@@ -39,14 +39,16 @@ export default function RBACSidenav() {
       <div className="flex-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive =
+            pathname === item.href ||
+            (item.href !== '/rbac' && pathname.startsWith(item.href + '/'));
           return (
             <Link
               key={item.name}
               href={item.href}
               className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-500 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-400 shadow-sm'
+                  ? 'bg-indigo-100 text-indigo-700 border-r-2 border-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-400 shadow-sm'
                   : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white'
               }`}
             >
