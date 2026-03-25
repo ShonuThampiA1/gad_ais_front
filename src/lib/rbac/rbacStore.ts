@@ -102,20 +102,60 @@ interface RBACState {
   setUserOverrides: (overrides: UserOverride[]) => void;
 }
 
-// Initial Mock Data
+// Initial Real Data Extracted from Project
+const initialRoles: Role[] = [
+  { id: 1, name: 'ADMIN' },
+  { id: 2, name: 'OFFICER' },
+  { id: 3, name: 'Section Clerk' },
+  { id: 4, name: 'Under Secretary' },
+  { id: 5, name: 'AS_II' },
+  { id: 6, name: 'Deputy Secretary' },
+  { id: 7, name: 'Super Admin' },
+];
+
 const initialMenus: MenuNode[] = [
+  // Dashboard & Main Modules
   { id: 1, name: 'Dashboard', path: '/dashboard', type: 'MODULE', parentId: null, sortOrder: 1, icon: 'HomeIcon' },
-  { id: 2, name: 'Master Controls', path: '/master-controls', type: 'MODULE', parentId: null, sortOrder: 2, icon: 'CogIcon' },
-  { id: 3, name: 'Services', path: '/services', type: 'MODULE', parentId: null, sortOrder: 3, icon: 'DocumentTextIcon' },
-  { id: 4, name: 'RBAC', path: '/rbac', type: 'MODULE', parentId: null, sortOrder: 4, icon: 'ShieldCheckIcon' },
-  { id: 5, name: 'Menus Management', path: '/rbac/menus-management', type: 'MENU', parentId: 4, sortOrder: 1 },
-  { id: 6, name: 'Pages Management', path: '/rbac/pages-management', type: 'MENU', parentId: 4, sortOrder: 2 },
-  { id: 7, name: 'Actions Management', path: '/rbac/actions-management', type: 'MENU', parentId: 4, sortOrder: 3 },
-  { id: 8, name: 'Resources Management', path: '/rbac/resources-management', type: 'MENU', parentId: 4, sortOrder: 4 },
-  { id: 9, name: 'Role Menu Mapping', path: '/rbac/role-menu-mapping', type: 'MENU', parentId: 4, sortOrder: 5 },
-  { id: 10, name: 'Role Page Permissions', path: '/rbac/role-page-permissions', type: 'MENU', parentId: 4, sortOrder: 6 },
-  { id: 11, name: 'User Menu Override', path: '/rbac/user-menu-override', type: 'MENU', parentId: 4, sortOrder: 7 },
-  { id: 12, name: 'User Page Permission Override', path: '/rbac/user-page-permission-override', type: 'MENU', parentId: 4, sortOrder: 8 },
+  { id: 2, name: 'e-Services', path: '/services/requests', type: 'MODULE', parentId: null, sortOrder: 2, icon: 'UsersIcon' },
+  { id: 3, name: 'My Applications', path: '/applications', type: 'MODULE', parentId: null, sortOrder: 3, icon: 'FolderIcon' },
+  { id: 4, name: 'My Documents', path: '/documents', type: 'MODULE', parentId: null, sortOrder: 4, icon: 'CalendarIcon' },
+  { id: 5, name: 'My Profile', path: '/er-profile', type: 'MODULE', parentId: null, sortOrder: 5, icon: 'UserIcon' },
+
+  // Official Navigation
+  { id: 6, name: 'Official Dashboard', path: '/official/dashboard', type: 'MENU', parentId: null, sortOrder: 6, icon: 'UserPlusIcon' },
+  { id: 7, name: 'AIS Officer Onboarding', path: '/official', type: 'MENU', parentId: null, sortOrder: 7, icon: 'UserPlusIcon' },
+
+  // Services Navigation
+  { id: 8, name: 'Entitlement Claims', path: '/services/entitlement-claims', type: 'MENU', parentId: 2, sortOrder: 1, icon: 'HomeIcon' },
+  { id: 9, name: 'Requests', path: '/services/requests', type: 'MENU', parentId: 2, sortOrder: 2, icon: 'UsersIcon' },
+  { id: 10, name: 'Permissions', path: '/services/permissions', type: 'MENU', parentId: 2, sortOrder: 3, icon: 'FolderIcon' },
+  { id: 11, name: 'Submissions', path: '/services/submissions', type: 'MENU', parentId: 2, sortOrder: 4, icon: 'CalendarIcon' },
+
+  // Master Controls Navigation
+  { id: 12, name: 'Master Controls', path: '/master-controls', type: 'MODULE', parentId: null, sortOrder: 8, icon: 'CogIcon' },
+  { id: 13, name: 'Officer Management', path: '/master-controls/user-management', type: 'MENU', parentId: 12, sortOrder: 1, icon: 'UserPlusIcon' },
+  { id: 14, name: 'Personal Profile', path: '/master/personal-profile', type: 'MENU', parentId: 12, sortOrder: 2, icon: 'HomeIcon' },
+  { id: 15, name: 'Staffing and Roles', path: '/master/staffing-and-roles', type: 'MENU', parentId: 12, sortOrder: 3, icon: 'UsersIcon' },
+  { id: 16, name: 'Administrative Information', path: '/master/administrative-information', type: 'MENU', parentId: 12, sortOrder: 4, icon: 'FolderIcon' },
+  { id: 17, name: 'Employment and Career Details', path: '/master/employment-and-career', type: 'MENU', parentId: 12, sortOrder: 5, icon: 'CalendarIcon' },
+
+  // Admin Controls
+  { id: 18, name: 'Admin Controls', path: '/admin-controls', type: 'MODULE', parentId: null, sortOrder: 9, icon: 'ShieldCheckIcon' },
+  { id: 19, name: 'Add Section Officer', path: '/add-section-officer', type: 'MENU', parentId: 18, sortOrder: 1, icon: 'UserPlusIcon' },
+  { id: 20, name: 'Add Office', path: '/add-office', type: 'MENU', parentId: 18, sortOrder: 2, icon: 'BuildingLibraryIcon' },
+  { id: 21, name: 'Add Post', path: '/add-post', type: 'MENU', parentId: 18, sortOrder: 3, icon: 'ShieldCheckIcon' },
+  { id: 22, name: 'Add Officer', path: '/add-officer', type: 'MENU', parentId: 18, sortOrder: 4, icon: 'UserPlusIcon' },
+
+  // RBAC Controls
+  { id: 23, name: 'RBAC', path: '/rbac', type: 'MODULE', parentId: null, sortOrder: 10, icon: 'ShieldCheckIcon' },
+  { id: 24, name: 'Menus Management', path: '/rbac/menus-management', type: 'MENU', parentId: 23, sortOrder: 1 },
+  { id: 25, name: 'Pages Management', path: '/rbac/pages-management', type: 'MENU', parentId: 23, sortOrder: 2 },
+  { id: 26, name: 'Actions Management', path: '/rbac/actions-management', type: 'MENU', parentId: 23, sortOrder: 3 },
+  { id: 27, name: 'Resources Management', path: '/rbac/resources-management', type: 'MENU', parentId: 23, sortOrder: 4 },
+  { id: 28, name: 'Role Menu Mapping', path: '/rbac/role-menu-mapping', type: 'MENU', parentId: 23, sortOrder: 5 },
+  { id: 29, name: 'Role Page Permissions', path: '/rbac/role-page-permissions', type: 'MENU', parentId: 23, sortOrder: 6 },
+  { id: 30, name: 'User Menu Override', path: '/rbac/user-menu-override', type: 'MENU', parentId: 23, sortOrder: 7 },
+  { id: 31, name: 'User Page Permission Override', path: '/rbac/user-page-permission-override', type: 'MENU', parentId: 23, sortOrder: 8 },
 ];
 
 const initialActions: ActionMaster[] = [
@@ -123,24 +163,96 @@ const initialActions: ActionMaster[] = [
   { id: 2, name: 'Add', color: 'bg-green-100 text-green-700 border-green-200' },
   { id: 3, name: 'Edit', color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { id: 4, name: 'Delete', color: 'bg-red-100 text-red-700 border-red-200' },
+  { id: 5, name: 'Approve', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { id: 6, name: 'Reject', color: 'bg-neutral-100 text-neutral-700 border-neutral-200' },
+  { id: 7, name: 'Export', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { id: 8, name: 'Print', color: 'bg-gray-100 text-gray-700 border-gray-200' },
 ];
 
 const initialPages: PageMaster[] = [
-  { id: 1, name: 'User List', url: '/admin/users' },
-  { id: 2, name: 'Role List', url: '/admin/roles' },
-  { id: 3, name: 'Menus Management', url: '/rbac/menus-management' },
-  { id: 4, name: 'Pages Management', url: '/rbac/pages-management' },
+  { id: 1, name: 'Dashboard', url: '/dashboard' },
+  { id: 2, name: 'ER Profile', url: '/er-profile' },
+  { id: 3, name: 'Documents', url: '/documents' },
+  { id: 4, name: 'Applications', url: '/applications' },
+  { id: 5, name: 'Reports', url: '/reports' },
+  { id: 6, name: 'e-Services', url: '/services' },
+  { id: 7, name: 'Add Section Officer', url: '/add-section-officer' },
+  { id: 8, name: 'Add Office', url: '/add-office' },
+  { id: 9, name: 'Add Post', url: '/add-post' },
+  { id: 10, name: 'Add Officer', url: '/add/officer' },
+  { id: 11, name: 'Officer Management', url: '/master-controls/user-management' },
+  { id: 12, name: 'Personal Profile Master', url: '/master/personal-profile' },
+  { id: 13, name: 'Staffing and Roles Master', url: '/master/staffing-and-roles' },
+  { id: 14, name: 'Administrative Information Master', url: '/master/administrative-information' },
+  { id: 15, name: 'Employment Details Master', url: '/master/employment-and-career' },
+  { id: 16, name: 'Official Dashboard', url: '/official/dashboard' },
+  { id: 17, name: 'AIS Officer Onboarding', url: '/official' },
+  { id: 18, name: 'RBAC Dashoard', url: '/rbac' },
+  { id: 19, name: 'Menus Management', url: '/rbac/menus-management' },
+  { id: 20, name: 'Pages Management', url: '/rbac/pages-management' },
+  { id: 21, name: 'Actions Management', url: '/rbac/actions-management' },
+  { id: 22, name: 'Resources Management', url: '/rbac/resources-management' },
+  { id: 23, name: 'Role Menu Mapping', url: '/rbac/role-menu-mapping' },
+  { id: 24, name: 'Role Page Permissions', url: '/rbac/role-page-permissions' },
+  { id: 25, name: 'User Menu Override', url: '/rbac/user-menu-override' },
+  { id: 26, name: 'User Page Permission Override', url: '/rbac/user-page-permission-override' },
 ];
 
 const initialResources: Resource[] = [
-  { id: 1, key: 'user.view', category: 'USER', action: 'VIEW' },
-  { id: 2, key: 'user.create', category: 'USER', action: 'CREATE' },
+  { id: 1, key: 'dashboard.view', category: 'DASHBOARD', action: 'VIEW' },
+  { id: 2, key: 'profile.edit', category: 'PROFILE', action: 'EDIT' },
+  { id: 3, key: 'document.upload', category: 'DOCUMENT', action: 'ADD' },
+  { id: 4, key: 'document.download', category: 'DOCUMENT', action: 'EXPORT' },
+  { id: 5, key: 'application.approve', category: 'APPLICATION', action: 'APPROVE' },
+  { id: 6, key: 'application.reject', category: 'APPLICATION', action: 'REJECT' },
+  { id: 7, key: 'officer.create', category: 'OFFICER', action: 'ADD' },
+  { id: 8, key: 'rbac.manage', category: 'SYSTEM', action: 'EDIT' },
 ];
 
-const initialRoles: Role[] = [
-  { id: 1, name: 'Super Admin' },
-  { id: 2, name: 'Admin Officer' },
-  { id: 3, name: 'Section Officer' },
+// Provide sensible default mappings for the actual roles
+const initialRoleMenuMappings: RoleMenuMapping[] = [
+  { roleId: 1, menuIds: [18, 19, 20, 21, 22] }, // ADMIN gets Admin Controls
+  { roleId: 2, menuIds: [1, 2, 3, 4, 5, 8, 9, 10, 11] }, // OFFICER gets their dashboard, services, applications
+  { roleId: 3, menuIds: [12, 13, 14, 15, 16, 17] }, // Section Clerk gets Master Controls
+  { roleId: 7, menuIds: [23, 24, 25, 26, 27, 28, 29, 30, 31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] }, // Super Admin gets everything
+];
+
+const initialRolePagePermissions: RolePagePermissionMapping[] = [
+  {
+    roleId: 1, // Admin
+    permissions: [
+      { pageId: 7, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Section Officer
+      { pageId: 8, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Office
+      { pageId: 9, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Post
+      { pageId: 10, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Officer
+    ]
+  },
+  {
+    roleId: 2, // Officer
+    permissions: [
+      { pageId: 1, view: true, add: false, edit: false, delete: false, approve: false, export: false }, // Dashboard
+      { pageId: 2, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // ER Profile
+      { pageId: 3, view: true, add: true, edit: false, delete: true, approve: false, export: true }, // Documents
+      { pageId: 4, view: true, add: true, edit: false, delete: false, approve: false, export: true }, // Applications
+      { pageId: 6, view: true, add: true, edit: true, delete: false, approve: false, export: false }, // e-Services
+    ]
+  },
+  {
+    roleId: 3, // Section Clerk
+    permissions: [
+      { pageId: 11, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Officer Mgmt
+      { pageId: 12, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Personal Profile Master
+      { pageId: 13, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Staffing Master
+      { pageId: 14, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Admin Info Master
+      { pageId: 15, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Emp Details Master
+    ]
+  },
+  {
+    roleId: 7, // Super Admin
+    permissions: initialPages.map(page => ({
+      pageId: page.id, view: true, add: true, edit: true, delete: true, approve: true, export: true
+    }))
+  }
 ];
 
 export const useRBACStore = create<RBACState>()(
@@ -151,8 +263,8 @@ export const useRBACStore = create<RBACState>()(
       pages: initialPages,
       menus: initialMenus,
       roles: initialRoles,
-      roleMenuMappings: [],
-      rolePagePermissions: [],
+      roleMenuMappings: initialRoleMenuMappings,
+      rolePagePermissions: initialRolePagePermissions,
       userOverrides: [],
 
       setActions: (actions) => set({ actions }),

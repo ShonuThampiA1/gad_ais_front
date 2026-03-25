@@ -15,10 +15,10 @@ import { useRBACStore, PagePermission, UserOverride } from '@/lib/rbac/rbacStore
 
 // Same mock users as Menu Override
 const mockUsers = [
-  { id: 101, name: 'John Doe', roleId: 1, email: 'john@example.com' },
-  { id: 102, name: 'Jane Smith', roleId: 2, email: 'jane@example.com' },
-  { id: 103, name: 'Robert Johnson', roleId: 2, email: 'robert@example.com' },
-  { id: 104, name: 'Emily Davis', roleId: 3, email: 'emily@example.com' },
+  { id: 101, name: 'John Admin', roleId: 1, email: 'admin@example.com' },
+  { id: 102, name: 'Jane Officer', roleId: 2, email: 'officer@example.com' },
+  { id: 103, name: 'Robert Clerk', roleId: 3, email: 'clerk@example.com' },
+  { id: 104, name: 'Emily Super', roleId: 7, email: 'super@example.com' },
 ];
 
 export default function UserPagePermissionOverridePage() {
