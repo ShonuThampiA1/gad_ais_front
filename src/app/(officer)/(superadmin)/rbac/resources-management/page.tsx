@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MagnifyingGlassIcon,
   PlusIcon,
@@ -12,26 +11,60 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
-
-interface Resource {
-  id: number;
-  key: string;
-  category: string;
-  action: string;
-}
-
-const mockResources: Resource[] = [
-  { id: 1, key: 'user.create', category: 'USER', action: 'CREATE' },
-  { id: 2, key: 'user.view', category: 'USER', action: 'VIEW' },
-  { id: 3, key: 'user.edit', category: 'USER', action: 'EDIT' },
-  { id: 4, key: 'application.view', category: 'APPLICATION', action: 'VIEW' },
-  { id: 5, key: 'report.export', category: 'REPORT', action: 'EXPORT' },
-  { id: 6, key: 'system.configure', category: 'SYSTEM', action: 'CONFIGURE' },
-];
+import { useRBACStore, Resource } from '@/lib/rbac/rbacStore';
 
 export default function ResourcesManagementPage() {
-  const [resources] = useState<Resource[]>(mockResources);
+  const [mounted, setMounted] = useState(false);
+  const resources = useRBACStore((state) => state.resources);
+  const setResources = useRBACStore((state) => state.setResources);
+
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Add / Edit Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState<Resource | null>(null);
+  const [formData, setFormData] = useState({ key: '', category: '', action: '' });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  const filteredResources = resources.filter(res =>
+    res.key.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    res.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    res.action.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleOpenModal = (item?: Resource) => {
+    if (item) {
+      setEditItem(item);
+      setFormData({ key: item.key, category: item.category, action: item.action });
+    } else {
+      setEditItem(null);
+      setFormData({ key: '', category: 'USER', action: 'VIEW' });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.key.trim() || !formData.category.trim() || !formData.action.trim()) return;
+
+    if (editItem) {
+      setResources(resources.map(r => r.id === editItem.id ? { ...r, ...formData } : r));
+    } else {
+      const newId = resources.length > 0 ? Math.max(...resources.map(r => r.id)) + 1 : 1;
+      setResources([...resources, { id: newId, ...formData }]);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm("Are you sure you want to delete this resource?")) {
+      setResources(resources.filter(r => r.id !== id));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -42,104 +75,142 @@ export default function ResourcesManagementPage() {
             Manage fine-grained resource keys for API authorization and feature flags.
           </p>
         </div>
-        <button className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+        <button
+          onClick={() => handleOpenModal()}
+          className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+        >
           <PlusIcon className="h-5 w-5 mr-2" />
           Add Resource
         </button>
       </div>
 
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-        {/* Header / Search */}
-        <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="relative max-w-sm w-full">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-700">
+        <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 flex justify-between">
+          <div className="relative max-w-md w-full">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
             <input
               type="text"
-              placeholder="Search by key, category or action..."
-              className="w-full pl-10 pr-4 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Search resources..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow dark:text-white"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <select className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-              <option value="">All Categories</option>
-              <option value="USER">USER</option>
-              <option value="APPLICATION">APPLICATION</option>
-              <option value="REPORT">REPORT</option>
-              <option value="SYSTEM">SYSTEM</option>
-            </select>
-            <button className="flex items-center px-3 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 transition-colors">
-              <FunnelIcon className="h-4 w-4 mr-2" />
-              More Filters
-            </button>
-          </div>
         </div>
-
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-neutral-50 dark:bg-neutral-800/50">
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Resource Key</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Action</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider text-right">Actions</th>
+          <table className="w-full text-left text-sm text-neutral-600 dark:text-neutral-400">
+            <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400">
+              <tr>
+                <th className="px-6 py-4 font-medium">Resource Key</th>
+                <th className="px-6 py-4 font-medium">Category</th>
+                <th className="px-6 py-4 font-medium">Action</th>
+                <th className="px-6 py-4 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-              {resources.map((res) => (
-                <tr key={res.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors group">
-                  <td className="px-6 py-4 text-sm font-mono text-neutral-500 dark:text-neutral-400">
-                    #{res.id}
+            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+              {filteredResources.map((resource) => (
+                <tr key={resource.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-white flex items-center">
+                    <CubeIcon className="h-4 w-4 mr-2 text-neutral-400" />
+                    {resource.key}
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-neutral-900 dark:text-white">
-                    <div className="flex items-center">
-                      <CubeIcon className="h-4 w-4 mr-2 text-neutral-400" />
-                      {res.key}
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-neutral-100 text-neutral-700 border border-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700">
+                      {resource.category}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30">
+                      {resource.action}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => handleOpenModal(resource)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-md transition-colors">
+                        <PencilIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(resource.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-md transition-colors">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
-                      {res.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
-                      {res.action}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button className="p-2 text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                      <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button className="p-2 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
                   </td>
                 </tr>
               ))}
+              {filteredResources.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-neutral-500 dark:text-neutral-400">
+                    No resources found matching your search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* Pagination */}
-        <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
-          <span className="text-sm text-neutral-500 dark:text-neutral-400">
-            Showing 1 to {resources.length} of {resources.length} resources
-          </span>
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50" disabled>
-              <ChevronLeftIcon className="h-4 w-4" />
-            </button>
-            <button className="px-3 py-1 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg font-medium">1</button>
-            <button className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg">
-              <ChevronRightIcon className="h-4 w-4" />
-            </button>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                {editItem ? 'Edit Resource' : 'Add Resource'}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  Resource Key
+                </label>
+                <input
+                  type="text"
+                  value={formData.key}
+                  onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                  placeholder="e.g., user.view"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                  placeholder="e.g., USER, REPORT"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  Action
+                </label>
+                <input
+                  type="text"
+                  value={formData.action}
+                  onChange={(e) => setFormData({ ...formData, action: e.target.value })}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                  placeholder="e.g., VIEW, EXPORT"
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-4">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-600 dark:hover:bg-neutral-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                >
+                  Save Resource
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

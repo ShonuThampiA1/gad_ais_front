@@ -12,14 +12,11 @@ import {
   KeyIcon,
   ShieldCheckIcon 
 } from '@heroicons/react/24/outline';
+import { useRBACStore } from '@/lib/rbac/rbacStore';
+import { useEffect, useState } from 'react';
 
-type NavigationItem = {
-  name: string;
-  href: string;
-  icon: React.ElementType;
-};
-
-const navItems: NavigationItem[] = [
+// Default nav items if we don't have mapping or if it's Super Admin overriding
+const defaultNavItems = [
   { name: 'Dashboard', href: '/rbac', icon: ChartBarIcon },
   { name: 'Menus Management', href: '/rbac/menus-management', icon: ListBulletIcon },
   { name: 'Pages Management', href: '/rbac/pages-management', icon: DocumentIcon },
@@ -33,11 +30,22 @@ const navItems: NavigationItem[] = [
 
 export default function RBACSidenav() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  const menus = useRBACStore((state) => state.menus);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null; // Prevent hydration errors
+
+  // Later: we can filter defaultNavItems based on roleMenuMappings
+  // For now, as SuperAdmin managing RBAC, show all default nav items.
 
   return (
     <nav className="flex flex-col p-4 space-y-2 h-full">
       <div className="flex-1">
-        {navItems.map((item) => {
+        {defaultNavItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             pathname === item.href ||

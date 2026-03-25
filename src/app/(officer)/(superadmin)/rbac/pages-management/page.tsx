@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MagnifyingGlassIcon,
   PlusIcon,
@@ -12,26 +11,59 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
-
-interface PageMaster {
-  id: number;
-  name: string;
-  url: string;
-}
-
-const mockPages: PageMaster[] = [
-  { id: 1, name: 'Dashboard', url: '/dashboard' },
-  { id: 2, name: 'User Management', url: '/admin/users' },
-  { id: 3, name: 'Role Management', url: '/admin/roles' },
-  { id: 4, name: 'Menus Management', url: '/admin/rbac/menus' },
-  { id: 5, name: 'Pages Management', url: '/admin/rbac/pages' },
-  { id: 6, name: 'Actions Management', url: '/admin/rbac/actions' },
-  { id: 7, name: 'Beneficiary List', url: '/beneficiaries' },
-];
+import { useRBACStore, PageMaster } from '@/lib/rbac/rbacStore';
 
 export default function PagesManagementPage() {
-  const [pages] = useState<PageMaster[]>(mockPages);
+  const [mounted, setMounted] = useState(false);
+  const pages = useRBACStore((state) => state.pages);
+  const setPages = useRBACStore((state) => state.setPages);
+
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Add / Edit Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState<PageMaster | null>(null);
+  const [formData, setFormData] = useState({ name: '', url: '' });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  const filteredPages = pages.filter(page =>
+    page.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    page.url.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleOpenModal = (item?: PageMaster) => {
+    if (item) {
+      setEditItem(item);
+      setFormData({ name: item.name, url: item.url });
+    } else {
+      setEditItem(null);
+      setFormData({ name: '', url: '' });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.name.trim() || !formData.url.trim()) return;
+
+    if (editItem) {
+      setPages(pages.map(p => p.id === editItem.id ? { ...p, ...formData } : p));
+    } else {
+      const newId = pages.length > 0 ? Math.max(...pages.map(p => p.id)) + 1 : 1;
+      setPages([...pages, { id: newId, ...formData }]);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm("Are you sure you want to delete this page?")) {
+      setPages(pages.filter(p => p.id !== id));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -39,90 +71,129 @@ export default function PagesManagementPage() {
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white">Pages Management</h1>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            Define and manage all application pages and their unique URLs.
+            Define system pages for permission assignments.
           </p>
         </div>
-        <button className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+        <button
+          onClick={() => handleOpenModal()}
+          className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+        >
           <PlusIcon className="h-5 w-5 mr-2" />
           Add Page
         </button>
       </div>
 
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-        {/* Table Header / Filters */}
-        <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="relative max-w-sm w-full">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-sm border border-neutral-200 dark:border-neutral-700">
+        <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 flex justify-between">
+          <div className="relative max-w-md w-full">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
             <input
               type="text"
-              placeholder="Search by page name or URL..."
-              className="w-full pl-10 pr-4 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Search pages by name or URL..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow dark:text-white"
             />
           </div>
-          <button className="flex items-center px-3 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 transition-colors">
-            <FunnelIcon className="h-4 w-4 mr-2" />
-            Filters
-          </button>
         </div>
-
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-neutral-50 dark:bg-neutral-800/50">
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Page ID</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Page Name</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Page URL</th>
-                <th className="px-6 py-4 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider text-right">Actions</th>
+          <table className="w-full text-left text-sm text-neutral-600 dark:text-neutral-400">
+            <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400">
+              <tr>
+                <th className="px-6 py-4 font-medium">ID</th>
+                <th className="px-6 py-4 font-medium">Page Name</th>
+                <th className="px-6 py-4 font-medium">URL / Route</th>
+                <th className="px-6 py-4 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-              {pages.map((page) => (
-                <tr key={page.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors group">
-                  <td className="px-6 py-4 text-sm font-mono text-neutral-500 dark:text-neutral-400">
-                    #{page.id.toString().padStart(3, '0')}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-neutral-900 dark:text-white">
+            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+              {filteredPages.map((page) => (
+                <tr key={page.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                  <td className="px-6 py-4">{page.id}</td>
+                  <td className="px-6 py-4 font-medium text-neutral-900 dark:text-white">
                     {page.name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600 dark:text-neutral-400">
-                    <div className="flex items-center">
-                      <LinkIcon className="h-3.5 w-3.5 mr-2 text-neutral-400" />
+                  <td className="px-6 py-4">
+                    <div className="flex items-center text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md w-fit">
+                      <LinkIcon className="h-4 w-4 mr-1.5" />
                       {page.url}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button className="p-2 text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                      <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button className="p-2 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => handleOpenModal(page)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-md transition-colors">
+                        <PencilIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(page.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-md transition-colors">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {filteredPages.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-neutral-500 dark:text-neutral-400">
+                    No pages found matching your search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* Pagination */}
-        <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
-          <span className="text-sm text-neutral-500 dark:text-neutral-400">
-            Showing 1 to {pages.length} of {pages.length} entries
-          </span>
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50" disabled>
-              <ChevronLeftIcon className="h-4 w-4" />
-            </button>
-            <button className="px-3 py-1 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg font-medium">1</button>
-            <button className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg">
-              <ChevronRightIcon className="h-4 w-4" />
-            </button>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                {editItem ? 'Edit Page' : 'Add Page'}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  Page Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                  placeholder="e.g., User Management"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  URL / Route
+                </label>
+                <input
+                  type="text"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                  placeholder="e.g., /admin/users"
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-4">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-600 dark:hover:bg-neutral-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                >
+                  Save Page
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
