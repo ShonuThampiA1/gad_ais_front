@@ -172,30 +172,76 @@ const initialActions: ActionMaster[] = [
 const initialPages: PageMaster[] = [
   { id: 1, name: 'Dashboard', url: '/dashboard' },
   { id: 2, name: 'ER Profile', url: '/er-profile' },
-  { id: 3, name: 'Documents', url: '/documents' },
-  { id: 4, name: 'Applications', url: '/applications' },
-  { id: 5, name: 'Reports', url: '/reports' },
-  { id: 6, name: 'e-Services', url: '/services' },
-  { id: 7, name: 'Add Section Officer', url: '/add-section-officer' },
-  { id: 8, name: 'Add Office', url: '/add-office' },
-  { id: 9, name: 'Add Post', url: '/add-post' },
-  { id: 10, name: 'Add Officer', url: '/add/officer' },
-  { id: 11, name: 'Officer Management', url: '/master-controls/user-management' },
-  { id: 12, name: 'Personal Profile Master', url: '/master/personal-profile' },
-  { id: 13, name: 'Staffing and Roles Master', url: '/master/staffing-and-roles' },
-  { id: 14, name: 'Administrative Information Master', url: '/master/administrative-information' },
-  { id: 15, name: 'Employment Details Master', url: '/master/employment-and-career' },
-  { id: 16, name: 'Official Dashboard', url: '/official/dashboard' },
-  { id: 17, name: 'AIS Officer Onboarding', url: '/official' },
-  { id: 18, name: 'RBAC Dashoard', url: '/rbac' },
-  { id: 19, name: 'Menus Management', url: '/rbac/menus-management' },
-  { id: 20, name: 'Pages Management', url: '/rbac/pages-management' },
-  { id: 21, name: 'Actions Management', url: '/rbac/actions-management' },
-  { id: 22, name: 'Resources Management', url: '/rbac/resources-management' },
-  { id: 23, name: 'Role Menu Mapping', url: '/rbac/role-menu-mapping' },
-  { id: 24, name: 'Role Page Permissions', url: '/rbac/role-page-permissions' },
-  { id: 25, name: 'User Menu Override', url: '/rbac/user-menu-override' },
-  { id: 26, name: 'User Page Permission Override', url: '/rbac/user-page-permission-override' },
+  { id: 3, name: 'ER Profile Preview', url: '/er-profile/preview-profile' },
+  { id: 4, name: 'ER Profile SPARK Preview', url: '/er-profile/spark-preview' },
+  { id: 5, name: 'Documents', url: '/documents' },
+  { id: 6, name: 'Applications', url: '/applications' },
+  { id: 7, name: 'Reports', url: '/reports' },
+
+  { id: 8, name: 'Add Section Officer', url: '/add-section-officer' },
+  { id: 9, name: 'Add Office', url: '/add-office' },
+  { id: 10, name: 'Add Post', url: '/add-post' },
+  { id: 11, name: 'Add Officer', url: '/add-officer' },
+
+  // Master Controls
+  { id: 12, name: 'Officer Management', url: '/master-controls/user-management' },
+  { id: 13, name: 'Administrative Department Master', url: '/master-controls/administrative-department' },
+  { id: 14, name: 'Cadre Master', url: '/master-controls/cadre' },
+  { id: 15, name: 'Category Master', url: '/master-controls/category' },
+  { id: 16, name: 'Country Master', url: '/master-controls/country' },
+  { id: 17, name: 'Designation Master', url: '/master-controls/designation' },
+  { id: 18, name: 'Disability Master', url: '/master-controls/disability' },
+  { id: 19, name: 'District Master', url: '/master-controls/district' },
+  { id: 20, name: 'Division Master', url: '/master-controls/division' },
+  { id: 21, name: 'Gender Master', url: '/master-controls/gender' },
+  { id: 22, name: 'Grade Master', url: '/master-controls/grade' },
+  { id: 23, name: 'Implementing Agency Master', url: '/master-controls/implementing-agency' },
+  { id: 24, name: 'Language Master', url: '/master-controls/language' },
+  { id: 25, name: 'Level Master', url: '/master-controls/level' },
+  { id: 26, name: 'Ministry Master', url: '/master-controls/ministry' },
+  { id: 27, name: 'Posting Type Master', url: '/master-controls/posting-type' },
+  { id: 28, name: 'Qualification Master', url: '/master-controls/qualification' },
+  { id: 29, name: 'Recruitment Master', url: '/master-controls/recruitment' },
+  { id: 30, name: 'Retirement Master', url: '/master-controls/retirement' },
+  { id: 31, name: 'Role Master', url: '/master-controls/role' },
+  { id: 32, name: 'State Master', url: '/master-controls/state' },
+  { id: 33, name: 'Tenure Master', url: '/master-controls/tenure' },
+  { id: 34, name: 'Training Type Master', url: '/master-controls/training-type' },
+
+  // Master Forms
+  { id: 35, name: 'Personal Profile Master', url: '/master/personal-profile' },
+  { id: 36, name: 'Staffing and Roles Master', url: '/master/staffing-and-roles' },
+  { id: 37, name: 'Administrative Information Master', url: '/master/administrative-information' },
+  { id: 38, name: 'Employment Details Master', url: '/master/employment-and-career' },
+
+  // Official section
+  { id: 39, name: 'AIS Officer Onboarding', url: '/official' },
+  { id: 40, name: 'Official Dashboard', url: '/official/dashboard' },
+  { id: 41, name: 'First Time Logins List', url: '/official/dashboard/first-time-logins' },
+  { id: 42, name: 'Officer Verification List', url: '/official/dashboard/officer-verification-list' },
+  { id: 43, name: 'Started ER Profiles', url: '/official/dashboard/started-er' },
+  { id: 44, name: 'Verified Profiles', url: '/official/verified' },
+  { id: 45, name: 'Profiles Awaiting Verification', url: '/official/pending' },
+  { id: 46, name: 'Official Edit Profile', url: '/official/edit-profile' },
+  { id: 47, name: 'Official Preview Profile', url: '/official/preview-profile' },
+
+  // RBAC
+  { id: 48, name: 'RBAC Dashoard', url: '/rbac' },
+  { id: 49, name: 'Menus Management', url: '/rbac/menus-management' },
+  { id: 50, name: 'Pages Management', url: '/rbac/pages-management' },
+  { id: 51, name: 'Actions Management', url: '/rbac/actions-management' },
+  { id: 52, name: 'Resources Management', url: '/rbac/resources-management' },
+  { id: 53, name: 'Role Menu Mapping', url: '/rbac/role-menu-mapping' },
+  { id: 54, name: 'Role Page Permissions', url: '/rbac/role-page-permissions' },
+  { id: 55, name: 'User Menu Override', url: '/rbac/user-menu-override' },
+  { id: 56, name: 'User Page Permission Override', url: '/rbac/user-page-permission-override' },
+
+  // Services
+  { id: 57, name: 'Services Entitlement Claims', url: '/services/entitlement-claims' },
+  { id: 58, name: 'Services Requests', url: '/services/requests' },
+  { id: 59, name: 'Services Permissions', url: '/services/permissions' },
+  { id: 60, name: 'Services Submissions', url: '/services/submissions' },
+  { id: 61, name: 'Services Documents', url: '/services/documents' },
 ];
 
 const initialResources: Resource[] = [
@@ -221,10 +267,10 @@ const initialRolePagePermissions: RolePagePermissionMapping[] = [
   {
     roleId: 1, // Admin
     permissions: [
-      { pageId: 7, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Section Officer
-      { pageId: 8, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Office
-      { pageId: 9, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Post
-      { pageId: 10, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Officer
+      { pageId: 8, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Section Officer
+      { pageId: 9, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Office
+      { pageId: 10, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Post
+      { pageId: 11, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Add Officer
     ]
   },
   {
@@ -232,19 +278,19 @@ const initialRolePagePermissions: RolePagePermissionMapping[] = [
     permissions: [
       { pageId: 1, view: true, add: false, edit: false, delete: false, approve: false, export: false }, // Dashboard
       { pageId: 2, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // ER Profile
-      { pageId: 3, view: true, add: true, edit: false, delete: true, approve: false, export: true }, // Documents
-      { pageId: 4, view: true, add: true, edit: false, delete: false, approve: false, export: true }, // Applications
-      { pageId: 6, view: true, add: true, edit: true, delete: false, approve: false, export: false }, // e-Services
+      { pageId: 5, view: true, add: true, edit: false, delete: true, approve: false, export: true }, // Documents
+      { pageId: 6, view: true, add: true, edit: false, delete: false, approve: false, export: true }, // Applications
+      { pageId: 58, view: true, add: true, edit: true, delete: false, approve: false, export: false }, // e-Services Requests
     ]
   },
   {
     roleId: 3, // Section Clerk
     permissions: [
-      { pageId: 11, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Officer Mgmt
-      { pageId: 12, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Personal Profile Master
-      { pageId: 13, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Staffing Master
-      { pageId: 14, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Admin Info Master
-      { pageId: 15, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Emp Details Master
+      { pageId: 12, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Officer Mgmt
+      { pageId: 35, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Personal Profile Master
+      { pageId: 36, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Staffing Master
+      { pageId: 37, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Admin Info Master
+      { pageId: 38, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Emp Details Master
     ]
   },
   {
