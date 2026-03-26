@@ -1,40 +1,14 @@
 
-> gad-tailwindui2@0.1.0 dev
-> next dev --turbopack
+> gad-tailwindui2@0.1.0 build
+> next build
 
 ▲ Next.js 16.1.1 (Turbopack)
-- Local:         http://localhost:3000
-- Network:       http://192.168.0.2:3000
 
-✓ Starting...
-✓ Ready in 1250ms
-
-🔍 isLoaded check: false
-REQUIRED_SECTIONS: [
-  'personal',
-  'profile_photo',
-  'education',
-  'service',
-  'central_deputation',
-  'training',
-  'awards',
-  'disability',
-  'disciplinary'
-]
-sectionLoaded keys: []
-sectionProgress keys: []
-personal: loaded=undefined, progress=NO
-profile_photo: loaded=undefined, progress=NO
-education: loaded=undefined, progress=NO
-service: loaded=undefined, progress=NO
-central_deputation: loaded=undefined, progress=NO
-training: loaded=undefined, progress=NO
-awards: loaded=undefined, progress=NO
-disability: loaded=undefined, progress=NO
-disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 1283ms (compile: 708ms, render: 574ms)
- GET /login/ 200 in 177ms (compile: 70ms, render: 107ms)
- GET /login/ 200 in 73ms (compile: 6ms, render: 67ms)
+  Creating an optimized production build ...
+✓ Compiled successfully in 25.1s
+  Running TypeScript ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/72) ...
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -59,9 +33,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 81ms (compile: 4ms, render: 76ms)
- GET /login/ 200 in 82ms (compile: 6ms, render: 76ms)
- GET /login/ 200 in 58ms (compile: 4ms, render: 55ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -86,9 +57,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 74ms (compile: 4ms, render: 70ms)
- GET /login/ 200 in 108ms (compile: 5ms, render: 103ms)
- GET /login/ 200 in 69ms (compile: 7ms, render: 62ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -113,9 +81,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 75ms (compile: 4ms, render: 71ms)
- GET /login/ 200 in 68ms (compile: 5ms, render: 64ms)
- GET /login/ 200 in 53ms (compile: 3ms, render: 50ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -140,9 +105,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 76ms (compile: 3ms, render: 73ms)
- GET /login/ 200 in 24ms (compile: 4ms, render: 21ms)
- GET /login/ 200 in 41ms (compile: 2ms, render: 39ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -167,9 +129,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 88ms (compile: 3ms, render: 85ms)
- GET /login/ 200 in 72ms (compile: 4ms, render: 68ms)
- GET /login/ 200 in 49ms (compile: 5ms, render: 44ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -194,9 +153,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 81ms (compile: 4ms, render: 77ms)
- GET /login/ 200 in 28ms (compile: 3ms, render: 24ms)
- GET /login/ 200 in 57ms (compile: 3ms, render: 54ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -221,9 +177,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 64ms (compile: 3ms, render: 61ms)
- GET /login/ 200 in 25ms (compile: 4ms, render: 21ms)
- GET /login/ 200 in 56ms (compile: 3ms, render: 53ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -248,9 +201,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 69ms (compile: 4ms, render: 65ms)
- GET /login/ 200 in 28ms (compile: 4ms, render: 24ms)
- GET /login/ 200 in 51ms (compile: 3ms, render: 48ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -275,9 +225,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 70ms (compile: 3ms, render: 67ms)
- GET /login/ 200 in 77ms (compile: 5ms, render: 72ms)
- GET /login/ 200 in 53ms (compile: 3ms, render: 50ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -302,9 +249,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 60ms (compile: 3ms, render: 57ms)
- GET /login/ 200 in 25ms (compile: 3ms, render: 22ms)
- GET /login/ 200 in 62ms (compile: 3ms, render: 59ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -329,9 +273,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 86ms (compile: 4ms, render: 82ms)
- GET /login/ 200 in 25ms (compile: 3ms, render: 22ms)
- GET /login/ 200 in 60ms (compile: 4ms, render: 56ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -356,9 +297,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 73ms (compile: 9ms, render: 64ms)
- GET /login/ 200 in 32ms (compile: 3ms, render: 29ms)
- GET /login/ 200 in 57ms (compile: 3ms, render: 54ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -383,9 +321,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 74ms (compile: 3ms, render: 71ms)
- GET /login/ 200 in 73ms (compile: 3ms, render: 69ms)
- GET /login/ 200 in 55ms (compile: 3ms, render: 52ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -410,10 +345,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 93ms (compile: 3ms, render: 90ms)
- GET /login/ 200 in 27ms (compile: 3ms, render: 24ms)
- GET /login/ 200 in 59ms (compile: 4ms, render: 56ms)
- GET / 200 in 879ms (compile: 835ms, render: 44ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -438,9 +369,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 75ms (compile: 4ms, render: 71ms)
- GET /login/ 200 in 65ms (compile: 7ms, render: 58ms)
- GET /login/ 200 in 59ms (compile: 3ms, render: 56ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -465,9 +393,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 80ms (compile: 3ms, render: 77ms)
- GET /login/ 200 in 93ms (compile: 4ms, render: 89ms)
- GET /login/ 200 in 72ms (compile: 4ms, render: 68ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -492,9 +417,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 102ms (compile: 3ms, render: 98ms)
- GET /login/ 200 in 86ms (compile: 3ms, render: 83ms)
- GET /login/ 200 in 73ms (compile: 3ms, render: 70ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -519,9 +441,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 66ms (compile: 3ms, render: 63ms)
- GET /login/ 200 in 116ms (compile: 12ms, render: 104ms)
- GET /login/ 200 in 73ms (compile: 16ms, render: 58ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -546,9 +465,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 71ms (compile: 4ms, render: 67ms)
- GET /login/ 200 in 84ms (compile: 5ms, render: 79ms)
- GET /login/ 200 in 58ms (compile: 8ms, render: 50ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -573,9 +489,54 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 80ms (compile: 4ms, render: 76ms)
- GET /login/ 200 in 98ms (compile: 5ms, render: 93ms)
- GET /login/ 200 in 98ms (compile: 3ms, render: 96ms)
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -600,9 +561,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 77ms (compile: 3ms, render: 73ms)
- GET /login/ 200 in 83ms (compile: 5ms, render: 78ms)
- GET /login/ 200 in 47ms (compile: 3ms, render: 44ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -627,9 +585,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 87ms (compile: 4ms, render: 83ms)
- GET /login/ 200 in 63ms (compile: 4ms, render: 60ms)
- GET /login/ 200 in 60ms (compile: 5ms, render: 56ms)
+  Generating static pages using 3 workers (18/72)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -654,9 +610,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 256ms (compile: 7ms, render: 249ms)
- GET /login/ 200 in 64ms (compile: 4ms, render: 60ms)
- GET /login/ 200 in 94ms (compile: 5ms, render: 89ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -681,9 +634,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 74ms (compile: 4ms, render: 70ms)
- GET /login/ 200 in 105ms (compile: 3ms, render: 101ms)
- GET /login/ 200 in 59ms (compile: 4ms, render: 55ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -708,9 +658,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 125ms (compile: 6ms, render: 120ms)
- GET /login/ 200 in 106ms (compile: 5ms, render: 101ms)
- GET /login/ 200 in 74ms (compile: 7ms, render: 66ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -735,9 +682,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 176ms (compile: 9ms, render: 168ms)
- GET /login/ 200 in 202ms (compile: 9ms, render: 193ms)
- GET /login/ 200 in 126ms (compile: 7ms, render: 119ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -762,9 +706,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 172ms (compile: 6ms, render: 165ms)
- GET /login/ 200 in 169ms (compile: 9ms, render: 160ms)
- GET /login/ 200 in 151ms (compile: 11ms, render: 140ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -789,9 +730,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 137ms (compile: 6ms, render: 132ms)
- GET /login/ 200 in 145ms (compile: 5ms, render: 140ms)
- GET /login/ 200 in 102ms (compile: 5ms, render: 96ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -816,9 +754,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 102ms (compile: 5ms, render: 97ms)
- GET /login/ 200 in 30ms (compile: 4ms, render: 27ms)
- GET /login/ 200 in 87ms (compile: 6ms, render: 81ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -843,7 +778,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 58ms (compile: 3ms, render: 55ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -868,9 +802,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 227ms (compile: 14ms, render: 213ms)
- GET /login/ 200 in 143ms (compile: 8ms, render: 135ms)
- GET /login/ 200 in 99ms (compile: 6ms, render: 93ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -895,9 +826,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 113ms (compile: 4ms, render: 109ms)
- GET /login/ 200 in 104ms (compile: 4ms, render: 100ms)
- GET /login/ 200 in 85ms (compile: 5ms, render: 80ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -922,9 +850,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 68ms (compile: 3ms, render: 65ms)
- GET /login/ 200 in 25ms (compile: 3ms, render: 22ms)
- GET /login/ 200 in 65ms (compile: 3ms, render: 62ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -949,9 +874,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 106ms (compile: 4ms, render: 102ms)
- GET /login/ 200 in 93ms (compile: 5ms, render: 88ms)
- GET /login/ 200 in 75ms (compile: 4ms, render: 71ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -976,9 +898,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 85ms (compile: 3ms, render: 82ms)
- GET /login/ 200 in 89ms (compile: 3ms, render: 86ms)
- GET /login/ 200 in 89ms (compile: 3ms, render: 86ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1003,9 +922,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 87ms (compile: 4ms, render: 83ms)
- GET /login/ 200 in 111ms (compile: 18ms, render: 93ms)
- GET /login/ 200 in 62ms (compile: 4ms, render: 58ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1030,9 +946,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 60ms (compile: 3ms, render: 57ms)
- GET /login/ 200 in 71ms (compile: 5ms, render: 65ms)
- GET /login/ 200 in 61ms (compile: 4ms, render: 57ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1057,9 +970,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 65ms (compile: 3ms, render: 62ms)
- GET /login/ 200 in 109ms (compile: 3ms, render: 106ms)
- GET /login/ 200 in 94ms (compile: 3ms, render: 91ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1084,9 +994,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 66ms (compile: 3ms, render: 63ms)
- GET /login/ 200 in 84ms (compile: 4ms, render: 80ms)
- GET /login/ 200 in 48ms (compile: 4ms, render: 44ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1111,9 +1018,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 57ms (compile: 3ms, render: 54ms)
- GET /login/ 200 in 67ms (compile: 3ms, render: 64ms)
- GET /login/ 200 in 55ms (compile: 3ms, render: 52ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1138,9 +1042,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 68ms (compile: 3ms, render: 65ms)
- GET /login/ 200 in 79ms (compile: 5ms, render: 74ms)
- GET /login/ 200 in 56ms (compile: 4ms, render: 53ms)
+  Generating static pages using 3 workers (36/72)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1165,9 +1067,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 60ms (compile: 3ms, render: 58ms)
- GET /login/ 200 in 26ms (compile: 5ms, render: 22ms)
- GET /login/ 200 in 59ms (compile: 3ms, render: 56ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1192,9 +1091,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 148ms (compile: 5ms, render: 143ms)
- GET /login/ 200 in 25ms (compile: 3ms, render: 22ms)
- GET /login/ 200 in 80ms (compile: 8ms, render: 71ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1219,9 +1115,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 103ms (compile: 3ms, render: 100ms)
- GET /login/ 200 in 25ms (compile: 4ms, render: 22ms)
- GET /login/ 200 in 51ms (compile: 2ms, render: 48ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1246,9 +1139,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 71ms (compile: 3ms, render: 68ms)
- GET /login/ 200 in 23ms (compile: 3ms, render: 21ms)
- GET /login/ 200 in 44ms (compile: 2ms, render: 42ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1273,9 +1163,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 90ms (compile: 4ms, render: 87ms)
- GET /login/ 200 in 102ms (compile: 5ms, render: 97ms)
- GET /login/ 200 in 65ms (compile: 6ms, render: 60ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1300,9 +1187,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 83ms (compile: 3ms, render: 80ms)
- GET /login/ 200 in 29ms (compile: 3ms, render: 26ms)
- GET /login/ 200 in 57ms (compile: 3ms, render: 54ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1327,10 +1211,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/menus-management/ 200 in 70ms (compile: 3ms, render: 67ms)
- GET /login/ 200 in 67ms (compile: 6ms, render: 61ms)
- GET /login/ 200 in 44ms (compile: 2ms, render: 42ms)
-○ Compiling /rbac/role-menu-mapping ...
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1355,9 +1235,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/role-menu-mapping/ 200 in 5.4s (compile: 4.6s, render: 767ms)
- GET /login/ 200 in 608ms (compile: 140ms, render: 468ms)
- GET /login/ 200 in 250ms (compile: 29ms, render: 221ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1382,9 +1259,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/role-menu-mapping/ 200 in 191ms (compile: 26ms, render: 165ms)
- GET /login/ 200 in 114ms (compile: 5ms, render: 109ms)
- GET /login/ 200 in 77ms (compile: 4ms, render: 73ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1409,9 +1283,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/role-menu-mapping/ 200 in 85ms (compile: 5ms, render: 80ms)
- GET /login/ 200 in 92ms (compile: 4ms, render: 88ms)
- GET /login/ 200 in 65ms (compile: 3ms, render: 62ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1436,9 +1307,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/role-menu-mapping/ 200 in 98ms (compile: 6ms, render: 92ms)
- GET /login/ 200 in 101ms (compile: 6ms, render: 94ms)
- GET /login/ 200 in 68ms (compile: 5ms, render: 62ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1463,9 +1331,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/role-menu-mapping/ 200 in 227ms (compile: 6ms, render: 221ms)
- GET /login/ 200 in 77ms (compile: 4ms, render: 73ms)
- GET /login/ 200 in 60ms (compile: 4ms, render: 55ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1490,9 +1355,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/user-menu-override/ 200 in 4.6s (compile: 3.2s, render: 1352ms)
- GET /login/ 200 in 382ms (compile: 37ms, render: 345ms)
- GET /login/ 200 in 267ms (compile: 17ms, render: 250ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1517,10 +1379,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/user-menu-override/ 200 in 78ms (compile: 4ms, render: 75ms)
- GET /login/ 200 in 72ms (compile: 4ms, render: 68ms)
- GET /login/ 200 in 52ms (compile: 3ms, render: 49ms)
-○ Compiling /rbac ...
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1545,9 +1403,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/ 200 in 13.8s (compile: 10.5s, render: 3.3s)
- GET /login/ 200 in 268ms (compile: 69ms, render: 199ms)
- GET /login/ 200 in 238ms (compile: 112ms, render: 126ms)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1572,6 +1427,201 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
- GET /rbac/ 200 in 250ms (compile: 19ms, render: 230ms)
- GET /login/ 200 in 80ms (compile: 28ms, render: 52ms)
- GET /login/ 200 in 42ms (compile: 4ms, render: 37ms)
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+  Generating static pages using 3 workers (54/72)
+✓ Generating static pages using 3 workers (72/72) in 1104.7ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /add-office
+├ ○ /add-officer
+├ ○ /add-post
+├ ○ /add-section-officer
+├ ○ /applications
+├ ○ /dashboard
+├ ○ /documents
+├ ○ /er-profile
+├ ○ /er-profile/preview-profile
+├ ○ /er-profile/preview-profile2
+├ ○ /er-profile/spark-preview
+├ ○ /forgot-password
+├ ○ /home
+├ ○ /login
+├ ○ /master-controls/administrative-department
+├ ○ /master-controls/cadre
+├ ○ /master-controls/category
+├ ○ /master-controls/country
+├ ○ /master-controls/designation
+├ ○ /master-controls/disability
+├ ○ /master-controls/district
+├ ○ /master-controls/division
+├ ○ /master-controls/gender
+├ ○ /master-controls/grade
+├ ○ /master-controls/implementing-agency
+├ ○ /master-controls/language
+├ ○ /master-controls/level
+├ ○ /master-controls/ministry
+├ ○ /master-controls/posting-type
+├ ○ /master-controls/qualification
+├ ○ /master-controls/recruitment
+├ ○ /master-controls/retirement
+├ ○ /master-controls/role
+├ ○ /master-controls/state
+├ ○ /master-controls/tenure
+├ ○ /master-controls/training-type
+├ ○ /master-controls/user-management
+├ ○ /master/administrative-information
+├ ○ /master/employment-and-career
+├ ○ /master/personal-profile
+├ ○ /master/staffing-and-roles
+├ ○ /officer-profile
+├ ○ /official
+├ ○ /official/dashboard
+├ ○ /official/dashboard/first-time-logins
+├ ○ /official/dashboard/officer-verification-list
+├ ○ /official/dashboard/started-er
+├ ○ /official/edit-profile
+├ ○ /official/pending
+├ ○ /official/preview-profile
+├ ○ /official/verified
+├ ○ /rbac
+├ ○ /rbac/actions-management
+├ ○ /rbac/dashboard
+├ ○ /rbac/menus-management
+├ ○ /rbac/pages-management
+├ ○ /rbac/resources-management
+├ ○ /rbac/role-menu-mapping
+├ ○ /rbac/role-page-permissions
+├ ○ /rbac/user-menu-override
+├ ○ /rbac/user-page-permission-override
+├ ○ /reports
+├ ○ /services/documents
+├ ○ /services/entitlement-claims
+├ ○ /services/permissions
+├ ○ /services/requests
+├ ○ /services/submissions
+└ ○ /unauthorized
+
+
+○  (Static)  prerendered as static content

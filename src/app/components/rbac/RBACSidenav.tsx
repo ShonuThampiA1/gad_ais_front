@@ -28,7 +28,7 @@ const rbacNavItems = [
   { name: 'User Page Permission Override', href: '/rbac/user-page-permission-override', icon: KeyIcon, menuId: 31 },
 ];
 
-export default function RBACSidenav() {
+export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
@@ -40,36 +40,56 @@ export default function RBACSidenav() {
 
   if (!mounted) return null; // Prevent hydration errors
 
-  // In a real integration, we'd check sessionStorage.getItem('role_id') here.
-  // For the super admin configuring this module, we show everything or we filter based on role 7 (Super Admin).
-  // Because this is specifically the RBAC module's side nav, and role 7 has access to all these menus in our initial data:
-
   const currentRoleId = typeof window !== 'undefined' ? Number(sessionStorage.getItem('role_id')) || 7 : 7;
   const currentRoleMapping = roleMenuMappings.find(m => m.roleId === currentRoleId);
   const allowedMenuIds = new Set(currentRoleMapping?.menuIds || []);
 
   const visibleNavItems = rbacNavItems.filter(item => allowedMenuIds.has(item.menuId));
 
+  // Find if any other item is active
+  const anyOtherActive = visibleNavItems.slice(1).some(item =>
+    pathname === item.href || pathname === `${item.href}/` || pathname.startsWith(`${item.href}/`)
+  );
+
   return (
-    <nav className="flex flex-col p-4 space-y-2 h-full">
-      <div className="flex-1">
+    <nav className="p-4 space-y-1 h-full">
+      <div className="space-y-1">
         {visibleNavItems.length > 0 ? (
-          visibleNavItems.map((item) => {
+          visibleNavItems.map((item, index) => {
             const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== '/rbac' && pathname.startsWith(item.href + '/'));
+
+            // Determine if the current item is active
+            let isActive = false;
+            if (index === 0) {
+              // Dashboard is active if it's an exact match, OR if we are on /rbac/dashboard,
+              // OR if we are anywhere in /rbac and no other menu item matches.
+              isActive = pathname === '/rbac' ||
+                         pathname === '/rbac/' ||
+                         pathname.startsWith('/rbac/dashboard') ||
+                         (pathname.startsWith('/rbac') && !anyOtherActive);
+            } else {
+              isActive = pathname === item.href ||
+                         pathname === `${item.href}/` ||
+                         pathname.startsWith(`${item.href}/`);
+            }
+
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                onClick={onItemClick}
+                className={`flex items-center px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 group ${
                   isActive
-                    ? 'bg-indigo-100 text-indigo-700 border-r-2 border-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-400 shadow-sm'
-                    : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white'
+                    ? 'bg-primary-500 text-white translate-x-1'
+                    : 'text-neutral-600 hover:bg-blue-50 hover:text-blue-700 dark:text-neutral-400 dark:hover:bg-primary-900/30 dark:hover:text-blue-300'
                 }`}
               >
-                <Icon className="h-5 w-5 mr-3 flex-shrink-0" aria-hidden="true" />
+                <Icon
+                  className={`h-5 w-5 mr-3 flex-shrink-0 transition-transform duration-300 ${
+                    isActive ? 'text-white scale-110' : 'text-neutral-400 group-hover:text-blue-600 group-hover:scale-110'
+                  }`}
+                  aria-hidden="true"
+                />
                 <span>{item.name}</span>
               </Link>
             );
