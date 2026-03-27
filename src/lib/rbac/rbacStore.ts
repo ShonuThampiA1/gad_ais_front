@@ -347,6 +347,7 @@ export const useRBACStore = create<RBACState>()(
     }),
     {
       name: 'rbac-storage', // name of item in storage (must be unique)
+      version: 1, // bump version to bust the cache of old role mapping data
     }
   )
 );
