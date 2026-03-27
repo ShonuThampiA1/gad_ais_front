@@ -26,6 +26,8 @@ const rbacNavItems = [
   { name: 'Role Page Permissions', href: '/rbac/role-page-permissions', icon: KeyIcon, menuId: 29 },
   { name: 'User Menu Override', href: '/rbac/user-menu-override', icon: ShieldCheckIcon, menuId: 30 },
   { name: 'User Page Permission Override', href: '/rbac/user-page-permission-override', icon: KeyIcon, menuId: 31 },
+  { name: 'Role Management', href: '/rbac/role-management', icon: ShieldCheckIcon, menuId: 62 },
+  { name: 'User Role Mapping', href: '/rbac/user-management', icon: UserIcon, menuId: 63 },
 ];
 
 export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void }) {

@@ -1575,3 +1575,58 @@ disciplinary: loaded=undefined, progress=NO
  GET /rbac/ 200 in 250ms (compile: 19ms, render: 230ms)
  GET /login/ 200 in 80ms (compile: 28ms, render: 52ms)
  GET /login/ 200 in 42ms (compile: 4ms, render: 37ms)
+○ Compiling /rbac/role-management ...
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+ GET /rbac/role-management/ 200 in 8.2s (compile: 5.5s, render: 2.7s)
+ GET /login/ 200 in 360ms (compile: 138ms, render: 223ms)
+ GET /login/ 200 in 156ms (compile: 9ms, render: 147ms)
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+ GET /rbac/role-management/ 200 in 320ms (compile: 40ms, render: 280ms)
+ GET /login/ 200 in 166ms (compile: 7ms, render: 159ms)
+ GET /login/ 200 in 124ms (compile: 8ms, render: 116ms)
