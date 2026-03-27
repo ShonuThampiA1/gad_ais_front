@@ -40,6 +40,13 @@ export interface Role {
   name: string;
 }
 
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  roleId: number; // Base assigned role
+}
+
 // Role -> Menu IDs
 export interface RoleMenuMapping {
   roleId: number;
@@ -88,6 +95,7 @@ interface RBACState {
   pages: PageMaster[];
   menus: MenuNode[];
   roles: Role[];
+  users: User[];
   roleMenuMappings: RoleMenuMapping[];
   rolePagePermissions: RolePagePermissionMapping[];
   userOverrides: UserOverride[];
@@ -97,6 +105,8 @@ interface RBACState {
   setResources: (resources: Resource[]) => void;
   setPages: (pages: PageMaster[]) => void;
   setMenus: (menus: MenuNode[]) => void;
+  setRoles: (roles: Role[]) => void;
+  setUsers: (users: User[]) => void;
   setRoleMenuMappings: (mappings: RoleMenuMapping[]) => void;
   setRolePagePermissions: (mappings: RolePagePermissionMapping[]) => void;
   setUserOverrides: (overrides: UserOverride[]) => void;
@@ -111,6 +121,13 @@ const initialRoles: Role[] = [
   { id: 5, name: 'AS_II' },
   { id: 6, name: 'Deputy Secretary' },
   { id: 7, name: 'Super Admin' },
+];
+
+const initialUsers: User[] = [
+  { id: 101, name: 'John Admin', roleId: 1, email: 'admin@example.com' },
+  { id: 102, name: 'Jane Officer', roleId: 2, email: 'officer@example.com' },
+  { id: 103, name: 'Robert Clerk', roleId: 3, email: 'clerk@example.com' },
+  { id: 104, name: 'Emily Super', roleId: 7, email: 'super@example.com' },
 ];
 
 const initialMenus: MenuNode[] = [
@@ -156,6 +173,8 @@ const initialMenus: MenuNode[] = [
   { id: 29, name: 'Role Page Permissions', path: '/rbac/role-page-permissions', type: 'MENU', parentId: 23, sortOrder: 6 },
   { id: 30, name: 'User Menu Override', path: '/rbac/user-menu-override', type: 'MENU', parentId: 23, sortOrder: 7 },
   { id: 31, name: 'User Page Permission Override', path: '/rbac/user-page-permission-override', type: 'MENU', parentId: 23, sortOrder: 8 },
+  { id: 62, name: 'Role Management', path: '/rbac/role-management', type: 'MENU', parentId: 23, sortOrder: 9 },
+  { id: 63, name: 'User Role Mapping', path: '/rbac/user-management', type: 'MENU', parentId: 23, sortOrder: 10 },
 ];
 
 const initialActions: ActionMaster[] = [
@@ -235,6 +254,8 @@ const initialPages: PageMaster[] = [
   { id: 54, name: 'Role Page Permissions', url: '/rbac/role-page-permissions' },
   { id: 55, name: 'User Menu Override', url: '/rbac/user-menu-override' },
   { id: 56, name: 'User Page Permission Override', url: '/rbac/user-page-permission-override' },
+  { id: 62, name: 'Role Management', url: '/rbac/role-management' },
+  { id: 63, name: 'User Management', url: '/rbac/user-management' },
 
   // Services
   { id: 57, name: 'Services Entitlement Claims', url: '/services/entitlement-claims' },
@@ -260,7 +281,7 @@ const initialRoleMenuMappings: RoleMenuMapping[] = [
   { roleId: 1, menuIds: [18, 19, 20, 21, 22] }, // ADMIN gets Admin Controls
   { roleId: 2, menuIds: [1, 2, 3, 4, 5, 8, 9, 10, 11] }, // OFFICER gets their dashboard, services, applications
   { roleId: 3, menuIds: [12, 13, 14, 15, 16, 17] }, // Section Clerk gets Master Controls
-  { roleId: 7, menuIds: [23, 24, 25, 26, 27, 28, 29, 30, 31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] }, // Super Admin gets everything
+  { roleId: 7, menuIds: [23, 24, 25, 26, 27, 28, 29, 30, 31, 62, 63, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] }, // Super Admin gets everything
 ];
 
 const initialRolePagePermissions: RolePagePermissionMapping[] = [
@@ -309,6 +330,7 @@ export const useRBACStore = create<RBACState>()(
       pages: initialPages,
       menus: initialMenus,
       roles: initialRoles,
+      users: initialUsers,
       roleMenuMappings: initialRoleMenuMappings,
       rolePagePermissions: initialRolePagePermissions,
       userOverrides: [],
@@ -317,6 +339,8 @@ export const useRBACStore = create<RBACState>()(
       setResources: (resources) => set({ resources }),
       setPages: (pages) => set({ pages }),
       setMenus: (menus) => set({ menus }),
+      setRoles: (roles) => set({ roles }),
+      setUsers: (users) => set({ users }),
       setRoleMenuMappings: (mappings) => set({ roleMenuMappings: mappings }),
       setRolePagePermissions: (mappings) => set({ rolePagePermissions: mappings }),
       setUserOverrides: (overrides) => set({ userOverrides: overrides }),

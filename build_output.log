@@ -5,10 +5,10 @@
 ▲ Next.js 16.1.1 (Turbopack)
 
   Creating an optimized production build ...
-✓ Compiled successfully in 25.1s
+✓ Compiled successfully in 35.0s
   Running TypeScript ...
   Collecting page data using 3 workers ...
-  Generating static pages using 3 workers (0/72) ...
+  Generating static pages using 3 workers (0/74) ...
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -465,6 +465,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
+  Generating static pages using 3 workers (18/74)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -508,6 +509,35 @@ personal: loaded=undefined, progress=NO
 profile_photo: loaded=undefined, progress=NO
 education: loaded=undefined, progress=NO
 service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
+central_deputation: loaded=undefined, progress=NO
+training: loaded=undefined, progress=NO
+awards: loaded=undefined, progress=NO
+disability: loaded=undefined, progress=NO
+disciplinary: loaded=undefined, progress=NO
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -521,11 +551,30 @@ REQUIRED_SECTIONS: [
   'disability',
   'disciplinary'
 ]
+sectionLoaded keys: []
+sectionProgress keys: []
+personal: loaded=undefined, progress=NO
+profile_photo: loaded=undefined, progress=NO
+education: loaded=undefined, progress=NO
+service: loaded=undefined, progress=NO
 central_deputation: loaded=undefined, progress=NO
 training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
+
+🔍 isLoaded check: false
+REQUIRED_SECTIONS: [
+  'personal',
+  'profile_photo',
+  'education',
+  'service',
+  'central_deputation',
+  'training',
+  'awards',
+  'disability',
+  'disciplinary'
+]
 sectionLoaded keys: []
 sectionProgress keys: []
 personal: loaded=undefined, progress=NO
@@ -585,7 +634,6 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
-  Generating static pages using 3 workers (18/72)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1042,7 +1090,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
-  Generating static pages using 3 workers (36/72)
+  Generating static pages using 3 workers (36/74)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1499,6 +1547,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
+  Generating static pages using 3 workers (55/74)
 
 🔍 isLoaded check: false
 REQUIRED_SECTIONS: [
@@ -1547,8 +1596,7 @@ training: loaded=undefined, progress=NO
 awards: loaded=undefined, progress=NO
 disability: loaded=undefined, progress=NO
 disciplinary: loaded=undefined, progress=NO
-  Generating static pages using 3 workers (54/72)
-✓ Generating static pages using 3 workers (72/72) in 1104.7ms
+✓ Generating static pages using 3 workers (74/74) in 1142.6ms
   Finalizing page optimization ...
 
 Route (app)
@@ -1611,8 +1659,10 @@ Route (app)
 ├ ○ /rbac/menus-management
 ├ ○ /rbac/pages-management
 ├ ○ /rbac/resources-management
+├ ○ /rbac/role-management
 ├ ○ /rbac/role-menu-mapping
 ├ ○ /rbac/role-page-permissions
+├ ○ /rbac/user-management
 ├ ○ /rbac/user-menu-override
 ├ ○ /rbac/user-page-permission-override
 ├ ○ /reports
