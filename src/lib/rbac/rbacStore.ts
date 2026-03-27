@@ -175,6 +175,7 @@ const initialMenus: MenuNode[] = [
   { id: 31, name: 'User Page Permission Override', path: '/rbac/user-page-permission-override', type: 'MENU', parentId: 23, sortOrder: 8 },
   { id: 62, name: 'Role Management', path: '/rbac/role-management', type: 'MENU', parentId: 23, sortOrder: 9 },
   { id: 63, name: 'User Role Mapping', path: '/rbac/user-management', type: 'MENU', parentId: 23, sortOrder: 10 },
+  { id: 64, name: 'Add User', path: '/rbac/add-user', type: 'MENU', parentId: 23, sortOrder: 11 },
 ];
 
 const initialActions: ActionMaster[] = [
@@ -256,6 +257,7 @@ const initialPages: PageMaster[] = [
   { id: 56, name: 'User Page Permission Override', url: '/rbac/user-page-permission-override' },
   { id: 62, name: 'Role Management', url: '/rbac/role-management' },
   { id: 63, name: 'User Management', url: '/rbac/user-management' },
+  { id: 64, name: 'Add User', url: '/rbac/add-user' },
 
   // Services
   { id: 57, name: 'Services Entitlement Claims', url: '/services/entitlement-claims' },
@@ -347,6 +349,7 @@ export const useRBACStore = create<RBACState>()(
     }),
     {
       name: 'rbac-storage', // name of item in storage (must be unique)
+      version: 2, // bump version to bust the cache of old role mapping data
     }
   )
 );
