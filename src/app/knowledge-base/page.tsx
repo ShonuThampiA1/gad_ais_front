@@ -2,7 +2,22 @@
 
 import React, { useState, useMemo } from 'react';
 import { DashboardLayout } from '../components/layouts/dashboardlayout';
-import { MagnifyingGlassIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import {
+  MagnifyingGlassIcon,
+  PlayCircleIcon,
+  UserIcon,
+  GlobeAmericasIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  PresentationChartBarIcon,
+  TrophyIcon,
+  HandRaisedIcon,
+  NoSymbolIcon,
+  QuestionMarkCircleIcon,
+  SparklesIcon,
+  HomeIcon,
+  DocumentTextIcon
+} from '@heroicons/react/24/outline';
 import { Breadcrumb } from '@/app/components/breadcrumb';
 
 // Types
@@ -12,6 +27,7 @@ type Flow = {
   description: string;
   steps: string[];
   videoPlaceholder?: string;
+  icon?: React.ElementType;
 };
 
 type Module = {
@@ -31,6 +47,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-1',
         title: 'Officer Details',
+        icon: UserIcon,
         description: 'Details regarding your primary identification and contact information.',
         steps: [
           'Navigate to the "Officer Details" section in your ER Profile.',
@@ -43,6 +60,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-2',
         title: 'Personal Information',
+        icon: UserIcon,
         description: 'Update personal attributes and demographic data.',
         steps: [
           'Navigate to the "Personal Information" section.',
@@ -55,6 +73,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-3',
         title: 'Address Information',
+        icon: HomeIcon,
         description: 'Manage your permanent and present address details.',
         steps: [
           'Select the "Address Information" section.',
@@ -67,6 +86,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-4',
         title: 'Dependent Details',
+        icon: UserIcon,
         description: 'Add or modify information about your dependents.',
         steps: [
           'Go to "Dependent Details" in the accordion menu.',
@@ -79,6 +99,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-5',
         title: 'Educational Qualifications',
+        icon: AcademicCapIcon,
         description: 'Add your academic degrees and certifications.',
         steps: [
           'Expand the "Educational Qualifications" section.',
@@ -91,6 +112,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-6',
         title: 'Service Details',
+        icon: BriefcaseIcon,
         description: 'Record your service history and current posting information.',
         steps: [
           'Open "Service Details".',
@@ -103,6 +125,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-7',
         title: 'Deputation Details',
+        icon: GlobeAmericasIcon,
         description: 'Record periods of deputation to other departments or governments.',
         steps: [
           'Navigate to "Deputation Details".',
@@ -115,6 +138,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-8',
         title: 'Training Details',
+        icon: PresentationChartBarIcon,
         description: 'Log any official training programs attended.',
         steps: [
           'Select "Training Details" from the menu.',
@@ -127,6 +151,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-9',
         title: 'Awards and Publications',
+        icon: TrophyIcon,
         description: 'Document your professional achievements and publications.',
         steps: [
           'Expand the "Awards and Publications" section.',
@@ -139,6 +164,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-10',
         title: 'Disability Details',
+        icon: HandRaisedIcon,
         description: 'Record any relevant disability information.',
         steps: [
           'Open "Disability Details".',
@@ -151,6 +177,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-11',
         title: 'Disciplinary Details',
+        icon: NoSymbolIcon,
         description: 'Record any disciplinary actions or proceedings.',
         steps: [
           'Navigate to "Disciplinary Details".',
@@ -163,6 +190,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-12',
         title: 'How to complete Profile',
+        icon: QuestionMarkCircleIcon,
         description: 'General guide on successfully completing the ER Profile.',
         steps: [
           'Use the Spark Profile preview to check synced data first.',
@@ -175,6 +203,7 @@ const manualData: Module[] = [
       {
         id: 'flow-profile-13',
         title: 'Guided Mode',
+        icon: SparklesIcon,
         description: 'Learn how to use Guided Mode for step-by-step assistance.',
         steps: [
           'Click the "Start Guided Mode" button at the top of the ER Profile.',
@@ -194,6 +223,7 @@ const manualData: Module[] = [
       {
         id: 'flow-dashboard-1',
         title: 'Navigating the Sidebar',
+        icon: HomeIcon,
         description: 'How to use the main sidebar to access different sections of the portal.',
         steps: [
           'Log in to the portal.',
@@ -206,6 +236,7 @@ const manualData: Module[] = [
       {
         id: 'flow-dashboard-2',
         title: 'Viewing Officer Details',
+        icon: UserIcon,
         description: 'How to view your quick profile summary on the dashboard.',
         steps: [
           'Navigate to the main Dashboard.',
@@ -223,6 +254,7 @@ const manualData: Module[] = [
       {
         id: 'flow-services-1',
         title: 'Submitting a Request',
+        icon: DocumentTextIcon,
         description: 'How to submit a new service request.',
         steps: [
           'Click on "e-Services" in the navigation.',
@@ -364,7 +396,10 @@ export default function KnowledgeBasePage() {
                         <span className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 font-bold text-xs shrink-0">
                           {index + 1}
                         </span>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{flow.title}</h3>
+                        {flow.icon && (
+                            <flow.icon className="h-6 w-6 text-primary-500 shrink-0" aria-hidden="true" strokeWidth={2} />
+                        )}
+                        <h3 className="text-lg font-semibold text-primary-500">{flow.title}</h3>
                       </div>
 
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 ml-10">{flow.description}</p>
