@@ -20,7 +20,7 @@ const roleBasedRoutes = {
     '/documents',
     '/reports',
     '/services',
-    '/user-manual',
+    '/knowledge-base',
    
   ],
   '3': [ // section officer
