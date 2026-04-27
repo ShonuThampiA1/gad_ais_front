@@ -34,7 +34,7 @@ const DashboardNavigation = () => {
     { name: 'My Applications', href: '/applications', icon: FolderIcon, role: [2] },
     { name: 'My Documents', href: '/documents', icon: CalendarIcon, role: [2] },
     { name: 'My Profile', href: '/er-profile', icon: UserIcon, role: [2] },
-    { name: 'User Manual', href: '/user-manual', icon: BookOpenIcon, role: [2] },
+    { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpenIcon, role: [2] },
   ];
 
   const filteredNavigation =
