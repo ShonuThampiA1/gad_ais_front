@@ -20,7 +20,8 @@ import {
   ChevronDownIcon,
   PlayCircleIcon,
   LinkIcon,
-  ArrowTopRightOnSquareIcon
+  ArrowTopRightOnSquareIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 
 // Types
@@ -276,12 +277,48 @@ const manualSegments: ModuleSegment[] = [
 ];
 
 export default function UserManualPage() {
+  const [searchTerm, setSearchTerm] = useState('');
   const [activeSegmentId, setActiveSegmentId] = useState<string>(manualSegments[0].id);
   const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set());
 
+  // Filter segments and flows based on search
+  const filteredSegments = useMemo(() => {
+    if (!searchTerm.trim()) return manualSegments;
+
+    const lowerSearch = searchTerm.toLowerCase();
+
+    return manualSegments.map(segment => {
+      const segmentMatches = segment.title.toLowerCase().includes(lowerSearch) ||
+                             segment.overview.toLowerCase().includes(lowerSearch);
+
+      const matchingFlows = segment.flows.filter(flow =>
+        flow.title.toLowerCase().includes(lowerSearch) ||
+        flow.description.toLowerCase().includes(lowerSearch) ||
+        flow.steps.some(step => step.toLowerCase().includes(lowerSearch))
+      );
+
+      if (segmentMatches) {
+          return { ...segment };
+      }
+      return { ...segment, flows: matchingFlows };
+
+    }).filter(segment => segment.flows.length > 0 ||
+                         segment.title.toLowerCase().includes(lowerSearch) ||
+                         segment.overview.toLowerCase().includes(lowerSearch));
+  }, [searchTerm]);
+
+  // Effect to automatically select the first matching segment when search changes
+  useEffect(() => {
+    if (filteredSegments.length > 0) {
+        if (!filteredSegments.find(s => s.id === activeSegmentId)) {
+            setActiveSegmentId(filteredSegments[0].id);
+        }
+    }
+  }, [filteredSegments, activeSegmentId]);
+
   // Automatically expand the first flow of the active segment when segment changes
   useEffect(() => {
-    const activeSegment = manualSegments.find(s => s.id === activeSegmentId);
+    const activeSegment = filteredSegments.find(s => s.id === activeSegmentId);
     if (activeSegment && activeSegment.flows.length > 0) {
       setExpandedFlows(new Set([activeSegment.flows[0].id]));
     } else {
@@ -324,8 +361,25 @@ export default function UserManualPage() {
       <div className="bg-white rounded-md px-4 py-6 sm:px-6 lg:px-8 dark:bg-gray-800/50 mt-4 relative z-0">
 
         <div className="mb-8 border-b border-gray-200 dark:border-gray-700 pb-4">
-          <h1 className="text-3xl font-bold text-primary-500 mb-2">User Manual</h1>
-          <p className="text-gray-600 dark:text-gray-300">Detailed flow documentation for all portal modules.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-primary-500 mb-2">User Manual</h1>
+              <p className="text-gray-600 dark:text-gray-300">Detailed flow documentation for all portal modules.</p>
+            </div>
+
+            <div className="relative w-full sm:max-w-xs">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+              </div>
+              <input
+                type="text"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-gray-900 dark:text-white shadow-sm"
+                placeholder="Search manual..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         {/* 2/3 - 1/3 Layout */}
@@ -333,7 +387,11 @@ export default function UserManualPage() {
 
           {/* Left Section: Segments List (2/3 width) */}
           <div className="lg:w-2/3 space-y-6 relative z-0">
-            {manualSegments.map((segment) => {
+            {filteredSegments.length === 0 ? (
+               <div className="py-12 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                 No sections found matching "{searchTerm}".
+               </div>
+            ) : filteredSegments.map((segment) => {
               const isActive = segment.id === activeSegmentId;
 
               return (
