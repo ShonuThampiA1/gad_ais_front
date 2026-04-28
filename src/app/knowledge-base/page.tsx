@@ -10,10 +10,13 @@ import {
   DocumentTextIcon,
   VideoCameraIcon,
   LightBulbIcon,
-  RocketLaunchIcon
+  RocketLaunchIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 
 export default function KnowledgeBaseLandingPage() {
+  const [searchTerm, setSearchTerm] = React.useState('');
+
   const categories = [
     {
       id: 'user-manual',
@@ -80,14 +83,31 @@ export default function KnowledgeBaseLandingPage() {
         {/* Header Section */}
         <div className="mb-10 text-center max-w-2xl mx-auto">
           <h1 className="text-3xl font-bold text-primary-500 mb-4">How can we help you today?</h1>
-          <p className="text-base text-gray-600 dark:text-gray-300">
+          <p className="text-base text-gray-600 dark:text-gray-300 mb-6">
             Browse through our knowledge base categories below to find documentation, guides, and answers to your questions.
           </p>
+
+          <div className="relative max-w-xl mx-auto">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-gray-900 dark:text-white shadow-sm"
+              placeholder="Search for answers, guides, or manuals..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Categories Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto relative z-0">
-          {categories.map((category) => (
+          {categories.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase()) || c.description.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+             <div className="col-span-full py-12 text-center text-gray-500 dark:text-gray-400">
+               No categories found matching "{searchTerm}".
+             </div>
+          ) : categories.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase()) || c.description.toLowerCase().includes(searchTerm.toLowerCase())).map((category) => (
             <Link
               key={category.id}
               href={category.href}
