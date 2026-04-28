@@ -318,10 +318,10 @@ export default function KnowledgeBasePage() {
   return (
     <DashboardLayout>
       <Breadcrumb />
-      <div className="bg-white rounded-md px-1 py-3 dark:bg-gray-800/50 mt-4">
+      <div className="bg-white rounded-md px-4 py-3 dark:bg-gray-800/50 mt-4">
 
         {/* Header & Search */}
-        <div className="mb-6 p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Knowledge Base</h1>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
             Welcome to the AIS e-Service Portal documentation. Find guides and step-by-step instructions below.
