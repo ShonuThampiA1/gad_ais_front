@@ -21,6 +21,7 @@ const roleBasedRoutes = {
     '/reports',
     '/services',
     '/knowledge-base',
+    '/knowledge-base/user-manual',
    
   ],
   '3': [ // section officer
