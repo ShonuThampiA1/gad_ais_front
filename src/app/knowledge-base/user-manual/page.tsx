@@ -31,7 +31,7 @@ type Flow = {
   title: string;
   description: string;
   steps: string[];
-  image?: string;
+  images?: string[];
   icon?: React.ElementType;
 };
 
@@ -62,7 +62,7 @@ const manualSegments: ModuleSegment[] = [
           'Fill in any missing or required fields such as mobile number or emergency contact.',
           'Click the "Save" button to securely store your officer details.'
         ],
-        image: '/images/knowledge_base/user_manual/Officer_details_new_one.png'
+        images: ['/images/knowledge_base/user_manual/Officer_details_new_one.png']
       },
       {
         id: 'flow-profile-2',
@@ -75,7 +75,10 @@ const manualSegments: ModuleSegment[] = [
           'Upload any necessary supporting documents if prompted.',
           'Save the card to update your profile.'
         ],
-        image: '/images/knowledge_base/user_manual/Personal_details.png'
+        images: [
+          '/images/knowledge_base/user_manual/Personal_details.png',
+          '/images/knowledge_base/user_manual/personal_edit.png'
+        ]
       },
       {
         id: 'flow-profile-3',
@@ -100,7 +103,10 @@ const manualSegments: ModuleSegment[] = [
           'Select the relationship type and provide their name and date of birth.',
           'Save each dependent entry individually.'
         ],
-        image: '/images/knowledge_base/user_manual/dependent_details.png'
+        images: [
+          '/images/knowledge_base/user_manual/dependent_details.png',
+          '/images/knowledge_base/user_manual/dependent_save.png'
+        ]
       },
       {
         id: 'flow-profile-5',
@@ -113,7 +119,10 @@ const manualSegments: ModuleSegment[] = [
           'Enter details like Degree, Subject, University/Board, and Year of Passing.',
           'Ensure the details match your official records and save.'
         ],
-        image: '/images/knowledge_base/user_manual/education_Qualification_list.png'
+        images: [
+          '/images/knowledge_base/user_manual/education_Qualification_list.png',
+          '/images/knowledge_base/user_manual/education_save.png'
+        ]
       },
       {
         id: 'flow-profile-6',
@@ -126,7 +135,10 @@ const manualSegments: ModuleSegment[] = [
           'Update your posting history chronologically.',
           'Save the service record updates.'
         ],
-        image: '/images/knowledge_base/user_manual/service_listing.png'
+        images: [
+          '/images/knowledge_base/user_manual/service_listing.png',
+          '/images/knowledge_base/user_manual/service_add.png'
+        ]
       },
       {
         id: 'flow-profile-7',
@@ -139,7 +151,10 @@ const manualSegments: ModuleSegment[] = [
           'Fill in the organization name, start date, end date, and role.',
           'Save the deputation entry.'
         ],
-        image: '/images/knowledge_base/user_manual/deputation_details.png'
+        images: [
+          '/images/knowledge_base/user_manual/deputation_details.png',
+          '/images/knowledge_base/user_manual/deputation_save.png'
+        ]
       },
       {
         id: 'flow-profile-8',
@@ -152,7 +167,10 @@ const manualSegments: ModuleSegment[] = [
           'Provide the training topic, institution, and duration.',
           'Save to update your training history.'
         ],
-        image: '/images/knowledge_base/user_manual/Training_details.png'
+        images: [
+          '/images/knowledge_base/user_manual/Training_details.png',
+          '/images/knowledge_base/user_manual/training_save.png'
+        ]
       },
       {
         id: 'flow-profile-9',
@@ -165,7 +183,10 @@ const manualSegments: ModuleSegment[] = [
           'Enter the title, year, and issuing authority or publisher.',
           'Save the entry.'
         ],
-        image: '/images/knowledge_base/user_manual/awards_listing.png'
+        images: [
+          '/images/knowledge_base/user_manual/awards_listing.png',
+          '/images/knowledge_base/user_manual/awards_save.png'
+        ]
       },
       {
         id: 'flow-profile-10',
@@ -178,7 +199,10 @@ const manualSegments: ModuleSegment[] = [
           'If yes, provide the type and percentage of disability as per the medical certificate.',
           'Upload the supporting certificate and save.'
         ],
-        image: '/images/knowledge_base/user_manual/disability_listing.png'
+        images: [
+          '/images/knowledge_base/user_manual/disability_listing.png',
+          '/images/knowledge_base/user_manual/disability_save.png'
+        ]
       },
       {
         id: 'flow-profile-11',
@@ -191,7 +215,9 @@ const manualSegments: ModuleSegment[] = [
           'Provide the date, authority, and nature of the action.',
           'Save the disciplinary record.'
         ],
-        image: '/images/knowledge_base/user_manual/disciplinary_listing.png'
+        images: [
+          '/images/knowledge_base/user_manual/disciplinary_listing.png'
+        ]
       },
       {
         id: 'flow-profile-12',
@@ -452,16 +478,16 @@ export default function UserManualPage() {
                                         </ol>
 
                                         {/* Image Section */}
-                                        {flow.image && (
-                                          <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-sm relative w-full" style={{ aspectRatio: '16/9' }}>
+                                        {flow.images && flow.images.map((imgSrc, imgIdx) => (
+                                          <div key={imgIdx} className="mt-4 relative w-full mb-4" style={{ aspectRatio: '16/9' }}>
                                             <Image
-                                              src={flow.image}
-                                              alt={flow.title}
+                                              src={imgSrc}
+                                              alt={`${flow.title} - Step ${imgIdx + 1}`}
                                               fill
                                               className="object-contain"
                                             />
                                           </div>
-                                        )}
+                                        ))}
                                       </div>
                                     )}
                                  </div>
