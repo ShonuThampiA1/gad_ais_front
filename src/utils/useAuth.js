@@ -12,6 +12,7 @@ const roleBasedRoutes = {
     '/add/officer',
     '/add-post',
     '/lists',
+    '/rbac',
     
   ],
   '2': [ // ais Officer
