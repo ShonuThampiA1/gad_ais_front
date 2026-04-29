@@ -27,8 +27,10 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
         <ol className="flex min-w-0 items-center space-x-4">
           {/* Home Link */}
           <li className="flex items-center">
-            <HomeIcon aria-hidden="true" className="size-5 shrink-0 text-gray-500 dark:text-gray-200" />
-            <span className="sr-only">Home</span>
+            <Link href="/home" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-200 dark:hover:text-gray-100">
+              <HomeIcon aria-hidden="true" className="size-5 shrink-0" />
+              <span className="sr-only">Home</span>
+            </Link>
           </li>
 
           {/* Dynamic Breadcrumb Items */}
@@ -41,7 +43,7 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
 
               {/* Breadcrumb Link */}
               <Link
-                href="#"
+                href={page.current ? "#" : page.href}
                 className={`ml-4 text-sm font-medium capitalize ${
                   page.current ? "text-gray-700 dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
                 }`}

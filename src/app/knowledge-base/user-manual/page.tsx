@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { DashboardLayout } from '../../components/layouts/dashboardlayout';
 import { Breadcrumb } from '@/app/components/breadcrumb';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   UserIcon,
   GlobeAmericasIcon,
@@ -30,7 +31,7 @@ type Flow = {
   title: string;
   description: string;
   steps: string[];
-  videoPlaceholder?: string;
+  image?: string;
   icon?: React.ElementType;
 };
 
@@ -61,7 +62,7 @@ const manualSegments: ModuleSegment[] = [
           'Fill in any missing or required fields such as mobile number or emergency contact.',
           'Click the "Save" button to securely store your officer details.'
         ],
-        videoPlaceholder: 'How to update Officer Details'
+        image: '/images/knowledge_base/user_manual/Officer_details_new_one.png'
       },
       {
         id: 'flow-profile-2',
@@ -74,7 +75,7 @@ const manualSegments: ModuleSegment[] = [
           'Upload any necessary supporting documents if prompted.',
           'Save the card to update your profile.'
         ],
-        videoPlaceholder: 'Managing Personal Information'
+        image: '/images/knowledge_base/user_manual/Personal_details.png'
       },
       {
         id: 'flow-profile-3',
@@ -86,8 +87,7 @@ const manualSegments: ModuleSegment[] = [
           'Provide your Permanent Address details including State, District, and Pincode.',
           'If your Present Address is the same, check the "Same as Permanent Address" box.',
           'Otherwise, provide the Present Address details separately and save.'
-        ],
-        videoPlaceholder: 'Updating Address Details'
+        ]
       },
       {
         id: 'flow-profile-4',
@@ -100,7 +100,7 @@ const manualSegments: ModuleSegment[] = [
           'Select the relationship type and provide their name and date of birth.',
           'Save each dependent entry individually.'
         ],
-        videoPlaceholder: 'How to add Dependent Details'
+        image: '/images/knowledge_base/user_manual/dependent_details.png'
       },
       {
         id: 'flow-profile-5',
@@ -113,7 +113,7 @@ const manualSegments: ModuleSegment[] = [
           'Enter details like Degree, Subject, University/Board, and Year of Passing.',
           'Ensure the details match your official records and save.'
         ],
-        videoPlaceholder: 'Adding Educational Qualifications'
+        image: '/images/knowledge_base/user_manual/education_Qualification_list.png'
       },
       {
         id: 'flow-profile-6',
@@ -126,7 +126,7 @@ const manualSegments: ModuleSegment[] = [
           'Update your posting history chronologically.',
           'Save the service record updates.'
         ],
-        videoPlaceholder: 'Managing Service Details'
+        image: '/images/knowledge_base/user_manual/service_listing.png'
       },
       {
         id: 'flow-profile-7',
@@ -139,7 +139,7 @@ const manualSegments: ModuleSegment[] = [
           'Fill in the organization name, start date, end date, and role.',
           'Save the deputation entry.'
         ],
-        videoPlaceholder: 'Adding Deputation Records'
+        image: '/images/knowledge_base/user_manual/deputation_details.png'
       },
       {
         id: 'flow-profile-8',
@@ -152,7 +152,7 @@ const manualSegments: ModuleSegment[] = [
           'Provide the training topic, institution, and duration.',
           'Save to update your training history.'
         ],
-        videoPlaceholder: 'Logging Training Details'
+        image: '/images/knowledge_base/user_manual/Training_details.png'
       },
       {
         id: 'flow-profile-9',
@@ -165,7 +165,7 @@ const manualSegments: ModuleSegment[] = [
           'Enter the title, year, and issuing authority or publisher.',
           'Save the entry.'
         ],
-        videoPlaceholder: 'Recording Awards and Publications'
+        image: '/images/knowledge_base/user_manual/awards_listing.png'
       },
       {
         id: 'flow-profile-10',
@@ -178,7 +178,7 @@ const manualSegments: ModuleSegment[] = [
           'If yes, provide the type and percentage of disability as per the medical certificate.',
           'Upload the supporting certificate and save.'
         ],
-        videoPlaceholder: 'Updating Disability Details'
+        image: '/images/knowledge_base/user_manual/disability_listing.png'
       },
       {
         id: 'flow-profile-11',
@@ -191,7 +191,7 @@ const manualSegments: ModuleSegment[] = [
           'Provide the date, authority, and nature of the action.',
           'Save the disciplinary record.'
         ],
-        videoPlaceholder: 'Managing Disciplinary Details'
+        image: '/images/knowledge_base/user_manual/disciplinary_listing.png'
       },
       {
         id: 'flow-profile-12',
@@ -203,8 +203,7 @@ const manualSegments: ModuleSegment[] = [
           'Go through each section sequentially, starting from Officer Details.',
           'Ensure every required field is filled and saved individually.',
           'Once all sections are complete, you can preview and submit the final profile for verification.'
-        ],
-        videoPlaceholder: 'General Guide: Completing the Profile'
+        ]
       },
       {
         id: 'flow-profile-13',
@@ -216,8 +215,7 @@ const manualSegments: ModuleSegment[] = [
           'A Guidance Coach panel will appear to assist you.',
           'Click "Open Next Pending" to automatically navigate to the next incomplete section.',
           'Follow the coach prompts to finish filling out the mandatory fields.'
-        ],
-        videoPlaceholder: 'Using Guided Mode'
+        ]
       }
     ]
   },
@@ -237,8 +235,7 @@ const manualSegments: ModuleSegment[] = [
           'Look at the left-side navigation menu or top secondary navbar.',
           'Click on an icon to navigate to that section (e.g., e-Services, My Profile).',
           'The active section will be highlighted.'
-        ],
-        videoPlaceholder: 'Navigation Overview Video'
+        ]
       },
       {
         id: 'flow-dashboard-2',
@@ -269,8 +266,7 @@ const manualSegments: ModuleSegment[] = [
           'Select the type of request you want to submit.',
           'Fill in the required details in the form.',
           'Click the "Submit" button to finalize your request.'
-        ],
-        videoPlaceholder: 'Service Request Submission Video'
+        ]
       }
     ]
   }
@@ -455,21 +451,17 @@ export default function UserManualPage() {
                                           ))}
                                         </ol>
 
-                                        {/* Video Section Placeholder */}
-                                        <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900">
-                                          <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center justify-between">
-                                              <span className="font-medium text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                                                  <PlayCircleIcon className="w-5 h-5 text-primary-500" />
-                                                  Video Guide
-                                              </span>
+                                        {/* Image Section */}
+                                        {flow.image && (
+                                          <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900 shadow-sm relative w-full" style={{ aspectRatio: '16/9' }}>
+                                            <Image
+                                              src={flow.image}
+                                              alt={flow.title}
+                                              fill
+                                              className="object-contain"
+                                            />
                                           </div>
-                                          <div className="aspect-video flex items-center justify-center p-6">
-                                              <div className="text-center">
-                                                  <PlayCircleIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-                                                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Video Placeholder: {flow.videoPlaceholder}</p>
-                                              </div>
-                                          </div>
-                                        </div>
+                                        )}
                                       </div>
                                     )}
                                  </div>
