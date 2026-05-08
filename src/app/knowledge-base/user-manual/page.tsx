@@ -43,17 +43,18 @@ type ModuleSegment = {
   flows: Flow[];
 };
 
-// Mock Data representing different segments (left menu items)
-const manualSegments: ModuleSegment[] = [
-  {
-    id: 'my-profile',
-    title: 'My Profile',
-    overview: 'Complete details of your ER Profile including personal, educational, service, and other details. This section acts as a central repository for your employee record.',
-    icon: UserIcon,
-    flows: [
-      {
-        id: 'flow-profile-1',
-        title: 'Officer Details',
+// Mock Data representing different segments by role
+const roleManualData: Record<string, ModuleSegment[]> = {
+  'AIS Officer': [
+    {
+      id: 'my-profile',
+      title: 'My Profile',
+      overview: 'Complete details of your ER Profile including personal, educational, service, and other details. This section acts as a central repository for your employee record.',
+      icon: UserIcon,
+      flows: [
+        {
+          id: 'flow-profile-1',
+          title: 'Officer Details',
         icon: UserIcon,
         description: 'Details regarding your primary identification and contact information.',
         steps: [
@@ -296,20 +297,124 @@ const manualSegments: ModuleSegment[] = [
       }
     ]
   }
-];
+  ],
+  'Additional Secretary': [
+    {
+      id: 'profile-approvals',
+      title: 'Profile Approvals',
+      overview: 'Review and approve ER Profiles submitted by AIS Officers.',
+      icon: DocumentTextIcon,
+      flows: [
+        {
+          id: 'flow-as-1',
+          title: 'Reviewing a Profile',
+          icon: DocumentTextIcon,
+          description: 'How to access and review a submitted profile.',
+          steps: [
+            'Navigate to the "Profiles Awaiting Verification" section.',
+            'Select an officer\'s profile from the list.',
+            'Review all sections and uploaded documents for accuracy.'
+          ]
+        },
+        {
+          id: 'flow-as-2',
+          title: 'Approving or Rejecting',
+          icon: SparklesIcon,
+          description: 'Steps to finalize the profile verification process.',
+          steps: [
+            'After reviewing the profile, click the "Approve" button if all details are correct.',
+            'If discrepancies are found, provide comments and click "Reject" to send it back to the officer.',
+            'Confirm the action to update the profile status.'
+          ]
+        }
+      ]
+    },
+    {
+      id: 'officer-onboarding',
+      title: 'AIS Officer Onboarding',
+      overview: 'Manage the onboarding process for new AIS Officers.',
+      icon: UserIcon,
+      flows: [
+        {
+          id: 'flow-as-3',
+          title: 'Initiating Onboarding',
+          icon: UserIcon,
+          description: 'How to start the onboarding workflow for a new officer.',
+          steps: [
+            'Navigate to the "AIS Officer Onboarding" module.',
+            'Enter the basic details and AIS number of the new officer.',
+            'Trigger the initial profile creation and invite the officer to complete their profile.'
+          ]
+        }
+      ]
+    }
+  ],
+  'Admin': [
+    {
+      id: 'system-management',
+      title: 'System Management',
+      overview: 'Manage core system settings and configurations.',
+      icon: GlobeAmericasIcon,
+      flows: [
+        {
+          id: 'flow-admin-1',
+          title: 'Managing Master Data',
+          icon: BriefcaseIcon,
+          description: 'How to update master data tables.',
+          steps: [
+            'Navigate to the Master Controls section.',
+            'Select the specific table to update (e.g., Designations, Departments).',
+            'Add, edit, or remove entries as required.'
+          ]
+        }
+      ]
+    }
+  ],
+  'Super Admin': [
+    {
+      id: 'rbac-management',
+      title: 'RBAC Management',
+      overview: 'Control roles, permissions, and access across the portal.',
+      icon: HandRaisedIcon,
+      flows: [
+        {
+          id: 'flow-superadmin-1',
+          title: 'Assigning Roles',
+          icon: UserIcon,
+          description: 'How to map users to their respective roles.',
+          steps: [
+            'Navigate to the RBAC module.',
+            'Select "User Role Mapping".',
+            'Assign the appropriate role to the selected user and save.'
+          ]
+        }
+      ]
+    }
+  ]
+};
 
 export default function UserManualPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeSegmentId, setActiveSegmentId] = useState<string>(manualSegments[0].id);
+  const [activeRole, setActiveRole] = useState<string>('AIS Officer');
+  const [activeSegmentId, setActiveSegmentId] = useState<string>(roleManualData['AIS Officer'][0].id);
   const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set());
+
+  const currentRoleSegments = roleManualData[activeRole] || [];
+
+  // Reset active segment when role changes
+  useEffect(() => {
+    if (currentRoleSegments.length > 0) {
+      setActiveSegmentId(currentRoleSegments[0].id);
+    }
+  }, [activeRole]);
 
   // Filter segments and flows based on search
   const filteredSegments = useMemo(() => {
-    if (!searchTerm.trim()) return manualSegments;
+    if (!searchTerm.trim()) return currentRoleSegments;
 
     const lowerSearch = searchTerm.toLowerCase();
 
-    return manualSegments.map(segment => {
+    return currentRoleSegments.map(segment => {
       const segmentMatches = segment.title.toLowerCase().includes(lowerSearch) ||
                              segment.overview.toLowerCase().includes(lowerSearch);
 
@@ -327,7 +432,7 @@ export default function UserManualPage() {
     }).filter(segment => segment.flows.length > 0 ||
                          segment.title.toLowerCase().includes(lowerSearch) ||
                          segment.overview.toLowerCase().includes(lowerSearch));
-  }, [searchTerm]);
+  }, [searchTerm, currentRoleSegments]);
 
   // Effect to automatically select the first matching segment when search changes
   useEffect(() => {
@@ -346,7 +451,7 @@ export default function UserManualPage() {
     } else {
       setExpandedFlows(new Set());
     }
-  }, [activeSegmentId]);
+  }, [activeSegmentId, filteredSegments]);
 
   const toggleFlow = (flowId: string) => {
     setExpandedFlows(prev => {
@@ -360,7 +465,7 @@ export default function UserManualPage() {
     });
   };
 
-  const activeSegment = manualSegments.find(s => s.id === activeSegmentId) || manualSegments[0];
+  const activeSegment = currentRoleSegments.find(s => s.id === activeSegmentId) || currentRoleSegments[0];
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
@@ -383,7 +488,7 @@ export default function UserManualPage() {
       <div className="bg-white rounded-md px-4 py-6 sm:px-6 lg:px-8 dark:bg-gray-800/50 mt-4 relative z-0">
 
         <div className="mb-8 border-b border-gray-200 dark:border-gray-700 pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-3xl font-bold text-primary-500 mb-2">User Manual</h1>
               <p className="text-gray-600 dark:text-gray-300">Detailed flow documentation for all portal modules.</p>
@@ -401,6 +506,23 @@ export default function UserManualPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Role Selection Tabs */}
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(roleManualData).map(role => (
+              <button
+                key={role}
+                onClick={() => setActiveRole(role)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  activeRole === role
+                    ? 'bg-indigo-100 text-primary-500 dark:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {role}
+              </button>
+            ))}
           </div>
         </div>
 

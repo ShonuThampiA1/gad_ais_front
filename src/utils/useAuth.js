@@ -13,6 +13,8 @@ const roleBasedRoutes = {
     '/add-post',
     '/lists',
     '/rbac',
+    '/knowledge-base',
+    '/knowledge-base/user-manual',
     
   ],
   '2': [ // ais Officer
@@ -29,8 +31,18 @@ const roleBasedRoutes = {
     '/master',
     '/master-controls',
     '/officer-profile',
+    '/knowledge-base',
+    '/knowledge-base/user-manual',
    
     
+  ],
+  '4': [ // additional secretary
+    '/knowledge-base',
+    '/knowledge-base/user-manual',
+  ],
+  '7': [ // super admin
+    '/knowledge-base',
+    '/knowledge-base/user-manual',
   ],
   // Add more roles as needed
 };
