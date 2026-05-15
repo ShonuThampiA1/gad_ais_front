@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { HomeIcon } from "@heroicons/react/20/solid";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,8 +9,31 @@ type BreadcrumbProps = {
   rightContent?: ReactNode;
 };
 
+const pathRedirects: Record<string, string> = {
+  "/services": "/services/entitlement-claims",
+  "/master": "/master/personal-profile",
+  "/master-controls": "/master-controls/user-management",
+  "/official": "/official/dashboard"
+};
+
 export function Breadcrumb({ rightContent }: BreadcrumbProps) {
   const pathname = usePathname(); // Get the current route
+  const [homeLink, setHomeLink] = useState("/login");
+
+  useEffect(() => {
+    const roleId = sessionStorage.getItem("role_id");
+    let dashboardPath = "/login";
+    switch (roleId) {
+      case "1": dashboardPath = "/add-section-officer"; break;
+      case "2": dashboardPath = "/services/entitlement-claims"; break;
+      case "3": dashboardPath = "/master-controls/user-management"; break;
+      case "4": dashboardPath = "/official/dashboard"; break;
+      case "7": dashboardPath = "/rbac"; break;
+      default: dashboardPath = "/login"; break;
+    }
+    setHomeLink(dashboardPath);
+  }, []);
+
   const pathSegments = pathname.split("/").filter((segment) => segment); // Remove empty segments
 
   const formatBreadcrumbName = (segment: string) => {
@@ -28,8 +51,9 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
 
   // Generate breadcrumb pages from URL segments
   const breadcrumbItems = pathSegments.map((segment, index) => {
-    const href = "/" + pathSegments.slice(0, index + 1).join("/");
-    const name = formatBreadcrumbName(segment);
+    const rawHref = "/" + pathSegments.slice(0, index + 1).join("/");
+    const href = pathRedirects[rawHref] || rawHref;
+    const name = decodeURIComponent(segment.replace(/-/g, " ")); // Format segment
   
     return { name, href, current: index === pathSegments.length - 1 };
   });
@@ -40,7 +64,7 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
         <ol className="flex min-w-0 flex-wrap items-center gap-y-2 sm:space-x-4">
           {/* Home Link */}
           <li className="flex items-center">
-            <Link href="/home" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-200 dark:hover:text-gray-100">
+            <Link href={homeLink} className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-200 dark:hover:text-gray-100">
               <HomeIcon aria-hidden="true" className="size-5 shrink-0" />
               <span className="sr-only">Home</span>
             </Link>
