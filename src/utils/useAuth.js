@@ -23,6 +23,7 @@ const roleBasedRoutes = {
     '/documents',
     '/reports',
     '/services',
+    '/reimbursement',
     '/knowledge-base',
     '/knowledge-base/user-manual',
    
@@ -41,6 +42,7 @@ const roleBasedRoutes = {
     '/knowledge-base/user-manual',
   ],
   '7': [ // super admin
+     '/rbac',
     '/knowledge-base',
     '/knowledge-base/user-manual',
   ],

@@ -13,18 +13,31 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
   const pathname = usePathname(); // Get the current route
   const pathSegments = pathname.split("/").filter((segment) => segment); // Remove empty segments
 
+  const formatBreadcrumbName = (segment: string) => {
+    const normalized = decodeURIComponent(segment.replace(/-/g, " "));
+    const lower = normalized.toLowerCase();
+
+    const specialLabels: Record<string, string> = {
+      "er profile": "ER Profile",
+      "rbac": "RBAC",
+      "ais": "AIS",
+    };
+
+    return specialLabels[lower] || normalized;
+  };
+
   // Generate breadcrumb pages from URL segments
   const breadcrumbItems = pathSegments.map((segment, index) => {
     const href = "/" + pathSegments.slice(0, index + 1).join("/");
-    const name = decodeURIComponent(segment.replace(/-/g, " ")); // Format segment
+    const name = formatBreadcrumbName(segment);
   
     return { name, href, current: index === pathSegments.length - 1 };
   });
  
   return (
-    <nav aria-label="Breadcrumb" className="my-3 w-full">
-      <div className="flex w-full items-center rounded-md border bg-white px-6 dark:border-neutral-800 dark:bg-neutral-700 dark:text-white">
-        <ol className="flex min-w-0 items-center space-x-4">
+    <nav aria-label="Breadcrumb" className="my-1.5 w-full">
+      <div className="flex w-full flex-col gap-1 rounded-md border bg-white px-3 py-1.5 sm:flex-row sm:items-center sm:px-4 dark:border-neutral-800 dark:bg-neutral-700 dark:text-white">
+        <ol className="flex min-w-0 flex-wrap items-center gap-y-2 sm:space-x-4">
           {/* Home Link */}
           <li className="flex items-center">
             <Link href="/home" className="flex items-center text-gray-500 hover:text-gray-700 dark:text-gray-200 dark:hover:text-gray-100">
@@ -44,7 +57,7 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
               {/* Breadcrumb Link */}
               <Link
                 href={page.current ? "#" : page.href}
-                className={`ml-4 text-sm font-medium capitalize ${
+                className={`ml-4 text-sm font-medium ${
                   page.current ? "text-gray-700 dark:text-gray-100" : "text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
                 }`}
               >
@@ -55,7 +68,7 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
         </ol>
 
         {rightContent && (
-          <div className="ml-auto flex items-center gap-2 py-2">{rightContent}</div>
+          <div className="flex items-center gap-2 pt-0 sm:ml-auto">{rightContent}</div>
         )}
       </div>
     </nav>
