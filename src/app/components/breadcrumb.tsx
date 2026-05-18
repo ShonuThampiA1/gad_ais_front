@@ -53,14 +53,14 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
   const breadcrumbItems = pathSegments.map((segment, index) => {
     const rawHref = "/" + pathSegments.slice(0, index + 1).join("/");
     const href = pathRedirects[rawHref] || rawHref;
-    const name = decodeURIComponent(segment.replace(/-/g, " ")); // Format segment
+    const name = formatBreadcrumbName(segment);
   
     return { name, href, current: index === pathSegments.length - 1 };
   });
  
   return (
     <nav aria-label="Breadcrumb" className="my-1.5 w-full">
-      <div className="flex w-full flex-col gap-1 rounded-md border bg-white px-3 py-1.5 sm:flex-row sm:items-center sm:px-4 dark:border-neutral-800 dark:bg-neutral-700 dark:text-white">
+      <div className="flex w-full flex-col gap-1 rounded-md border bg-white px-3 sm:flex-row sm:items-center sm:px-4 dark:border-neutral-800 dark:bg-neutral-700 dark:text-white">
         <ol className="flex min-w-0 flex-wrap items-center gap-y-2 sm:space-x-4">
           {/* Home Link */}
           <li className="flex items-center">

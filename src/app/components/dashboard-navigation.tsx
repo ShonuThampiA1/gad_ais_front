@@ -19,7 +19,11 @@ type NavigationItem = {
   role?: number[];
 };
 
-const DashboardNavigation = () => {
+type DashboardNavigationProps = {
+  variant?: 'desktop' | 'mobile';
+};
+
+const DashboardNavigation = ({ variant = 'desktop' }: DashboardNavigationProps) => {
   const pathname = usePathname();
   const [role, setRole] = useState<number | null>(null);
 
@@ -30,11 +34,12 @@ const DashboardNavigation = () => {
 
   const navigation: NavigationItem[] = [
     { name: 'Dashboard', href: '/services/entitlement-claims', icon: HomeIcon, role: [2] },
-    { name: 'e-Services', href: '/services/requests', icon: UsersIcon, role: [2] },
     { name: 'My Applications', href: '/applications', icon: FolderIcon, role: [2] },
     { name: 'My Documents', href: '/documents', icon: CalendarIcon, role: [2] },
     { name: 'My Profile', href: '/er-profile', icon: UserIcon, role: [2] },
+    { name: 'Dashboard', href: '/rbac/dashboard', icon: HomeIcon, role: [7] },
     { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpenIcon, role: [1, 2, 3, 4, 7] },
+
   ];
 
   const filteredNavigation =
@@ -49,7 +54,13 @@ const DashboardNavigation = () => {
   }
 
   return (
-    <nav>
+    <nav
+      className={
+        variant === 'mobile'
+          ? 'flex flex-col gap-2'
+          : 'flex flex-row flex-nowrap items-center justify-center gap-1 overflow-x-auto whitespace-nowrap'
+      }
+    >
       {filteredNavigation.map((item) => {
         const isActive =
           pathname === item.href ||
@@ -63,17 +74,19 @@ const DashboardNavigation = () => {
               isActive
                 ? 'border-indigo-600 text-neutral-900'
                 : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-700',
-              'inline-flex flex-col items-center border-b-2 px-2 pt-1 text-sm font-medium mt-3 mx-2 dark:bg-neutral-700 dark:border-neutral-800 dark:text-white'
+              variant === 'mobile'
+                ? 'inline-flex w-full flex-row items-center gap-3 rounded-lg border-b-2 px-3 py-2 text-sm font-medium dark:bg-neutral-700 dark:border-neutral-800 dark:text-white'
+                : 'inline-flex shrink-0 flex-col items-center border-b-2 px-2 pt-1 text-sm font-medium mt-3 mx-2 dark:bg-neutral-700 dark:border-neutral-800 dark:text-white'
             )}
           >
             <item.icon
               className={classNames(
                 isActive ? 'text-indigo-600' : 'text-neutral-400',
-                'h-5 w-5 mb-1'
+                variant === 'mobile' ? 'h-5 w-5 shrink-0' : 'h-5 w-5 mb-1'
               )}
               aria-hidden="true"
             />
-            <p className="mb-1">{item.name}</p>
+            <p className={variant === 'mobile' ? 'text-left' : 'mb-1 text-center'}>{item.name}</p>
           </Link>
         );
       })}
