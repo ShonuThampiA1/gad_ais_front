@@ -21,17 +21,17 @@
 
 .bg-primary-500 {
   --tw-bg-opacity: 1;
-  background-color: rgb(30 64 175 / var(--tw-bg-opacity, 1));
+  background-color: var(--theme-primary-color, rgb(30 64 175));
 }
 
 .bg-primary-600 {
   --tw-bg-opacity: 1;
-  background-color: rgb(37 99 235 / var(--tw-bg-opacity, 1));
+  background-color: var(--theme-primary-color, rgb(37 99 235));
 }
 
 .bg-primary-700 {
   --tw-bg-opacity: 1;
-  background-color: rgb(29 78 216 / var(--tw-bg-opacity, 1));
+  background-color: var(--theme-primary-color, rgb(29 78 216));
 }
 
 .bg-primary-800 {
@@ -97,7 +97,7 @@
 /* Text Colors */
 .text-primary-500 {
   --tw-text-opacity: 1;
-  color: rgb(30 64 175 / var(--tw-text-opacity, 1));
+  color: var(--theme-primary-color, rgb(30 64 175));
 }
 
 .text-neutral-100 {

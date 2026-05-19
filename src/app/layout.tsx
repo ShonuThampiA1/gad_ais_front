@@ -6,6 +6,8 @@ import { ThemeProvider } from 'next-themes';
 
 import "./styles/style.css";
 import "./globals.css";
+import { CustomThemeProvider } from "./components/theme/CustomThemeProvider";
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -18,7 +20,9 @@ export default function RootLayout({ children }: LayoutProps) {
     >
       <body suppressHydrationWarning={true} className="antialiased bg-white text-zinc-950 dark:bg-gray-950 dark:text-white " >
          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          {children}
+          <CustomThemeProvider>
+            {children}
+          </CustomThemeProvider>
         </ThemeProvider>
     
         <ToastContainer

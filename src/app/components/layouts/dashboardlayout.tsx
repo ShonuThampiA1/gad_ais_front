@@ -13,6 +13,7 @@ import {
 import { BellIcon, Bars3Icon, XMarkIcon, KeyIcon, ArrowRightOnRectangleIcon, Cog6ToothIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { AccessibilityToolbar } from '@/app/components/accessibility';
 import { ThemeToggle } from '@/app/components/theme-toggle';
+import { ThemeCustomizer } from '@/app/components/theme/ThemeCustomizer';
 import { Footer } from '../../components/footer';
 import DashboardNavigation from '../dashboard-navigation';
 import UserNav from '../user-nav';
@@ -262,6 +263,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     </span>
                   )}
                 </button>
+                <ThemeCustomizer />
                 <ThemeToggle />
                 <Menu as="div" className="relative">
                   <MenuButton className="flex items-center rounded-full bg-gray-200 p-1 focus:outline-none focus:ring-2 focus:ring-primary-500">
