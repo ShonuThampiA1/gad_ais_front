@@ -1,11 +1,9 @@
 // components/Footer.js
 import Image from 'next/image';
-import Link from 'next/link';
-
 export function Footer() {
   return (
     <footer className="py-3 bg-primary-500 border-t dark:bg-gray-950 dark:border-neutral-900 dark:text-neutral-800">
-      <div className="container mx-auto flex flex-col space-y-4">
+      <div className="container mx-auto">
         <div className="flex flex-wrap justify-between items-center">
           {/* Left Logo */}
           <div className="w-full md:w-1/6 flex justify-center mb-4 md:mb-0">
@@ -70,17 +68,6 @@ export function Footer() {
               </div>
             </a>
           </div>
-        </div>
-
-        {/* Additional Links */}
-        <div className="flex flex-wrap justify-center items-center gap-4 text-xs text-neutral-100 dark:text-neutral-300 border-t border-primary-400 dark:border-neutral-800 pt-3">
-          <Link href="/user-agreement" className="hover:underline">User Agreement</Link>
-          <span className="hidden sm:inline">|</span>
-          <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
-          <span className="hidden sm:inline">|</span>
-          <Link href="/cookie-policy" className="hover:underline">Cookie Policy</Link>
-          <span className="hidden sm:inline">|</span>
-          <Link href="/contact" className="hover:underline">Contact</Link>
         </div>
       </div>
     </footer>

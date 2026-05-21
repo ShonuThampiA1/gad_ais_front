@@ -5,6 +5,7 @@ import { ArrowRight, CheckCircle, Zap, BarChart3, Shield, Users, FileText, Award
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
+import Link from 'next/link';
 import { ThemeToggle } from '@/app/components/theme-toggle';
 
 const HomePage = () => {
@@ -1773,13 +1774,13 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
 
             <div className="mt-7 border-t border-white/15 py-3">
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-indigo-100/90 sm:text-sm">
-                <a href="#" className="transition-colors hover:text-white">User Agreement</a>
-                <span className="text-white/50">|</span>
-                <a href="#" className="transition-colors hover:text-white">Privacy Policy</a>
-                <span className="text-white/50">|</span>
-                <a href="#" className="transition-colors hover:text-white">Cookie Policy</a>
-                <span className="text-white/50">|</span>
-                <a href="#" className="transition-colors hover:text-white">Contact</a>
+                <Link href="/user-agreement" className="hover:underline">User Agreement</Link>
+                <span className="hidden sm:inline">|</span>
+                <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
+                <span className="hidden sm:inline">|</span>
+                <Link href="/cookie-policy" className="hover:underline">Cookie Policy</Link>
+                <span className="hidden sm:inline">|</span>
+                <Link href="/contact" className="hover:underline">Contact</Link>
               </div>
             </div>
 
