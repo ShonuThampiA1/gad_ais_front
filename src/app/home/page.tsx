@@ -804,6 +804,12 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
             {/* -------------------HIDDEN---------------- */}
             <div className="hidden md:flex items-center gap-6 lg:gap-8">
               <a
+                href="/home"
+                className="relative text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 after:absolute after:left-0 after:-bottom-1 after:h-0.5 after:w-0 after:bg-indigo-600 after:transition-all after:duration-200 hover:after:w-full"
+              >
+                Home
+              </a>
+              <a
                 href="#services"
                 className="relative text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 after:absolute after:left-0 after:-bottom-1 after:h-0.5 after:w-0 after:bg-indigo-600 after:transition-all after:duration-200 hover:after:w-full"
               >
