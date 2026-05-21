@@ -568,7 +568,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
     {
       name: "IAS",
       label: "Indian Administrative Service",
-      subLabel: "Civil Administration & Governance",
+      subLabel: "Governance, Administration, Policy Implementation, Development Management",
       borderColor: "border-indigo-200 dark:border-indigo-600",
       borderHover:"hover:border-indigo-300 dark:hover:border-indigo-700",
       bgColor: "bg-gradient-to-br from-indigo-50 to-indigo-100 ",
@@ -579,7 +579,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
     {
       name: "IPS",
       label: "Indian Police Service",
-      subLabel: "Law & Order Management",
+      subLabel: "Policing, Internal Security, Law Enforcement, Public Safety.",
       borderColor: "border-amber-200 dark:border-gray-600",
       borderHover: "hover:border-amber-300 dark:hover:border-amber-700",
       bgColor: "bg-gradient-to-br from-amber-50 to-gray-100 ",
@@ -590,7 +590,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
     {
       name: "IFS",
       label: "Indian Forest Service",
-      subLabel: "Environmental Management",
+      subLabel: "Forest Administration, Environmental Conservation, Wildlife Protection, Ecological Governance",
       borderColor: "border-emerald-200 dark:border-emerald-600",
       borderHover: "hover:border-emerald-300 dark:hover:border-amber-700",
       bgColor: "bg-gradient-to-br from-emerald-50 to-emerald-100 ",
@@ -791,11 +791,11 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                   Government of Kerala
                 </div>
                 <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                  General Administration (AIS) Dept
+                  General Administration (AIS) Department
                 </div>
-                <div className="text-sm font-bold text-indigo-700 dark:text-indigo-400">
+                {/* <div className="text-sm font-bold text-indigo-700 dark:text-indigo-400">
                   KARMASRI PORTAL
-                </div>
+                </div> */}
               </div>
             </div>
 
@@ -832,7 +832,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                   onClick={handleLoginRedirect}
                   className="bg-gradient-to-r from-indigo-600 to-indigo-600 hover:from-indigo-700 hover:to-indigo-700 text-white px-5 lg:px-6 py-2.5 rounded-lg font-semibold text-sm tracking-wide transition-all shadow-sm border border-indigo-500/50 dark:border-indigo-600"
                 >
-                  Officer Portal
+                  Officer Login
                 </motion.button>
               </div>
             </div>
@@ -894,7 +894,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                   onClick={handleLoginRedirect}
                   className="w-full bg-gradient-to-r from-indigo-600 to-indigo-600 hover:from-indigo-700 hover:to-indigo-700 text-white px-4 py-3 rounded-lg font-semibold text-sm tracking-wide transition-all shadow-sm border border-indigo-500/50 dark:border-indigo-600"
                 >
-                  Officer Portal
+                  Officer Login
                 </motion.button>
               </div>
             </motion.div>
@@ -912,7 +912,6 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
             fill
             className="object-cover"
             priority
-            quality={100}
           />
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/90 via-indigo-800/85 to-indigo-900/90 dark:from-gray-950/90 dark:via-indigo-900/85 dark:to-gray-950/90 z-10" />
         </motion.div>
@@ -1065,6 +1064,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                             <p className="text-xs text-gray-600 text-center px-2 leading-tight">
                               {service.subLabel}
                             </p>
+
                           </motion.div>
                         )
                       )}
@@ -1366,6 +1366,43 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
         </div>
       </section>
 
+      {/* ==================== CIVIL SERVICES DAY ==================== */}
+      <section className="py-12 sm:py-16 lg:py-20 px-4 sm:px-6 lg:px-10 bg-gradient-to-br from-white via-amber-50/30 to-emerald-50/30 dark:from-gray-900 dark:via-indigo-950/10 dark:to-gray-950">
+        <div className="w-full max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true, margin: "-50px" }}
+            className="w-full text-center"
+          >
+            <div className="px-0 py-2 sm:px-2 sm:py-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-bold tracking-[0.25em] uppercase text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                <Award className="h-4 w-4" />
+                April 21 — National Civil Service Day
+              </div>
+
+              <div className="mt-5 flex justify-center gap-2">
+                <span className="h-1.5 w-16 rounded-full bg-[#FF9933]" />
+                <span className="h-1.5 w-12 rounded-full bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700" />
+                <span className="h-1.5 w-16 rounded-full bg-green-600" />
+              </div>
+
+              <p className="mx-auto mt-8 max-w-6xl text-lg leading-relaxed text-gray-800 sm:text-xl md:text-2xl dark:text-gray-100">
+                It was on this day in 1947 that
+                <span className="px-1.5 font-semibold text-amber-700 dark:text-amber-300"> Sardar Vallabhbhai Patel</span>
+                , the great &quot;Iron Man of India&quot;, honoured civil servants by calling them the
+                <span className="mx-2 inline-block rounded-xl bg-indigo-100 px-3 py-1 font-semibold italic text-indigo-800 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800">
+                  &quot;Steel Frame of India&quot;
+                </span>
+                — the resolute force that executes the policies of the government and strengthens the wheel of governance that propels the nation forward.
+              </p>
+
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* ==================== FEATURES ==================== */}
       <section id="features" className="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-indigo-50/30 dark:from-gray-900 dark:to-indigo-950/10">
         <div className="max-w-7xl mx-auto">
@@ -1443,7 +1480,7 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4 xl:gap-6">
             {services.map((service, index) => {
               const Icon = service.icon;
               return (
@@ -1454,20 +1491,21 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                   transition={{ delay: index * 0.1, duration: 0.5 }}
                   viewport={{ once: true, margin: "-50px" }}
                   whileHover={{ y: -3 }}
-                  className="bg-gradient-to-br from-indigo-50/80 to-indigo-50/80 dark:from-gray-800 dark:to-gray-700 border border-indigo-300 dark:border-indigo-700 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300"
+                  className="h-full bg-gradient-to-br from-indigo-50/80 to-indigo-50/80 dark:from-gray-800 dark:to-gray-700 border border-indigo-300 dark:border-indigo-700 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:shadow-lg transition-all duration-300"
                 >
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-600 to-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
-                      <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  <div className="flex h-full flex-col items-start text-left">
+                    <div className="mb-5 flex items-start gap-4">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-600 shadow-md sm:h-12 sm:w-12 sm:rounded-xl">
+                        <Icon className="h-5 w-5 text-white sm:h-6 sm:w-6" />
+                      </div>
+                      <h3 className="text-lg font-bold leading-tight text-gray-900 dark:text-white sm:text-xl xl:text-[1.65rem]">
                         {service.title}
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {service.description}
-                      </p>
                     </div>
+
+                    <p className="max-w-[26ch] text-sm leading-8 text-gray-600 dark:text-gray-400">
+                      {service.description}
+                    </p>
                   </div>
                 </motion.div>
               );
@@ -1679,75 +1717,82 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
       </motion.section>
 
       {/* ==================== FOOTER ==================== */}
-      <footer ref={footerRef} className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
-          {/* Tricolour accent */}
-          <div className="flex justify-center gap-1">
-            <span className="h-1 w-6 sm:w-8 rounded-full bg-[#FF9933]" />
-            <span className="h-1 w-6 sm:w-8 rounded-full bg-white" />
-            <span className="h-1 w-6 sm:w-8 rounded-full bg-green-600" />
-          </div>
-
-          {/* MAIN ROW */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* LEFT SIDE */}
-            <div>
-              <h3 className="font-bold text-lg tracking-wide mb-1 flex items-center gap-1">
-                    {/* -------------------HIDDEN---------------- */}  <CheckIcon className="w-4 h-4 text-indigo-300 hidden" />
-                KARMASRI
-              </h3>
-              <p className="text-indigo-100 max-w-sm text-xs sm:text-sm">
-                Streamlining administrative excellence for Kerala cadre All India Services officers.
-              </p>
+      <footer ref={footerRef} className="bg-gradient-to-r from-indigo-900 to-indigo-950 px-4 py-7 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-9">
+        <div className="mx-auto max-w-7xl">
+          <div className="relative border-t border-white/15 pt-7 sm:pt-8">
+            <div className="absolute left-1/2 top-0 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 bg-[linear-gradient(90deg,rgba(49,46,129,0.95),rgba(30,27,75,0.95))] px-3 py-1">
+              <span className="h-1 w-6 rounded-full bg-[#FF9933]" />
+              <span className="h-1 w-5 rounded-full bg-white" />
+              <span className="h-1 w-6 rounded-full bg-green-500" />
             </div>
 
-            {/* RIGHT SIDE */}
-            <div className="flex flex-col lg:items-end gap-3 sm:gap-4">
-              {/* OWNERSHIP */}
-              <div className="text-left lg:text-right">
-                <p className="font-semibold text-sm">Owned By</p>
-                <p className="text-indigo-100/80 text-xs sm:text-sm">
-                  General Administration Department (AIS),<br />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr_1.35fr] lg:gap-0">
+              <div className="text-center lg:border-r lg:border-white/15 lg:px-7 lg:py-1">
+                <h3 className="text-base font-bold tracking-wide sm:text-lg">
+                  KARMASRI
+                </h3>
+                <p className="mx-auto mt-2 max-w-[19rem] text-sm leading-6 text-indigo-100/85">
+                  Streamlining administrative excellence for Kerala cadre All India Services officers.
+                </p>
+              </div>
+
+              <div className="text-center lg:border-r lg:border-white/15 lg:px-7 lg:py-1">
+                <p className="text-sm font-bold uppercase tracking-wide sm:text-base">
+                  Owned By
+                </p>
+                <p className="mx-auto mt-2 max-w-[18rem] text-sm leading-6 text-indigo-100/85">
+                  General Administration (AIS) Department,
+                  <br />
                   Government of Kerala.
                 </p>
               </div>
 
-              {/* CDIPD + DUK */}
-              <div className="flex items-center gap-3 lg:justify-end">
-                <div className="text-left lg:text-right text-xs sm:text-sm leading-tight text-indigo-100/80">
-                  <p className="font-semibold text-white">
-                    Designed &amp; Developed by CDIPD
+              <div className="text-center lg:px-7 lg:py-1">
+                <p className="mx-auto max-w-xl text-sm font-bold uppercase leading-snug tracking-wide sm:text-base">
+                  Designed &amp; Developed by
+                </p>
+                <div className="mt-2 flex flex-col items-center gap-3 lg:flex-row lg:items-center lg:justify-center lg:gap-4">
+                  <p className="max-w-md text-sm leading-6 text-indigo-100/85 lg:text-right">
+                    Centre for Digital Innovation and Product Development (CDIPD), Digital University Kerala.
                   </p>
-                  <p className="text-indigo-100/75">
-                    Digital University Kerala
-                  </p>
-                </div>
-                <div className="w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center rounded-lg p-1 bg-white/10 backdrop-blur-sm border border-white/20">
-                  <div className="relative w-full h-full">
-                    <Image
-                      src="/duk_logo_white.png"
-                      alt="Digital University Kerala"
-                      fill
-                      className="object-contain"
-                      sizes="(max-width: 640px) 48px, 64px"
-                    />
+
+                  <div className="flex h-12 w-28 items-center justify-center sm:h-14 sm:w-32">
+                    <div className="relative h-full w-full">
+                      <Image
+                        src="/cdipd-cmmi-logo.png"
+                        alt="Digital University Kerala"
+                        fill
+                        className="object-contain"
+                        sizes="(max-width: 640px) 112px, 128px"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* BOTTOM ROW */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-indigo-700">
-            <p className="text-xs text-indigo-100/75 text-center sm:text-left">
-              © 2025 KARMASRI Portal, Government of Kerala.
-            </p>
+            <div className="mt-7 border-t border-white/15 py-3">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-indigo-100/90 sm:text-sm">
+                <a href="#" className="transition-colors hover:text-white">User Agreement</a>
+                <span className="text-white/50">|</span>
+                <a href="#" className="transition-colors hover:text-white">Privacy Policy</a>
+                <span className="text-white/50">|</span>
+                <a href="#" className="transition-colors hover:text-white">Cookie Policy</a>
+                <span className="text-white/50">|</span>
+                <a href="#" className="transition-colors hover:text-white">Contact</a>
+              </div>
+            </div>
 
-                {/* -------------------HIDDEN---------------- */}
-            <div className="flex gap-3 sm:gap-4 text-xs text-indigo-100/85 hidden">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-white transition-colors">Accessibility</a>
+            <div className="border-t border-white/15 pt-3 text-center">
+              <p className="text-[11px] text-indigo-100/75 sm:text-xs">
+                Copyright 2026 KARMASRI Portal, Government of Kerala.
+              </p>
+            </div>
+
+            <div className="hidden mt-8 border-t border-white/15 pt-4 text-center">
+              <p className="text-xs text-indigo-100/75 sm:text-sm">
+                © 2026 KARMASRI Portal, Government of Kerala.
+              </p>
             </div>
           </div>
         </div>
