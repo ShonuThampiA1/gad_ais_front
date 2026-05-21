@@ -26,6 +26,11 @@ const roleBasedRoutes = {
     '/reimbursement',
     '/knowledge-base',
     '/knowledge-base/user-manual',
+    '/user-agreement',
+    '/disclaimer',
+    '/cookie-policy',
+    '/privacy-policy',
+    '/contact',
    
   ],
   '3': [ // section officer
