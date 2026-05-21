@@ -87,3 +87,9 @@ disciplinary: loaded=undefined, progress=NO
  GET /login/ 200 in 206ms (compile: 4ms, render: 202ms)
  GET /login/ 200 in 185ms (compile: 5ms, render: 180ms)
  GET /login/ 200 in 131ms (compile: 6ms, render: 125ms)
+○ Compiling /cookie-policy ...
+ GET /cookie-policy/ 200 in 9.4s (compile: 8.4s, render: 958ms)
+ GET /login/ 200 in 277ms (compile: 31ms, render: 247ms)
+ GET /login/ 200 in 182ms (compile: 5ms, render: 176ms)
+ GET /login/ 200 in 134ms (compile: 8ms, render: 126ms)
+ GET /login/ 200 in 115ms (compile: 11ms, render: 104ms)

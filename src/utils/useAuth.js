@@ -50,7 +50,7 @@ const roleBasedRoutes = {
 };
 
 // Publicly accessible routes
-const publicRoutes = ['/', '/login', '/faqs', '/user-agreement', '/privacy-policy', '/cookie-policy','/official/'];
+const publicRoutes = ['/', '/login', '/faqs', '/user-agreement', '/privacy-policy', '/cookie-policy', '/disclaimer', '/contact', '/official/'];
 
 export default function useAuth() {
   const router = useRouter();
