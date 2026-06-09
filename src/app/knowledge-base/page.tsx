@@ -37,6 +37,15 @@ export default function KnowledgeBaseLandingPage() {
       iconColor: 'text-emerald-600 dark:text-emerald-400'
     },
     {
+      id: 'policies',
+      title: 'Policies & Agreements',
+      description: 'View the portal policies, agreements, and terms of service.',
+      icon: DocumentTextIcon,
+      href: '/knowledge-base/policies/user-agreement',
+      bgColor: 'bg-amber-50 dark:bg-amber-900/30',
+      iconColor: 'text-amber-600 dark:text-amber-400'
+    },
+    {
       id: 'guides',
       title: 'Quick Guides',
       description: 'Short, task-oriented guides to help you complete specific actions efficiently.',
