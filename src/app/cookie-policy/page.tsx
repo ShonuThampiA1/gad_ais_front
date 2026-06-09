@@ -132,7 +132,7 @@ export default function CookiePolicyPage() {
             {/* Left Section: Content (2/3 width) */}
             <div className="lg:w-2/3 relative z-0">
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 shadow-sm">
-                 <div className="prose prose-blue dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: policy.content }} />
+                 <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: policy.content }} />
               </div>
             </div>
 
