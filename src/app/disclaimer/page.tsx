@@ -111,7 +111,7 @@ export default function DisclaimerPage() {
 
       {/* Spacer for navbar */}
       <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto bg-white rounded-md px-4 py-8 sm:px-6 lg:px-8 dark:bg-gray-800/50 mt-4 shadow-sm border border-gray-100 dark:border-gray-800 min-h-[calc(100vh-12rem)]">
 
           {/* Header */}
           <div className="mb-8 border-b border-gray-200 dark:border-gray-700 pb-6 flex items-center gap-4">
