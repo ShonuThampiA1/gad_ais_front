@@ -83,6 +83,15 @@ export default function PolicyPage() {
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Related Documents</h3>
                    <ul className="space-y-2">
+                                            <li>
+                         <Link
+                           href="/contact"
+                           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+                         >
+                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 text-gray-400"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                           Contact Us
+                         </Link>
+                       </li>
                      {allPolicies.map(policy => {
                        const isCurrent = policy.id === policyId;
                        const Icon = policy.icon as any;

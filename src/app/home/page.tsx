@@ -1786,6 +1786,8 @@ const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
                 <span className="hidden sm:inline">|</span>
                 <Link href="/cookie-policy" className="hover:underline">Cookie Policy</Link>
                 <span className="hidden sm:inline">|</span>
+                <Link href="/disclaimer" className="hover:underline">Disclaimer</Link>
+                <span className="hidden sm:inline">|</span>
                 <Link href="/contact" className="hover:underline">Contact</Link>
               </div>
             </div>
