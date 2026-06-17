@@ -35,6 +35,7 @@ const roleBasedRoutes = {
   ],
   '3': [ // section officer
     '/master',
+    '/section-dashboard',
     '/master-controls',
     '/officer-profile',
     '/knowledge-base',
