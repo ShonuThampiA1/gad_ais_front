@@ -13,6 +13,7 @@ const roleBasedRoutes = {
     '/add-post',
     '/lists',
     '/rbac',
+    '/ama',
     '/knowledge-base',
     '/knowledge-base/user-manual',
     
@@ -29,6 +30,7 @@ const roleBasedRoutes = {
    
   ],
   '3': [ // section officer
+    '/section-officer',
     '/master',
     '/master-controls',
     '/officer-profile',

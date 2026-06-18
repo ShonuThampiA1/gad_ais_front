@@ -1,29 +1,22 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  UserPlusIcon,
   HomeIcon,
-  UsersIcon,
-  FolderIcon,
-  CalendarIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 const navItems = [
-  { name: 'Dashboard', href: '/section-officer/dashboard', icon: HomeIcon },
-  { name: 'Officer Management', href: '/master-controls/user-management', icon: UserPlusIcon },
-  { name: 'Personal Profile', href: '/master/personal-profile', icon: HomeIcon },
-  { name: 'Staffing and Roles', href: '/master/staffing-and-roles', icon: UsersIcon },
-  { name: 'Administrative Information', href: '/master/administrative-information', icon: FolderIcon },
-  { name: 'Employment and Career Details', href: '/master/employment-and-career', icon: CalendarIcon },
+  { name: 'Dashboard', href: '/assistant/dashboard', icon: HomeIcon },
+  { name: 'Sample Menu', href: '/assistant/sample', icon: DocumentTextIcon },
 ];
 
-export default function MasterSidenav({ onItemClick }: { onItemClick?: () => void }) {
+export default function AssistantSidenav({ onItemClick }: { onItemClick?: () => void }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
-  const [openModule, setOpenModule] = useState<string | null>('master');
+  const [openModule, setOpenModule] = useState<string | null>('assistant');
 
   useEffect(() => {
     setMounted(true);
@@ -35,23 +28,23 @@ export default function MasterSidenav({ onItemClick }: { onItemClick?: () => voi
     <nav className="p-4 space-y-2 h-full">
       <div className="space-y-1">
         <button
-          onClick={() => setOpenModule(prev => prev === 'master' ? null : 'master')}
+          onClick={() => setOpenModule(prev => prev === 'assistant' ? null : 'assistant')}
           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-200 ${
-            navItems.some(i => pathname === i.href || pathname.startsWith(i.href + "/")) && openModule !== 'master'
+            navItems.some(i => pathname === i.href || pathname.startsWith(i.href + "/")) && openModule !== 'assistant'
               ? 'bg-blue-50 text-blue-700 dark:bg-primary-900/20 dark:text-blue-300'
               : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
           }`}
         >
           <div className="flex items-center">
-            <UsersIcon className="h-5 w-5 mr-3 text-blue-600 dark:text-blue-400" />
-            Section Officer
+            <HomeIcon className="h-5 w-5 mr-3 text-blue-600 dark:text-blue-400" />
+            Assistant
           </div>
           <ChevronDownIcon
-            className={`h-4 w-4 text-neutral-400 transition-transform duration-200 ${openModule === 'master' ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 text-neutral-400 transition-transform duration-200 ${openModule === 'assistant' ? 'rotate-180' : ''}`}
           />
         </button>
 
-        {openModule === 'master' && (
+        {openModule === 'assistant' && (
           <div className="pl-4 pr-2 space-y-1 mt-1">
             {navItems.map((item) => {
               const Icon = item.icon;
