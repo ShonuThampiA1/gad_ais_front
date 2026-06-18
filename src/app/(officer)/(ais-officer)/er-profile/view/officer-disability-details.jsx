@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   PlusIcon,
@@ -20,8 +20,24 @@ import ConfirmModal from "@/app/components/confirmModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import moment from 'moment';
+import { fetchBulkMasters } from "@/utils/masters";
+import { canEditErProfile, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
-export function DisabilityDetails({ profileData }) {
+const udidPattern = /^[A-Z]{2}\d+$/;
+
+const getValidatedDisabilityPercentage = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+
+  const percentage = Number(value);
+  if (Number.isNaN(percentage) || percentage <= 0 || percentage > 100) {
+    return { valid: false, message: "Disability Percentage must be between 1 and 100." };
+  }
+
+  return { valid: true, value };
+};
+
+export function DisabilityDetails({ profileData, sharedMasterData, sharedMastersReady = false }) {
+  const saveInFlightRef = useRef(false);
   const { updateSectionProgress } = useProfileCompletion();
   const [isModalOpen, setModalOpen] = useState(false);
   const [isDocumentModalOpen, setDocumentModalOpen] = useState(false);
@@ -33,7 +49,9 @@ export function DisabilityDetails({ profileData }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [masterData, setMasterData] = useState([]);
+  const [masterDataLoading, setMasterDataLoading] = useState(true);
   const [sparkFields, setSparkFields] = useState(new Set());
+  const [localProfileData, setLocalProfileData] = useState(profileData);
   const [officerFields, setOfficerFields] = useState({
     GAD_OFFICER: [],
     AIS_OFFICER: [],
@@ -43,8 +61,28 @@ export function DisabilityDetails({ profileData }) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [disabilityToDelete, setDisabilityToDelete] = useState(null);
 
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3';
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
+  const updateProfileDisabilityDetails = useCallback((nextDisabilityDetails) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            officer_disability: nextDisabilityDetails,
+          },
+        },
+      };
+
+      sessionStorage.setItem("profileData", JSON.stringify(updatedProfileData));
+      return updatedProfileData;
+    });
+  }, [profileData]);
 
   const fields = [
     {
@@ -202,44 +240,63 @@ export function DisabilityDetails({ profileData }) {
   );
 
   useEffect(() => {
-    const fetchMasterData = async () => {
+    if (!profileData) return;
+
+    const storedProfileData = sessionStorage.getItem("profileData");
+    if (storedProfileData) {
       try {
-        const res = await axiosInstance.get("/masters/disability-all");
-        setMasterData(res.data.data.disability || []);
+        setLocalProfileData(JSON.parse(storedProfileData));
+        return;
+      } catch (e) {
+        console.warn("Invalid profileData cache in sessionStorage, clearing.", e);
+        sessionStorage.removeItem("profileData");
+      }
+    }
+
+    setLocalProfileData(profileData);
+  }, [profileData]);
+
+  useEffect(() => {
+    const fetchMasterData = async () => {
+      if (!sharedMastersReady) {
+        return;
+      }
+
+      setMasterDataLoading(true);
+      if (sharedMasterData) {
+        setMasterData(sharedMasterData);
+        setMasterDataLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetchBulkMasters(["disability"]);
+        setMasterData(res.disability || []);
       } catch (err) {
         toast.error("Failed to fetch master data", {
           className: "bg-red-500 text-white",
           progressClassName: "bg-red-200",
         });
         console.error("Error fetching master data:", err);
+      } finally {
+        setMasterDataLoading(false);
       }
     };
 
     fetchMasterData();
-  }, []);
+  }, [sharedMasterData, sharedMastersReady]);
 
   useEffect(() => {
-    const storedDisability = sessionStorage.getItem('disability_details');
+    if (!localProfileData) return;
 
-    if (storedDisability) {
-      console.log("Loading disability details from sessionStorage");
-      const parsedDisability = JSON.parse(storedDisability);
-      setDisabilityDetails(parsedDisability);
-      setLoading(false);
-      return;
-    }
-
-    if (!profileData) return;
-
-    console.log("Processing disability details from API data");
     const processDisabilityData = async () => {
       setLoading(true);
       try {
-        const sparkData = profileData?.spark_data?.data || {};
+        const sparkData = localProfileData?.spark_data?.data || {};
         const officerInfo =
-          profileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+          localProfileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
         const dbDisability =
-          profileData?.officer_data?.get_all_officer_info_by_user_id?.officer_disability || [];
+          localProfileData?.officer_data?.get_all_officer_info_by_user_id?.officer_disability || [];
 
         const officerFieldsData = {
           GAD_OFFICER: officerInfo?.fields?.GAD_OFFICER ? Object.keys(officerInfo.fields.GAD_OFFICER) : [],
@@ -250,7 +307,6 @@ export function DisabilityDetails({ profileData }) {
 
         const { details: sparkMappedDetails, sparkKeys } = mapSparkDataToDisability(sparkData, dbDisability);
 
-        console.log("Mapped disability details:", sparkMappedDetails);
 
         setDisabilityDetails(sparkMappedDetails);
         setSparkFields(sparkKeys);
@@ -267,7 +323,7 @@ export function DisabilityDetails({ profileData }) {
     };
 
     processDisabilityData();
-  }, [profileData, mapSparkDataToDisability]);
+  }, [localProfileData, mapSparkDataToDisability]);
 
   const handleDeleteClick = useCallback((disability) => {
     setDisabilityToDelete(disability);
@@ -302,9 +358,14 @@ export function DisabilityDetails({ profileData }) {
 
       if (response.data.success) {
         setDisabilityDetails(prev => prev.filter(d => String(d.ais_des_id) !== String(disabilityId)));
-
-        const updatedDisabilityDetails = disabilityDetails.filter(d => String(d.ais_des_id) !== String(disabilityId));
-        sessionStorage.setItem('disability_details', JSON.stringify(updatedDisabilityDetails));
+        const currentProfileSnapshot = localProfileData || {};
+        const currentOfficerData =
+          currentProfileSnapshot.officer_data?.get_all_officer_info_by_user_id || {};
+        updateProfileDisabilityDetails(
+          (currentOfficerData.officer_disability || []).filter(
+            (disability) => String(disability?.ais_des_id) !== String(disabilityId)
+          )
+        );
 
         toast.success("Disability details deleted successfully", {
           className: "bg-primary-500 text-white",
@@ -324,10 +385,15 @@ export function DisabilityDetails({ profileData }) {
       setIsDeleteModalOpen(false);
       setDisabilityToDelete(null);
     }
-  }, [isButtonDisabled, disabilityDetails, disabilityToDelete]);
+  }, [isButtonDisabled, disabilityToDelete, localProfileData, updateProfileDisabilityDetails]);
 
   const handleSave = useCallback(
     async (updatedDisability) => {
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setTimeout(() => {
+        saveInFlightRef.current = false;
+      }, 2500);
       try {
         const isSparkEntry =
           selectedDisability?.ais_des_id &&
@@ -365,11 +431,31 @@ export function DisabilityDetails({ profileData }) {
           }
         }
 
+        const rawUdidNumber = updatedDisability.user_data.udid_number;
+
+        if (rawUdidNumber && String(rawUdidNumber).length > 18) {
+          toast.error("UDID Document Number cannot exceed 18 characters.", {
+            className: "bg-red-500 text-white",
+            progressClassName: "bg-red-200",
+          });
+          return;
+        }
+
+        if (rawUdidNumber && !udidPattern.test(String(rawUdidNumber))) {
+          toast.error("UDID Document Number must start with 2 letters followed by digits only.", {
+            className: "bg-red-500 text-white",
+            progressClassName: "bg-red-200",
+          });
+          return;
+        }
+
         const userDataWithDocuments = {
           disability_type_id: updatedDisability.user_data.disability_type_id || null,
           disability_perc: updatedDisability.user_data.disability_perc || null,
           dis_valid_up_to: updatedDisability.user_data.dis_valid_up_to || null,
-          udid_number: updatedDisability.user_data.udid_number || null,
+          udid_number: rawUdidNumber
+            ? String(rawUdidNumber).slice(0, 18)
+            : null,
           disability_proof: documentId || updatedDisability.user_data.disability_proof || "",
         };
 
@@ -377,6 +463,15 @@ export function DisabilityDetails({ profileData }) {
           spark_data: updatedDisability.spark_data || null,
           user_data: userDataWithDocuments,
         };
+
+        const percentageValidation = getValidatedDisabilityPercentage(requestBody.user_data.disability_perc);
+        if (percentageValidation && !percentageValidation.valid) {
+          toast.error(percentageValidation.message, {
+            className: "bg-red-500 text-white",
+            progressClassName: "bg-red-200",
+          });
+          return;
+        }
 
         const newDisTypeId = String(
           requestBody.user_data.disability_type_id ??
@@ -515,9 +610,90 @@ export function DisabilityDetails({ profileData }) {
               newDisabilityDetails = [...prevData, updatedDisabilityData];
             }
 
-            sessionStorage.setItem('disability_details', JSON.stringify(newDisabilityDetails));
             return newDisabilityDetails;
           });
+
+          const currentProfileSnapshot = localProfileData || {};
+          const currentOfficerData =
+            currentProfileSnapshot.officer_data?.get_all_officer_info_by_user_id || {};
+          const currentDisabilityRecords = currentOfficerData.officer_disability || [];
+          const existingDisabilityRecord = currentDisabilityRecords.find(
+            (disability) =>
+              String(disability?.ais_des_id) ===
+              String(savedDisability.ais_des_id || selectedDisability?.ais_des_id)
+          );
+          const userSource = sessionStorage.getItem("role_id") === "3" ? "GAD_OFFICER" : "AIS_OFFICER";
+          const userFieldPayload = Object.fromEntries(
+            Object.entries(userDataWithDocuments).filter(([, value]) => value !== null && value !== undefined)
+          );
+          const mergedSavedDisability = {
+            ...(existingDisabilityRecord || {}),
+            ...savedDisability,
+            ais_des_id: savedDisability.ais_des_id,
+            user_id: profileData?.user_id || savedDisability.user_id,
+            email: profileData?.email || savedDisability.email,
+            first_name: currentOfficerData.officer_info?.[0]?.first_name || existingDisabilityRecord?.first_name || "",
+            last_name: currentOfficerData.officer_info?.[0]?.last_name || existingDisabilityRecord?.last_name || "",
+            disability_type_id: savedDisability.disability_type_id || "",
+            disability_perc: savedDisability.disability_perc || "",
+            dis_valid_up_to: savedDisability.dis_valid_up_to || "",
+            udid_number: savedDisability.udid_number || "",
+            disability_proof: savedDisability.disability_proof || "",
+            fields: {
+              ...(existingDisabilityRecord?.fields || {}),
+              ...(requestBody.spark_data
+                ? {
+                    DB_SPARK_API: {
+                      ...(existingDisabilityRecord?.fields?.DB_SPARK_API || {}),
+                      ...requestBody.spark_data,
+                    },
+                  }
+                : {}),
+              ...(Object.keys(userFieldPayload).length
+                ? {
+                    [userSource]: {
+                      ...(existingDisabilityRecord?.fields?.[userSource] || {}),
+                      ...userFieldPayload,
+                    },
+                  }
+                : {}),
+              UNKNOWN:
+                existingDisabilityRecord?.fields?.UNKNOWN || savedDisability.fields?.UNKNOWN || {},
+            },
+          };
+          let updatedDisabilityRecords = [...currentDisabilityRecords];
+
+          if (isSparkEntry) {
+            const sparkDisabilityIndex = updatedDisabilityRecords.findIndex((disability) => {
+              const dbSparkFields = disability?.fields?.DB_SPARK_API || {};
+              return (
+                String(dbSparkFields.disability_type_id || disability?.disability_type_id || "").trim().toLowerCase() ===
+                  String(selectedDisability?.disability_type_id || "").trim().toLowerCase() &&
+                String(dbSparkFields.disability_percentage || disability?.disability_perc || "").trim().toLowerCase() ===
+                  String(selectedDisability?.disability_perc || "").trim().toLowerCase() &&
+                String(dbSparkFields.valid_up_to || disability?.dis_valid_up_to || "").trim().toLowerCase() ===
+                  String(selectedDisability?.dis_valid_up_to || "").trim().toLowerCase() &&
+                String(dbSparkFields.udid_number || disability?.udid_number || "").trim().toLowerCase() ===
+                  String(selectedDisability?.udid_number || "").trim().toLowerCase()
+              );
+            });
+
+            if (sparkDisabilityIndex !== -1) {
+              updatedDisabilityRecords[sparkDisabilityIndex] = mergedSavedDisability;
+            } else {
+              updatedDisabilityRecords.push(mergedSavedDisability);
+            }
+          } else if (isUpdate) {
+            updatedDisabilityRecords = updatedDisabilityRecords.map((disability) =>
+              String(disability?.ais_des_id) === String(selectedDisability?.ais_des_id)
+                ? mergedSavedDisability
+                : disability
+            );
+          } else {
+            updatedDisabilityRecords.push(mergedSavedDisability);
+          }
+
+          updateProfileDisabilityDetails(updatedDisabilityRecords);
 
           setSparkFields((prev) => {
             const newSparkFields = new Set(prev);
@@ -566,7 +742,7 @@ export function DisabilityDetails({ profileData }) {
         });
       }
     },
-    [selectedDisability, profileData, disabilityDetails]
+    [selectedDisability, profileData, disabilityDetails, localProfileData, updateProfileDisabilityDetails]
   );
 
   const handleEdit = useCallback(
@@ -751,9 +927,7 @@ export function DisabilityDetails({ profileData }) {
 
   const getDisabilityStatus = (validUpTo) => {
     if (!validUpTo) return "N/A";
-    const today = moment();
-    const validDate = moment(validUpTo);
-    return today.isSameOrBefore(validDate) ? "Valid" : "Expired";
+    return moment().isSameOrBefore(moment(validUpTo), "day") ? "Valid" : "Expired";
   };
 
   const renderSparkIndicator = (fieldKey, fieldSource) => {
@@ -838,6 +1012,12 @@ export function DisabilityDetails({ profileData }) {
       </div>
     );
   };
+
+  const renderFieldValueSkeleton = () => (
+    <span className="inline-flex animate-pulse pt-1">
+      <span className="h-4 w-28 rounded bg-gray-200 dark:bg-gray-600" />
+    </span>
+  );
 
   return (
     <div className="p-2 mx-auto w-full bg-white dark:bg-gray-900">
@@ -930,7 +1110,9 @@ export function DisabilityDetails({ profileData }) {
                             field.type !== "file" ? 'break-words line-clamp-5' : ''
                           }`}
                         >
-                          {field.type === "file"
+                          {field.type === "master" && masterDataLoading
+                            ? renderFieldValueSkeleton()
+                            : field.type === "file"
                             ? renderDocumentButton(disability[field.key])
                             : field.type === "master"
                             ? getMasterValue(disability[field.key], field.masterKey)
@@ -958,6 +1140,7 @@ export function DisabilityDetails({ profileData }) {
         disabilityDetails={selectedDisability}
         onSave={handleSave}
         masterData={masterData}
+        masterDataLoading={masterDataLoading}
         sparkFields={sparkFields}
         officerFields={officerFields}
       />

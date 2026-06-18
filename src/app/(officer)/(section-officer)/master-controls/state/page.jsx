@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from 'react-toastify';
 import { TrashIcon, PencilSquareIcon, PlusIcon } from '@heroicons/react/16/solid'
 import { ModalStateDetails } from '../modal/state-details'
@@ -27,8 +28,8 @@ export default function StateList() {
     
       const fetchState = useCallback(async () => {
         try {
-          const response = await axiosInstance.get(`/masters/state`);
-          setStateList(response.data.data.state);
+          const payload = await fetchBulkMasters(["state"], { admin: true, includeInactive: true });
+          setStateList(payload.state || []);
         } catch (error) {
           console.error("Error fetching state:", error);
         }
@@ -222,4 +223,3 @@ export default function StateList() {
         </>
     );
 }
-

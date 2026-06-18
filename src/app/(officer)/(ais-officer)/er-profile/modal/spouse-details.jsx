@@ -39,6 +39,8 @@ const requiredFields = ["name", "email_id", "gender_id", "dob"];
 
 export function ModalSpouseDetails({ open, setOpen, spouseDetails, onSave, masterData }) {
   const [formData, setFormData] = useState(initialFormData);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditing = Boolean(spouseDetails?.id);
 
   
   useEffect(() => {
@@ -68,6 +70,7 @@ export function ModalSpouseDetails({ open, setOpen, spouseDetails, onSave, maste
   // Handle Save - Send data to backend
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
   
   
     const updatedData = { ...formData };
@@ -77,7 +80,10 @@ export function ModalSpouseDetails({ open, setOpen, spouseDetails, onSave, maste
     delete updatedData[field];  });
 
    
-        onSave(updatedData);
+        setIsSubmitting(true);
+        Promise.resolve(onSave(updatedData)).finally(() => {
+          setIsSubmitting(false);
+        });
         setOpen(false);
      
   };
@@ -176,9 +182,10 @@ export function ModalSpouseDetails({ open, setOpen, spouseDetails, onSave, maste
                     </button>
                     <button
                       type="submit"
-                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      disabled={isSubmitting}
+                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                     </button>
                   </div>
                 </div>

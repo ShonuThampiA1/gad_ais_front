@@ -8,6 +8,19 @@ import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import axiosInstance from '@/utils/apiClient'
 import { SearchableSelect } from '@/app/components/searchable-select'
 
+const DEFAULT_PROFILE_IMAGE_PATH = "/images/avatar.jpg";
+
+const toAbsoluteAssetUrl = (path) => {
+  if (!path || typeof window === "undefined") return path;
+
+  if (/^https?:\/\//i.test(path) || path.startsWith("data:")) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${window.location.origin}${normalizedPath}`;
+};
+
 export function ModalPdfDownload({ open = false, setOpen, userDetails }) {
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -23,15 +36,18 @@ export function ModalPdfDownload({ open = false, setOpen, userDetails }) {
   const pdfGenerator = async (selectedLang) => {
     setIsDownloading(true); // Set loading state
     if (userDetails) {
-      console.log("Transformed User Details:", userDetails);
       try {
+        const pdfUserDetails = {
+          ...userDetails,
+          profile_image: toAbsoluteAssetUrl(userDetails.profile_image || DEFAULT_PROFILE_IMAGE_PATH),
+        };
+
         const response = await axiosInstance.post(
           "/file-uploader/generate-pdf", {
-          user_data_json: userDetails,
+          user_data_json: pdfUserDetails,
           lang: selectedLang
         }, { headers: { 'Content-Type': 'application/json' } }
         );
-        // console.log("PDF Generation Response:", response);
         handleDownloadPDF(response.data.data.download_url);
       }
       catch (error) {
@@ -52,7 +68,6 @@ export function ModalPdfDownload({ open = false, setOpen, userDetails }) {
     }
 
     try {
-      console.log("Downloading PDF from:", pdfDownloadLink);
       const response = await axiosInstance.get(
         `/file-uploader${pdfDownloadLink}`,
         { responseType: "blob" } // important!

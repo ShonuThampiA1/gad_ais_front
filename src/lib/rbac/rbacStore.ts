@@ -265,6 +265,8 @@ const initialPages: PageMaster[] = [
   { id: 59, name: 'Services Permissions', url: '/services/permissions' },
   { id: 60, name: 'Services Submissions', url: '/services/submissions' },
   { id: 61, name: 'Services Documents', url: '/services/documents' },
+  { id: 65, name: 'Medical Reimbursement', url: '/reimbursement/medical' },
+  { id: 66, name: 'Medical Reimbursement Workspace', url: '/reimbursement/medical/current' },
 ];
 
 const initialResources: Resource[] = [
@@ -304,6 +306,8 @@ const initialRolePagePermissions: RolePagePermissionMapping[] = [
       { pageId: 5, view: true, add: true, edit: false, delete: true, approve: false, export: true }, // Documents
       { pageId: 6, view: true, add: true, edit: false, delete: false, approve: false, export: true }, // Applications
       { pageId: 58, view: true, add: true, edit: true, delete: false, approve: false, export: false }, // e-Services Requests
+      { pageId: 65, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Medical Reimbursement
+      { pageId: 66, view: true, add: true, edit: true, delete: false, approve: false, export: true }, // Medical Reimbursement Workspace
     ]
   },
   {
@@ -349,7 +353,7 @@ export const useRBACStore = create<RBACState>()(
     }),
     {
       name: 'rbac-storage', // name of item in storage (must be unique)
-      version: 2, // bump version to bust the cache of old role mapping data
+      version: 3, // bump version to bust the cache of old role mapping data
     }
   )
 );

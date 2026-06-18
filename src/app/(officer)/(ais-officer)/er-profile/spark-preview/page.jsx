@@ -18,6 +18,7 @@ import {
 
 } from "@heroicons/react/24/outline";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters, mapBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 
 const SparkPreviewPage = () => {
@@ -73,11 +74,11 @@ const mandatoryDeputationFields = [
   ];
 
   const mandatoryAwardsFields = [
-    "reward_name", "reward_from", "received_on", "reward_doc"
+    "reward_name", "reward_type", "reward_from", "received_on", "reward_doc"
   ];
 
    const mandatoryDisabilityFields = [
-    "disability_type_id", "disability_proof", "disability_percentage", "disability_valid_up_to"
+    "disability_type_id", "disability_proof", "disability_percentage", "disability_valid_up_to", "udid_number"
   ];
 
    
@@ -309,7 +310,8 @@ const mandatoryDeputationFields = [
         (q) => q.qualification?.toLowerCase() === (edu.course_type || "").toLowerCase()
       )?.qualification_id || "",
       raw_qualification: edu.course_type || "",
-      subject_name: edu.qualification || "",
+      // SPARK payload uses `subject` for education subject/major in other views; keep fallbacks for older payloads.
+      subject_name: edu.subject || edu.subject_name || edu.qualification || "",
       institute_name: edu.university || "",
       _source: "SPARK",
       isSaved: false,
@@ -361,9 +363,14 @@ const mandatoryDeputationFields = [
       return {
         ais_ser_id: `spark_${index}`,
         designation_id: designationMatch?.designation_id || null,
-        department_id: departmentMatch?.administrative_department_id || null,
+        administrative_department_id:
+          departmentMatch?.administrative_department_id || null,
         district_id: districtMatch?.district_id || null,
         state_id: stateMatch?.state_id || null,
+        address: service.office || service.address || "",
+        phone_no: service.phone_no || service.phone_number || "",
+        basic_pay: service.basic_pay || "",
+        is_additional_charge: service.is_additional_charge || false,
         start_date: normalizeSparkServiceDate(service.date_from),
         end_date: normalizeSparkServiceDate(service.date_to),
         other_details: service.remarks || "",
@@ -409,7 +416,7 @@ const mandatoryDeputationFields = [
         training_type_id: train.training_type_id || "",
         country_id: train.country || "",
         institute_name: train.conducted_by || train.institute_name || "",
-        subject: train.subject || "",
+        subject: train.qualification || "",
         place: train.city || train.place || "",
         training_from: normalizeSparkTrainingDate(train.from_date),
         training_to: normalizeSparkTrainingDate(train.to_date),
@@ -422,6 +429,7 @@ const mandatoryDeputationFields = [
   const mapSparkDataToAwards = (sparkData) => (sparkData.awards || []).map((award, index) => ({
     ais_rew_id: `spark_${index}`,
     reward_name: award.nature || "",
+    reward_type: award.reward_type || "",
     reward_from: (award.office || award.department || "").trim(),
     received_on: "",
     reward_description: award.purpose || "",
@@ -435,6 +443,7 @@ const mandatoryDeputationFields = [
     disability_type_id: dis.disability_type_id || "",
     disability_percentage: dis.disability_percentage || "",
     disability_valid_up_to: dis.valid_up_to || "",
+    udid_number: dis.udid_number || "",
     disability_proof: dis.upload_certificate || "",
     _source: "SPARK",
     isSaved: false,
@@ -453,63 +462,61 @@ const mandatoryDeputationFields = [
   useEffect(() => {
     const fetchMasters = async () => {
       try {
-        const responses = await Promise.all([
-          axiosInstance.get("/masters/qualification-all"),
-          axiosInstance.get("/masters/recruitment-all"),
-          axiosInstance.get("/masters/cadre-all"),
-          axiosInstance.get("/masters/gender-all"),
-          axiosInstance.get("/masters/state-all"),
-          axiosInstance.get("/masters/district-all"),
-          axiosInstance.get("/masters/designation-all"),
-          axiosInstance.get("/masters/retirement-all"),
-          axiosInstance.get("/masters/language-all"),
-          axiosInstance.get("/masters/language-all"),
-          axiosInstance.get("/masters/category-all"),
-          axiosInstance.get("/masters/blood-groups"),
-          axiosInstance.get("/masters/designation-all"),
-          axiosInstance.get("/masters/level-all"),
-          axiosInstance.get("/masters/ministry-all"),
-          axiosInstance.get("/masters/administrative_department-all"),
-          axiosInstance.get("/masters/grade-all"),
-          axiosInstance.get("/masters/district-all"),
-          axiosInstance.get("/masters/posting_type-all"),
-          axiosInstance.get("/masters/agency-all"),
-          axiosInstance.get("/masters/state-all"),
-          axiosInstance.get("/masters/training_type-all"),
-          axiosInstance.get("/masters/country-all"),
-          axiosInstance.get("/masters/relation"),
-          axiosInstance.get("/masters/institution-all"),
-          axiosInstance.get("/masters/disability-all"),
+        const payload = await fetchBulkMasters([
+          "qualification",
+          "recruitment",
+          "cadre",
+          "gender",
+          "state",
+          "district",
+          "designation",
+          "retirement",
+          "language",
+          "category",
+          "blood_group",
+          "level",
+          "ministry",
+          "administrative_department",
+          "grade",
+          "posting_type",
+          "agency",
+          "training_type",
+          "country",
+          "relation",
+          "institution",
+          "disability",
         ]);
 
-        setMasterData({
-          qualification: responses[0].data.data.qualification || [],
-          recruitment: responses[1].data.data.recruitment || [],
-          cadre: responses[2].data.data.cadre || [],
-          gender: responses[3].data.data.gender || [],
-          state: responses[4].data.data.state || [],
-          district: responses[5].data.data.district || [],
-          designation: responses[6].data.data.designation || [],
-          retirement: responses[7].data.data.retirement || [],
-          motherTongue: responses[8].data.data.motherTongue || [],
-          languageKnown: responses[9].data.data.languageKnown || [],
-          category: responses[10].data.data.category || [],
-          bloodGroup: responses[11].data.data.bloodGroup || [],
-          designations: responses[12].data.data.designation || [],
-          levels: responses[13].data.data.level || [],
-          ministries: responses[14].data.data.ministry || [],
-          departments: responses[15].data.data.departments || [],
-          grades: responses[16].data.data.grade || [],
-          districts: responses[17].data.data.district || [],
-          postingTypes: responses[18].data.data.posting_type || [],
-          implementingAgencies: responses[19].data.data.implementing_agency || [],
-          states: responses[20].data.data.state || [],
-          training_types: responses[21].data.data.training_type || [],
-          countries: responses[22].data.data.country || [],
-          relationship: responses[23].data.data.relationship || [],
-          institution: responses[24].data.data.institution || [],
-          disability_type: responses[25].data.data.disability_type || [],
-        });
+        setMasterData(
+          mapBulkMasters(payload, {
+            qualification: "qualification",
+            recruitment: "recruitment",
+            cadre: "cadre",
+            gender: "gender",
+            state: "state",
+            district: "district",
+            designation: "designation",
+            retirement: "retirement",
+            motherTongue: "language",
+            languageKnown: "language",
+            category: "category",
+            bloodGroup: "blood_group",
+            designations: "designation",
+            levels: "level",
+            ministries: "ministry",
+            departments: "administrative_department",
+            grades: "grade",
+            districts: "district",
+            postingTypes: "posting_type",
+            implementingAgencies: "agency",
+            states: "state",
+            training_types: "training_type",
+            countries: "country",
+            relationship: "relation",
+            institution: "institution",
+            disability_type: "disability",
+          }),
+        );
       } catch (err) {
         setError("Failed to fetch master data");
         toast.error("Failed to fetch master data");
@@ -523,7 +530,6 @@ const mandatoryDeputationFields = [
     const storedProfile = sessionStorage.getItem("profileData");
     if (storedProfile) {
       const parsed = JSON.parse(storedProfile);
-      console.log("Loaded SPARK data from session:***********", parsed);
       setSparkData(parsed.spark_data?.data || {});
     }
     setLoading(false);
@@ -671,9 +677,17 @@ const mandatoryDeputationFields = [
   // Special handling for specific field labels
   if (key === "ais_number") return "AIS Number";
   if (key === "agency_id") return "Office";
+  if (key === "cen_designation") return "Central Designation";
   if (key === "cen_dept_id") return "Department";
   if (key === "cen_org_id") return "Office";
   if (key === "cen_min_id") return "Ministry";
+  if (key === "udid_number") return "UDID Document Number";
+  if (key === "reward_name") return "Award Name";
+  if (key === "reward_type") return "Award Category";
+  if (key === "reward_from") return "Award By";
+  if (key === "received_on") return "Award Received Date";
+  if (key === "reward_description") return "Description";
+    
   
   return key
     .replace(/_/g, " ")
@@ -718,7 +732,7 @@ const mandatoryDeputationFields = [
   // PDF Download Loading Overlay - Simple Version (rendered inside main layout)
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen dark:bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
@@ -726,7 +740,7 @@ const mandatoryDeputationFields = [
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-4">
+      <div className="flex flex-col items-center justify-center min-h-screen px-4 dark:bg-gray-900 dark:text-gray-100">
         <ExclamationCircleIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
         <p className="text-lg text-red-600 mb-4">{error}</p>
         <button
@@ -741,21 +755,21 @@ const mandatoryDeputationFields = [
 
 const FamilyInstructions = () => {
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 shadow-sm dark:bg-gray-800 dark:border-gray-700">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
-        <InformationCircleIcon className="w-6 h-6 text-blue-700" />
-        <h3 className="font-bold text-blue-800 text-lg">Family Member Entry Guidelines</h3>
+        <InformationCircleIcon className="w-6 h-6 text-blue-700 dark:text-blue-300" />
+        <h3 className="font-bold text-blue-800 text-lg dark:text-blue-200">Family Member Entry Guidelines</h3>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column: Field Requirements (condensed) */}
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100 dark:bg-gray-700 dark:border-gray-600">
           <div className="flex items-center gap-2 mb-3">
-            <ClipboardDocumentListIcon className="w-5 h-5 text-blue-600" />
-            <p className="font-semibold text-blue-700">Field Requirements</p>
+            <ClipboardDocumentListIcon className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+            <p className="font-semibold text-blue-700 dark:text-blue-200">Field Requirements</p>
           </div>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-200">
             <li className="flex items-start gap-2">
               <CheckCircleIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
               <span><span className="font-medium">Always required:</span> First Name, Relationship Type.</span>
@@ -792,19 +806,19 @@ const FamilyInstructions = () => {
         </div>
 
         {/* Right Column: Relationship Cards (unchanged) */}
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100 dark:bg-gray-700 dark:border-gray-600">
           <div className="flex items-center gap-2 mb-3">
             <UserGroupIcon className="w-5 h-5 text-blue-600" />
             <p className="font-semibold text-blue-700">Relationship‑Specific Notes</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Spouse Card */}
-            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50">
+            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/60">
               <div className="flex items-center gap-1 mb-2">
                 <HeartIcon className="w-4 h-4 text-pink-500" />
-                <p className="font-medium text-blue-800">Spouse</p>
+                <p className="font-medium text-blue-800 dark:text-blue-200">Spouse</p>
               </div>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside dark:text-gray-300">
                 <li>Only <strong>one current spouse</strong> allowed.</li>
                 <li>Current Spouse: provide DOB, Email, Mobile.</li>
                 <li>Divorced: provide Divorce Date & Divorce Document (other fields optional).</li>
@@ -813,12 +827,12 @@ const FamilyInstructions = () => {
             </div>
 
             {/* Child Card */}
-            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50">
+            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/60">
               <div className="flex items-center gap-1 mb-2">
                 <UserIcon className="w-4 h-4 text-green-600" />
-                <p className="font-medium text-blue-800">Child</p>
+                <p className="font-medium text-blue-800 dark:text-blue-200">Child</p>
               </div>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside dark:text-gray-300">
                 <li><strong>Child Type</strong> & <strong>Parent Name</strong> mandatory.</li>
                 <li>Alive: provide DOB, Email, Mobile.</li>
                 <li>Deceased: provide Death Date & Death Certificate.</li>
@@ -827,24 +841,24 @@ const FamilyInstructions = () => {
             </div>
 
             {/* Father Card */}
-            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50">
+            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/60">
               <div className="flex items-center gap-1 mb-2">
                 <UserIcon className="w-4 h-4 text-blue-700" />
-                <p className="font-medium text-blue-800">Father</p>
+                <p className="font-medium text-blue-800 dark:text-blue-200">Father</p>
               </div>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside dark:text-gray-300">
                 <li>Alive: provide DOB, Email, Mobile if available.</li>
                 <li>Deceased: provide Death Date & Death Certificate.</li>
               </ul>
             </div>
 
             {/* Mother Card */}
-            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50">
+            <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/60">
               <div className="flex items-center gap-1 mb-2">
                 <UserIcon className="w-4 h-4 text-purple-600" />
-                <p className="font-medium text-blue-800">Mother</p>
+                <p className="font-medium text-blue-800 dark:text-blue-200">Mother</p>
               </div>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+              <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside dark:text-gray-300">
                 <li>Alive: provide DOB, Email, Mobile if available.</li>
                 <li>Deceased: provide Death Date & Death Certificate.</li>
               </ul>
@@ -853,7 +867,7 @@ const FamilyInstructions = () => {
         </div>
       </div>
 
-      <p className="text-xs text-blue-600 mt-4 italic flex items-center gap-1">
+      <p className="text-xs text-blue-600 mt-4 italic flex items-center gap-1 dark:text-blue-300">
         <InformationCircleIcon className="w-4 h-4" />
         These guidelines help ensure data consistency. Mandatory fields are marked with * in the form.
       </p>
@@ -1113,7 +1127,7 @@ const FamilyInstructions = () => {
             <TwoColumnDetailSection
               title="AWARDS"
               data={awardsList}
-              fields={["reward_name", "reward_from", "received_on", "reward_description"]}
+              fields={["reward_name", "reward_type", "reward_from", "received_on", "reward_description"]}
               getMasterName={getMasterName}
               formatDate={formatDate}
               formatFieldName={formatFieldName}
@@ -1125,7 +1139,7 @@ const FamilyInstructions = () => {
             <TwoColumnDetailSection
               title="DISABILITY"
               data={disabilityList}
-              fields={["disability_type_id", "disability_percentage", "disability_valid_up_to"]}
+              fields={["disability_type_id", "disability_percentage", "disability_valid_up_to", "udid_number"]}
               getMasterName={getMasterName}
               formatDate={formatDate}
               formatFieldName={formatFieldName}
@@ -1193,14 +1207,14 @@ const FamilyInstructions = () => {
         </div>
 
         {/* Note Section */}
-        <div className="mt-6 bg-white shadow-lg rounded-xl p-5 sm:p-6 border border-indigo-300">
+        <div className="mt-6 bg-white shadow-lg rounded-xl p-5 sm:p-6 border border-indigo-300 dark:bg-gray-800 dark:border-gray-700">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <ExclamationCircleIcon className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-800 mb-2">About SPARK Data</h3>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <h3 className="text-base font-bold text-slate-800 mb-2 dark:text-gray-100">About SPARK Data</h3>
+              <p className="text-sm text-slate-600 leading-relaxed dark:text-gray-300">
                 This preview shows data imported from the SPARK system. Review the information carefully.
                 You can merge this data with your existing profile or use it to update your information.
               </p>
@@ -1237,7 +1251,7 @@ const ProfessionalSection = ({ title, data, getMasterName, formatFieldName, isFi
             return (
               <div
                 key={key}
-                className="flex border border-indigo-300 rounded-lg overflow-hidden hover:shadow-sm transition-shadow"
+                className="flex border border-indigo-300 rounded-lg overflow-hidden hover:shadow-sm transition-shadow dark:border-gray-700"
               >
                 <div className="w-2/5 bg-indigo-50 p-2.5 font-semibold text-slate-700 text-sm border-r border-indigo-300 flex items-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
                   {formatFieldName(key)}
@@ -1474,7 +1488,3 @@ const TwoColumnDetailSection = ({
 };
 
 export default SparkPreviewPage;
-
-
-
-

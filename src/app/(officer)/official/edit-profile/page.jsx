@@ -1,4 +1,3 @@
-// ProfileEditPage.jsx
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon, MagnifyingGlassIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { toast } from "react-toastify";
 import axiosInstance from '@/utils/apiClient';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
+import { formatDateToDDMMYYYY, parseDateFromDDMMYYYY, isValidDDMMYYYY } from '@/utils/dateFormat';
 
 // Add these imports at the top of the file
 import {
@@ -13,7 +14,6 @@ import {
   TrashIcon,
   ExclamationTriangleIcon, 
   ClockIcon,
-  ExclamationCircleIcon,
   LockClosedIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
@@ -59,6 +59,33 @@ const validateDateRange = (startDate, endDate, fieldPrefix = '') => {
   return null;
 };
 
+const getTodayDateString = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDisciplinaryMaxDate = (joiningDate, retirementDate) => {
+  if (retirementDate) {
+    return retirementDate;
+  }
+
+  if (joiningDate) {
+    const joinDate = new Date(joiningDate);
+    if (!Number.isNaN(joinDate.getTime())) {
+      joinDate.setFullYear(joinDate.getFullYear() + 100);
+      const year = joinDate.getFullYear();
+      const month = String(joinDate.getMonth() + 1).padStart(2, '0');
+      const day = String(joinDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  return getTodayDateString();
+};
+
 // PF Number validation
 const validatePFNumber = (pfNumber) => {
   if (!pfNumber) return null;
@@ -67,6 +94,169 @@ const validatePFNumber = (pfNumber) => {
     return 'PF Account Number must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).';
   }
   return null;
+};
+
+const validatePRANNumber = (praanNumber) => {
+  if (!praanNumber) return null;
+  const trimmedValue = praanNumber.toString().trim();
+  if (!/^\d{12}$/.test(trimmedValue)) {
+    return 'PRAN must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).';
+  }
+  return null;
+};
+
+const validatePhoneOrMobile = (value, fieldLabel = 'Phone number') => {
+  if (!value && value !== 0) return null;
+
+  const trimmedValue = value.toString().trim();
+  if (!trimmedValue) return null;
+
+  const normalized = trimmedValue.replace(/[\s\-()+]/g, '');
+
+  if (!/^\d+$/.test(normalized)) {
+    return `${fieldLabel} must contain digits only`;
+  }
+
+  const isValidMobile = /^[6-9]\d{9}$/.test(normalized);
+  const isValidLandline = normalized.length >= 8 && normalized.length <= 11;
+
+  if (!isValidMobile && !isValidLandline) {
+    return `${fieldLabel} must be a valid mobile or landline number`;
+  }
+
+  return null;
+};
+
+const validateBasicPay = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+
+  const trimmedValue = value.toString().trim();
+  if (!trimmedValue) return null;
+
+  if (!/^\d+(\.\d{0,2})?$/.test(trimmedValue)) {
+    return 'Basic Pay can contain up to 2 digits after decimal';
+  }
+
+  const [integerPart, decimalPart = ''] = trimmedValue.split('.');
+
+  if (integerPart.length > 8) {
+    return 'Basic Pay cannot exceed 8 digits before decimal';
+  }
+
+  if (decimalPart.length > 2) {
+    return 'Basic Pay cannot exceed 2 digits after decimal';
+  }
+
+  if (Number(trimmedValue) <= 0) {
+    return 'Basic Pay must be a positive number';
+  }
+
+  return null;
+};
+
+const getServiceDuplicateKey = (service) => {
+  const additionalChargeValue = service?.is_additional_charge ?? service?.additional_charge;
+  const isAdditionalCharge =
+    additionalChargeValue === true ||
+    additionalChargeValue === 'true' ||
+    additionalChargeValue === 'True' ||
+    additionalChargeValue === 'YES' ||
+    additionalChargeValue === 'Yes' ||
+    additionalChargeValue === 'yes';
+  if (isAdditionalCharge) return '';
+  const start = service?.start_date ? String(service.start_date).split('T')[0] : '';
+  const end = service?.end_date ? String(service.end_date).split('T')[0] : 'ongoing';
+  if (!start) return '';
+  return `${start}__${end}`;
+};
+
+const getServiceDuplicateMetaMap = (services = []) => {
+  const grouped = new Map();
+
+  services.forEach((service) => {
+    const key = getServiceDuplicateKey(service);
+    if (!key) return;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(service);
+  });
+
+  const duplicates = new Map();
+  grouped.forEach((items, key) => {
+    if (items.length > 1) {
+      duplicates.set(key, { count: items.length });
+    }
+  });
+
+  return duplicates;
+};
+
+const udidPattern = /^[A-Z]{2}\d+$/;
+
+const normalizeUdidNumberInput = (value) => {
+  let normalized = '';
+
+  for (const char of value.toUpperCase()) {
+    if (normalized.length < 2) {
+      if (/[A-Z]/.test(char)) {
+        normalized += char;
+      }
+      continue;
+    }
+
+    if (/\d/.test(char)) {
+      normalized += char;
+    }
+  }
+
+  return normalized.slice(0, 18);
+};
+
+const PERSONAL_REQUIRED_FIELDS = [
+  'honorifics',
+  'first_name',
+  'last_name',
+  'ais_number',
+  'email',
+  'allotment_year',
+  'date_of_joining',
+  'pen_number',
+  'source_of_recruitment_id',
+  'cadre_id',
+  'dob',
+  'gender_id',
+  'blood_group_id',
+  'mother_tongue_id',
+  'mobile_no',
+];
+
+const ADDRESS_REQUIRED_FIELDS = [
+  'address_line1_com',
+  'district_id_com',
+  'state_id_com',
+  'pin_code_com',
+  'address_line1_per',
+  'district_id_per',
+  'state_id_per',
+  'pin_code_per',
+];
+
+const isEmptyRequiredValue = (value) => {
+  if (Array.isArray(value)) return value.length === 0;
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  return value === '';
+};
+
+const addRequiredFieldErrors = (errors, data, fields) => {
+  fields.forEach((field) => {
+    const value = field === 'languages_known'
+      ? data?.languages_known_ids || data?.languages_known || []
+      : data?.[field];
+
+    if (isEmptyRequiredValue(value)) {
+      errors[field] = 'This field is required';
+    }
+  });
 };
 
 // Check if field source is AIS Officer (override SPARK_API for specific fields)
@@ -341,13 +531,9 @@ const MultiSelect = ({ label, options, value = [], onChange, disabled = false, e
       ref={containerRef}
       id={fieldId}
     >
-      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1 dark:text-gray-200">
-        {label}
-        {disabled && (
-          <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-200 rounded-full text-gray-900 cursor-help ml-1 dark:bg-gray-700 dark:text-gray-100" title="Sourced from SPARK, cannot be edited">
-            <LockClosedIcon className="h-3 w-3" />
-          </span>
-        )}
+      <label className="mb-2 flex items-center justify-between gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+        <span>{label}</span>
+        {disabled && <ReadOnlyIndicator compact />}
       </label>
       <div
         className={`flex items-center justify-between cursor-pointer rounded-lg border p-3 bg-white transition-all duration-200 dark:bg-gray-800 dark:border-gray-700 ${
@@ -392,14 +578,7 @@ const MultiSelect = ({ label, options, value = [], onChange, disabled = false, e
         </div>
       )}
       
-      {error && (
-        <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
-          {error}
-        </p>
-      )}
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
 };
@@ -461,15 +640,63 @@ const FormSection = ({ title, children, onSave, hasData = true, forceOpen = fals
   );
 };
 
+const LegendBadge = ({ icon, label, tone = 'gray' }) => {
+  const toneClasses = {
+    orange: 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/10 dark:text-orange-200 dark:ring-orange-400/30',
+    indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-200 dark:ring-indigo-400/30',
+    gray: 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-700/70 dark:text-gray-100 dark:ring-gray-600'
+  };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${toneClasses[tone] || toneClasses.gray}`}>
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
+};
+
+const ReadOnlyIndicator = ({ compact = false, title = 'Locked field: cannot be edited here' }) => {
+  if (compact) {
+    return (
+      <span
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-700 ring-1 ring-gray-200 dark:bg-gray-700/70 dark:text-gray-100 dark:ring-gray-600"
+        title={title}
+        aria-label={title}
+      >
+        <LockClosedIcon className="h-3 w-3" />
+      </span>
+    );
+  }
+
+  return (
+    <LegendBadge
+      tone="gray"
+      label="SPARK locked"
+      icon={<LockClosedIcon className="h-3 w-3" />}
+    />
+  );
+};
+
 // Reusable InputField with enhanced search highlighting
-const InputField = ({ label, type = 'text', value, onChange, disabled = false, options = [], multiple = false, error, min, max, searchTerm = '', fieldId }) => {
+const InputField = ({ label, type = 'text', value, onChange, disabled = false, options = [], multiple = false, error, min, max, maxLength, step, searchTerm = '', fieldId, placeholder, useNativeDatePicker = false, required = false }) => {
   const isSelect = type === 'select';
   const isTextarea = type === 'textarea';
   const isCheckbox = type === 'checkbox';
+  const isDate = type === 'date';
+  const [dateDisplayValue, setDateDisplayValue] = useState(
+    isDate ? formatDateToDDMMYYYY((value || '').split('T')[0]) : ''
+  );
+
+  useEffect(() => {
+    if (!isDate) return;
+    setDateDisplayValue(formatDateToDDMMYYYY((value || '').split('T')[0]));
+  }, [isDate, value]);
 
   const displayedValue = isSelect 
     ? (multiple ? (value || []).join(', ') : value?.toString() || '') 
-    : (value?.toString() || '');
+    : isDate
+      ? dateDisplayValue
+      : (value?.toString() || '');
 
   const isHighlighted = searchTerm && (
     label.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -482,18 +709,12 @@ const InputField = ({ label, type = 'text', value, onChange, disabled = false, o
 
   return (
     <div className={`relative group ${isHighlighted ? 'bg-yellow-100 border-l-4 border-yellow-500 p-3 rounded-r-lg' : ''}`} id={fieldId}>
-      <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1 dark:text-gray-200">
-        {label}
-       {disabled && (
-            <span className="inline-flex items-center justify-center w-4 h-4 bg-gray-200 rounded text-gray-900 cursor-help dark:bg-gray-700 dark:text-gray-200" title="Sourced from SPARK, cannot be edited">
-              <LockClosedIcon className="h-2.5 w-2.5" />
-            </span>
-          )}
-          {/* {error && (
-          <span className="text-red-500 text-xs font-normal ml-auto">
-            Required
-          </span>
-        )} */}
+      <label className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-gray-700 dark:text-gray-200">
+        <span>
+          {label}
+          {required && <span className="text-red-500 font-semibold"> *</span>}
+        </span>
+        {disabled && <ReadOnlyIndicator compact />}
       </label>
       {isCheckbox ? (
         <div className="flex items-center">
@@ -536,10 +757,68 @@ const InputField = ({ label, type = 'text', value, onChange, disabled = false, o
           value={value || ''}
           onChange={onChange}
           disabled={disabled}
+          maxLength={maxLength}
           className={`mt-1 block w-full text-sm border rounded-lg px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-colors disabled:bg-gray-200 disabled:text-gray-900 bg-white text-gray-900 ${
             error ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-gray-300'
           } dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:disabled:bg-gray-800`}
           rows={3}
+        />
+      ) : isDate && useNativeDatePicker ? (
+        <input
+          type="date"
+          value={(value || '').split('T')[0]}
+          onChange={onChange}
+          disabled={disabled}
+          min={min}
+          max={max}
+          className={`mt-1 block w-full text-sm border rounded-lg px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-colors disabled:bg-gray-200 disabled:text-gray-900 bg-white text-gray-900 ${
+            error ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-gray-300'
+          } dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:disabled:bg-gray-800`}
+        />
+      ) : isDate ? (
+        <input
+          type="text"
+          value={dateDisplayValue}
+          onChange={(e) => {
+            const rawValue = e.target.value.replace(/[^\d/]/g, '').slice(0, 10);
+            setDateDisplayValue(rawValue);
+          }}
+          onBlur={() => {
+            const trimmedValue = dateDisplayValue.trim();
+
+            if (!trimmedValue) {
+              setDateDisplayValue('');
+              onChange({ target: { value: '' } });
+              return;
+            }
+
+            if (!isValidDDMMYYYY(trimmedValue)) {
+              return;
+            }
+
+            const isoValue = parseDateFromDDMMYYYY(trimmedValue);
+            if (!isoValue) {
+              return;
+            }
+
+            if ((min && isoValue < min) || (max && isoValue > max)) {
+              return;
+            }
+
+            setDateDisplayValue(formatDateToDDMMYYYY(isoValue));
+            onChange({ target: { value: isoValue } });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            }
+          }}
+          disabled={disabled}
+          inputMode="numeric"
+          placeholder={placeholder || 'DD/MM/YYYY'}
+          className={`mt-1 block w-full text-sm border rounded-lg px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-colors disabled:bg-gray-200 disabled:text-gray-900 bg-white text-gray-900 ${
+            error ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-gray-300'
+          } dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:disabled:bg-gray-800`}
         />
       ) : (
         <input
@@ -549,17 +828,15 @@ const InputField = ({ label, type = 'text', value, onChange, disabled = false, o
           disabled={disabled}
           min={min}
           max={max}
+          maxLength={maxLength}
+          step={step}
+          placeholder={placeholder}
           className={`mt-1 block w-full text-sm border rounded-lg px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-colors disabled:bg-gray-200 disabled:text-gray-900 bg-white text-gray-900 ${
             error ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-gray-300'
           } dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:disabled:bg-gray-800`}
         />
       )}
-      {error && (
-        <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-          <ExclamationCircleIcon className="h-3 w-3" />
-          {error}
-        </p>
-      )}
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
 };
@@ -613,16 +890,17 @@ const PersonalDetails = ({ editedData, handleChange, errors, searchTerm = '' }) 
         error={errors.honorifics}
         searchTerm={searchTerm}
         fieldId="field-honorifics"
+        required={PERSONAL_REQUIRED_FIELDS.includes('honorifics')}
       />
-      <InputField label="First Name" value={editedData.ais_officer_info.first_name || ''} onChange={(e) => handleChange(null, null, 'first_name', e.target.value)} disabled={editedData.ais_officer_info.fields?.first_name === 'SPARK_API'} error={errors.first_name} searchTerm={searchTerm} fieldId="field-first_name" />
-      <InputField label="Last Name" value={editedData.ais_officer_info.last_name || ''} onChange={(e) => handleChange(null, null, 'last_name', e.target.value)} disabled={editedData.ais_officer_info.fields?.last_name === 'SPARK_API'} error={errors.last_name} searchTerm={searchTerm} fieldId="field-last_name" />
-      <InputField label="Email" type="email" value={editedData.ais_officer_info.email || ''} onChange={(e) => handleChange(null, null, 'email', e.target.value)} disabled={true} error={errors.email} searchTerm={searchTerm} fieldId="field-email" />
-      <InputField label="Mobile No" type="tel" value={editedData.ais_officer_info.mobile_no || ''} onChange={(e) => handleChange(null, null, 'mobile_no', e.target.value)} disabled={true} error={errors.mobile_no} searchTerm={searchTerm} fieldId="field-mobile_no" />
+      <InputField label="First Name" value={editedData.ais_officer_info.first_name || ''} onChange={(e) => handleChange(null, null, 'first_name', e.target.value)} disabled={true} error={errors.first_name} searchTerm={searchTerm} fieldId="field-first_name" required={PERSONAL_REQUIRED_FIELDS.includes('first_name')} />
+      <InputField label="Last Name" value={editedData.ais_officer_info.last_name || ''} onChange={(e) => handleChange(null, null, 'last_name', e.target.value)} disabled={true} error={errors.last_name} searchTerm={searchTerm} fieldId="field-last_name" required={PERSONAL_REQUIRED_FIELDS.includes('last_name')} />
+      <InputField label="Email" type="email" value={editedData.ais_officer_info.email || ''} onChange={(e) => handleChange(null, null, 'email', e.target.value)} disabled={true} error={errors.email} searchTerm={searchTerm} fieldId="field-email" required={PERSONAL_REQUIRED_FIELDS.includes('email')} />
+      <InputField label="Mobile No" type="tel" value={editedData.ais_officer_info.mobile_no || ''} onChange={(e) => handleChange(null, null, 'mobile_no', e.target.value)} disabled={true} error={errors.mobile_no} searchTerm={searchTerm} fieldId="field-mobile_no" required={PERSONAL_REQUIRED_FIELDS.includes('mobile_no')} />
       <InputField label="Alternative Mobile No" type="tel" value={editedData.ais_officer_info.alternative_mobile_no || ''} onChange={(e) => handleChange(null, null, 'alternative_mobile_no', e.target.value)} disabled={editedData.ais_officer_info.fields?.alternative_mobile_no === 'SPARK_API'} error={errors.alternative_mobile_no} searchTerm={searchTerm} fieldId="field-alternative_mobile_no" />
       <InputField label="Alternative Email" type="email" value={editedData.ais_officer_info.alternative_email || ''} onChange={(e) => handleChange(null, null, 'alternative_email', e.target.value)} disabled={editedData.ais_officer_info.fields?.alternative_email === 'SPARK_API'} error={errors.alternative_email} searchTerm={searchTerm} fieldId="field-alternative_email" />
-      <InputField label="AIS Number" value={editedData.ais_officer_info.ais_number || ''} onChange={(e) => handleChange(null, null, 'ais_number', e.target.value)} disabled={editedData.ais_officer_info.fields?.ais_number === 'SPARK_API'} error={errors.ais_number} searchTerm={searchTerm} fieldId="field-ais_number" />
+      <InputField label="AIS Number" value={editedData.ais_officer_info.ais_number || ''} onChange={(e) => handleChange(null, null, 'ais_number', e.target.value)} disabled={editedData.ais_officer_info.fields?.ais_number === 'SPARK_API'} error={errors.ais_number} searchTerm={searchTerm} fieldId="field-ais_number" required={PERSONAL_REQUIRED_FIELDS.includes('ais_number')} />
       <InputField label="Karmasri Id" value={editedData.ais_officer_info.identity_number || ''} onChange={(e) => handleChange(null, null, 'identity_number', e.target.value)} disabled={true} error={errors.identity_number} searchTerm={searchTerm} fieldId="field-identity_number" />
-      <InputField label="PEN Number" value={editedData.ais_officer_info.pen_number || ''} onChange={(e) => handleChange(null, null, 'pen_number', e.target.value)} disabled={true} error={errors.pen_number} searchTerm={searchTerm} fieldId="field-pen_number" />
+      <InputField label="PEN Number" value={editedData.ais_officer_info.pen_number || ''} onChange={(e) => handleChange(null, null, 'pen_number', e.target.value)} disabled={true} error={errors.pen_number} searchTerm={searchTerm} fieldId="field-pen_number" required={PERSONAL_REQUIRED_FIELDS.includes('pen_number')} />
       <InputField label="Praan Number" value={editedData.ais_officer_info.praan_number || ''} onChange={(e) => handleChange(null, null, 'praan_number', e.target.value)} disabled={editedData.ais_officer_info.fields?.praan_number === 'SPARK_API'} error={errors.praan_number} searchTerm={searchTerm} fieldId="field-praan_number" />
       <InputField label="PAN" value={editedData.ais_officer_info.pan_no || ''} onChange={(e) => handleChange(null, null, 'pan_no', e.target.value)} disabled={editedData.ais_officer_info.fields?.pan_no === 'SPARK_API'} error={errors.pan_no} searchTerm={searchTerm} fieldId="field-pan_no" />
       
@@ -639,27 +917,27 @@ const PersonalDetails = ({ editedData, handleChange, errors, searchTerm = '' }) 
         placeholder="Enter 12-digit PF number"
       />
       
-      <InputField label="Date of Birth" type="date" value={editedData.ais_officer_info.dob?.split('T')[0] || ''} onChange={(e) => handleChange(null, null, 'dob', e.target.value)} disabled={true} error={errors.dob} searchTerm={searchTerm} fieldId="field-dob" />
+      <InputField label="Date of Birth" type="date" value={editedData.ais_officer_info.dob?.split('T')[0] || ''} onChange={(e) => handleChange(null, null, 'dob', e.target.value)} disabled={true} error={errors.dob} searchTerm={searchTerm} fieldId="field-dob" required={PERSONAL_REQUIRED_FIELDS.includes('dob')} />
       <InputField label="Retirement Date" type="date" value={editedData.ais_officer_info.retirement_date?.split('T')[0] || ''} onChange={(e) => handleChange(null, null, 'retirement_date', e.target.value)} disabled={editedData.ais_officer_info.fields?.retirement_date === 'SPARK_API'} min={editedData.ais_officer_info.dob?.split('T')[0]} error={errors.retirement_date} searchTerm={searchTerm} fieldId="field-retirement_date" />
-      <InputField label="Allotment Year" type="number" value={editedData.ais_officer_info.allotment_year || ''} onChange={(e) => handleChange(null, null, 'allotment_year', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.allotment_year === 'SPARK_API'} error={errors.allotment_year} searchTerm={searchTerm} fieldId="field-allotment_year" />
-      <InputField label="Date of Joining" type="date" value={editedData.ais_officer_info.date_of_joining?.split('T')[0] || ''} onChange={(e) => handleChange(null, null, 'date_of_joining', e.target.value)} disabled={editedData.ais_officer_info.fields?.date_of_joining === 'SPARK_API'} error={errors.date_of_joining} searchTerm={searchTerm} fieldId="field-date_of_joining" />
+      <InputField label="Allotment Year" type="number" value={editedData.ais_officer_info.allotment_year || ''} onChange={(e) => handleChange(null, null, 'allotment_year', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.allotment_year === 'SPARK_API'} error={errors.allotment_year} searchTerm={searchTerm} fieldId="field-allotment_year" required={PERSONAL_REQUIRED_FIELDS.includes('allotment_year')} />
+      <InputField label="Date of Joining" type="date" value={editedData.ais_officer_info.date_of_joining?.split('T')[0] || ''} onChange={(e) => handleChange(null, null, 'date_of_joining', e.target.value)} disabled={editedData.ais_officer_info.fields?.date_of_joining === 'SPARK_API'} error={errors.date_of_joining} searchTerm={searchTerm} fieldId="field-date_of_joining" required={PERSONAL_REQUIRED_FIELDS.includes('date_of_joining')} />
       {/* <InputField label="PWD Status" type="checkbox" value={editedData.ais_officer_info.pwd_status} onChange={(e) => handleChange(null, null, 'pwd_status', e.target.checked)} disabled={false} error={errors.pwd_status} searchTerm={searchTerm} fieldId="field-pwd_status" /> */}
-      <InputField label="Gender" type="select" value={editedData.ais_officer_info.gender_id || ''} onChange={(e) => handleChange(null, null, 'gender_id', parseInt(e.target.value))} options={masters.gender.map((g) => ({ value: g.gender_id, label: g.gender }))} disabled={editedData.ais_officer_info.fields?.gender_id === 'SPARK_API'} error={errors.gender_id} searchTerm={searchTerm} fieldId="field-gender_id" />
-      <InputField label="Blood Group" type="select" value={editedData.ais_officer_info.blood_group_id || ''} onChange={(e) => handleChange(null, null, 'blood_group_id', parseInt(e.target.value))} options={masters.bloodGroup.map((b) => ({ value: b.blood_group_id, label: b.blood_group }))} disabled={editedData.ais_officer_info.fields?.blood_group_id === 'SPARK_API'} error={errors.blood_group_id} searchTerm={searchTerm} fieldId="field-blood_group_id" />
-      <InputField label="Category" type="select" value={editedData.ais_officer_info.category_id || ''} onChange={(e) => handleChange(null, null, 'category_id', parseInt(e.target.value))} options={masters.category.map((c) => ({ value: c.category_id, label: c.category }))} disabled={editedData.ais_officer_info.fields?.category_id === 'SPARK_API'} error={errors.category_id} searchTerm={searchTerm} fieldId="field-category_id" />
-      <InputField label="Mother Tongue" type="select" value={editedData.ais_officer_info.mother_tongue_id || ''} onChange={(e) => handleChange(null, null, 'mother_tongue_id', parseInt(e.target.value))} options={masters.language.map((l) => ({ value: l.language_id, label: l.language }))} disabled={editedData.ais_officer_info.fields?.mother_tongue_id === 'SPARK_API'} error={errors.mother_tongue_id} searchTerm={searchTerm} fieldId="field-mother_tongue_id" />
+      <InputField label="Gender" type="select" value={editedData.ais_officer_info.gender_id || ''} onChange={(e) => handleChange(null, null, 'gender_id', parseInt(e.target.value))} options={masters.gender.map((g) => ({ value: g.gender_id, label: g.gender }))} disabled={editedData.ais_officer_info.fields?.gender_id === 'SPARK_API'} error={errors.gender_id} searchTerm={searchTerm} fieldId="field-gender_id" required={PERSONAL_REQUIRED_FIELDS.includes('gender_id')} />
+      <InputField label="Blood Group" type="select" value={editedData.ais_officer_info.blood_group_id || ''} onChange={(e) => handleChange(null, null, 'blood_group_id', parseInt(e.target.value))} options={masters.bloodGroup.map((b) => ({ value: b.blood_group_id, label: b.blood_group }))} disabled={editedData.ais_officer_info.fields?.blood_group_id === 'SPARK_API'} error={errors.blood_group_id} searchTerm={searchTerm} fieldId="field-blood_group_id" required={PERSONAL_REQUIRED_FIELDS.includes('blood_group_id')} />
+      <InputField label="Category" type="select" value={editedData.ais_officer_info.category_id || ''} onChange={(e) => handleChange(null, null, 'category_id', parseInt(e.target.value))} options={masters.category.map((c) => ({ value: c.category_id, label: c.category }))} disabled={editedData.ais_officer_info.fields?.category_id === 'SPARK_API'} error={errors.category_id} searchTerm={searchTerm} fieldId="field-category_id" required={PERSONAL_REQUIRED_FIELDS.includes('category_id')} />
+      <InputField label="Mother Tongue" type="select" value={editedData.ais_officer_info.mother_tongue_id || ''} onChange={(e) => handleChange(null, null, 'mother_tongue_id', parseInt(e.target.value))} options={masters.language.map((l) => ({ value: l.language_id, label: l.language }))} disabled={editedData.ais_officer_info.fields?.mother_tongue_id === 'SPARK_API'} error={errors.mother_tongue_id} searchTerm={searchTerm} fieldId="field-mother_tongue_id" required={PERSONAL_REQUIRED_FIELDS.includes('mother_tongue_id')} />
 
 <div 
   className={`relative group ${isLanguagesHighlighted ? 'bg-yellow-50 border-2 border-yellow-400 p-2 rounded-lg shadow-md' : ''}`} 
   ref={languagesDropdownRef} 
   id="field-languages_known"
 >
-  <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1 dark:text-gray-200">
-    Languages Known
-    {editedData.ais_officer_info.fields?.languages_known === 'SPARK_API' && (
-      <span className="inline-flex items-center justify-center w-4 h-4 bg-gray-200 rounded text-gray-700 cursor-help dark:bg-gray-700 dark:text-gray-200" title="Sourced from SPARK, cannot be edited">
-      </span>
-    )}
+  <label className="mb-2 flex items-center justify-between gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+    <span>
+      Languages Known
+      {PERSONAL_REQUIRED_FIELDS.includes('languages_known') && <span className="text-red-500 font-semibold"> *</span>}
+    </span>
+    {editedData.ais_officer_info.fields?.languages_known === 'SPARK_API' && <ReadOnlyIndicator compact />}
   </label>
   <div
     className={`flex items-center justify-between cursor-pointer rounded-lg border p-2.5 bg-white text-sm transition-colors dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 ${
@@ -707,16 +985,11 @@ const PersonalDetails = ({ editedData, handleChange, errors, searchTerm = '' }) 
     </div>
   )}
   
-  {errors.languages_known && (
-    <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-      <ExclamationCircleIcon className="h-3 w-3" />
-      {errors.languages_known}
-    </p>
-  )}
+  {errors.languages_known && <p className="text-red-500 text-xs mt-1">{errors.languages_known}</p>}
 </div>
       
-      <InputField label="Source of Recruitment" type="select" value={editedData.ais_officer_info.source_of_recruitment_id || ''} onChange={(e) => handleChange(null, null, 'source_of_recruitment_id', parseInt(e.target.value))} options={masters.recruitment.map((r) => ({ value: r.recruitment_id, label: r.recruitment }))} disabled={editedData.ais_officer_info.fields?.source_of_recruitment_id === 'SPARK_API'} error={errors.source_of_recruitment_id} searchTerm={searchTerm} fieldId="field-source_of_recruitment_id" />
-      <InputField label="Cadre" type="select" value={editedData.ais_officer_info.cadre_id || ''} onChange={(e) => handleChange(null, null, 'cadre_id', parseInt(e.target.value))} options={masters.cadre.map((c) => ({ value: c.cadre_id, label: c.cadre }))} disabled={editedData.ais_officer_info.fields?.cadre_id === 'SPARK_API'} error={errors.cadre_id} searchTerm={searchTerm} fieldId="field-cadre_id" />
+      <InputField label="Source of Recruitment" type="select" value={editedData.ais_officer_info.source_of_recruitment_id || ''} onChange={(e) => handleChange(null, null, 'source_of_recruitment_id', parseInt(e.target.value))} options={masters.recruitment.map((r) => ({ value: r.recruitment_id, label: r.recruitment }))} disabled={editedData.ais_officer_info.fields?.source_of_recruitment_id === 'SPARK_API'} error={errors.source_of_recruitment_id} searchTerm={searchTerm} fieldId="field-source_of_recruitment_id" required={PERSONAL_REQUIRED_FIELDS.includes('source_of_recruitment_id')} />
+      <InputField label="Cadre" type="select" value={editedData.ais_officer_info.cadre_id || ''} onChange={(e) => handleChange(null, null, 'cadre_id', parseInt(e.target.value))} options={masters.cadre.map((c) => ({ value: c.cadre_id, label: c.cadre }))} disabled={editedData.ais_officer_info.fields?.cadre_id === 'SPARK_API'} error={errors.cadre_id} searchTerm={searchTerm} fieldId="field-cadre_id" required={PERSONAL_REQUIRED_FIELDS.includes('cadre_id')} />
     </div>
   );
 };
@@ -730,21 +1003,21 @@ const AddressDetails = ({ editedData, handleChange, errors, searchTerm = '' }) =
       <div className="mb-6">
         <h3 className="font-semibold text-base text-gray-800 mb-3 pb-2 border-b border-gray-200 dark:text-gray-100 dark:border-gray-700">Official Address</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InputField label="Address Line 1" value={editedData.ais_officer_info.address_line1_com || ''} onChange={(e) => handleChange(null, null, 'address_line1_com', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line1_com === 'SPARK_API'} error={errors.address_line1_com} searchTerm={searchTerm} fieldId="field-address_line1_com" />
+          <InputField label="Address Line 1" value={editedData.ais_officer_info.address_line1_com || ''} onChange={(e) => handleChange(null, null, 'address_line1_com', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line1_com === 'SPARK_API'} error={errors.address_line1_com} searchTerm={searchTerm} fieldId="field-address_line1_com" required={ADDRESS_REQUIRED_FIELDS.includes('address_line1_com')} />
           <InputField label="Address Line 2" value={editedData.ais_officer_info.address_line2_com || ''} onChange={(e) => handleChange(null, null, 'address_line2_com', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line2_com === 'SPARK_API'} error={errors.address_line2_com} searchTerm={searchTerm} fieldId="field-address_line2_com" />
-          <InputField label="State" type="select" value={editedData.ais_officer_info.state_id_com || ''} onChange={(e) => handleChange(null, null, 'state_id_com', parseInt(e.target.value))} options={masters.state.map((s) => ({ value: s.state_id, label: s.state }))} disabled={editedData.ais_officer_info.fields?.state_id_com === 'SPARK_API'} error={errors.state_id_com} searchTerm={searchTerm} fieldId="field-state_id_com" />
-          <InputField label="District" type="select" value={editedData.ais_officer_info.district_id_com || ''} onChange={(e) => handleChange(null, null, 'district_id_com', parseInt(e.target.value))} options={masters.district.filter((d) => d.state_id === editedData.ais_officer_info.state_id_com).map((d) => ({ value: d.district_id, label: d.district }))} disabled={editedData.ais_officer_info.fields?.district_id_com === 'SPARK_API'} error={errors.district_id_com} searchTerm={searchTerm} fieldId="field-district_id_com" />
-          <InputField label="Pin Code" type="number" value={editedData.ais_officer_info.pin_code_com || ''} onChange={(e) => handleChange(null, null, 'pin_code_com', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.pin_code_com === 'SPARK_API'} error={errors.pin_code_com} searchTerm={searchTerm} fieldId="field-pin_code_com" />
+          <InputField label="State" type="select" value={editedData.ais_officer_info.state_id_com || ''} onChange={(e) => handleChange(null, null, 'state_id_com', parseInt(e.target.value))} options={masters.state.map((s) => ({ value: s.state_id, label: s.state }))} disabled={editedData.ais_officer_info.fields?.state_id_com === 'SPARK_API'} error={errors.state_id_com} searchTerm={searchTerm} fieldId="field-state_id_com" required={ADDRESS_REQUIRED_FIELDS.includes('state_id_com')} />
+          <InputField label="District" type="select" value={editedData.ais_officer_info.district_id_com || ''} onChange={(e) => handleChange(null, null, 'district_id_com', parseInt(e.target.value))} options={masters.district.filter((d) => d.state_id === editedData.ais_officer_info.state_id_com).map((d) => ({ value: d.district_id, label: d.district }))} disabled={editedData.ais_officer_info.fields?.district_id_com === 'SPARK_API'} error={errors.district_id_com} searchTerm={searchTerm} fieldId="field-district_id_com" required={ADDRESS_REQUIRED_FIELDS.includes('district_id_com')} />
+          <InputField label="Pin Code" type="number" value={editedData.ais_officer_info.pin_code_com || ''} onChange={(e) => handleChange(null, null, 'pin_code_com', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.pin_code_com === 'SPARK_API'} error={errors.pin_code_com} searchTerm={searchTerm} fieldId="field-pin_code_com" required={ADDRESS_REQUIRED_FIELDS.includes('pin_code_com')} />
         </div>
       </div>
       <div>
         <h3 className="font-semibold text-base text-gray-800 mb-3 pb-2 border-b border-gray-200 dark:text-gray-100 dark:border-gray-700">Permanent Address</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <InputField label="Address Line 1" value={editedData.ais_officer_info.address_line1_per || ''} onChange={(e) => handleChange(null, null, 'address_line1_per', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line1_per === 'SPARK_API'} error={errors.address_line1_per} searchTerm={searchTerm} fieldId="field-address_line1_per" />
+          <InputField label="Address Line 1" value={editedData.ais_officer_info.address_line1_per || ''} onChange={(e) => handleChange(null, null, 'address_line1_per', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line1_per === 'SPARK_API'} error={errors.address_line1_per} searchTerm={searchTerm} fieldId="field-address_line1_per" required={ADDRESS_REQUIRED_FIELDS.includes('address_line1_per')} />
           <InputField label="Address Line 2" value={editedData.ais_officer_info.address_line2_per || ''} onChange={(e) => handleChange(null, null, 'address_line2_per', e.target.value)} disabled={editedData.ais_officer_info.fields?.address_line2_per === 'SPARK_API'} error={errors.address_line2_per} searchTerm={searchTerm} fieldId="field-address_line2_per" />
-          <InputField label="State" type="select" value={editedData.ais_officer_info.state_id_per || ''} onChange={(e) => handleChange(null, null, 'state_id_per', parseInt(e.target.value))} options={masters.state.map((s) => ({ value: s.state_id, label: s.state }))} disabled={editedData.ais_officer_info.fields?.state_id_per === 'SPARK_API'} error={errors.state_id_per} searchTerm={searchTerm} fieldId="field-state_id_per" />
-          <InputField label="District" type="select" value={editedData.ais_officer_info.district_id_per || ''} onChange={(e) => handleChange(null, null, 'district_id_per', parseInt(e.target.value))} options={masters.district.filter((d) => d.state_id === editedData.ais_officer_info.state_id_per).map((d) => ({ value: d.district_id, label: d.district }))} disabled={editedData.ais_officer_info.fields?.district_id_per === 'SPARK_API'} error={errors.district_id_per} searchTerm={searchTerm} fieldId="field-district_id_per" />
-          <InputField label="Pin Code" type="number" value={editedData.ais_officer_info.pin_code_per || ''} onChange={(e) => handleChange(null, null, 'pin_code_per', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.pin_code_per === 'SPARK_API'} error={errors.pin_code_per} searchTerm={searchTerm} fieldId="field-pin_code_per" />
+          <InputField label="State" type="select" value={editedData.ais_officer_info.state_id_per || ''} onChange={(e) => handleChange(null, null, 'state_id_per', parseInt(e.target.value))} options={masters.state.map((s) => ({ value: s.state_id, label: s.state }))} disabled={editedData.ais_officer_info.fields?.state_id_per === 'SPARK_API'} error={errors.state_id_per} searchTerm={searchTerm} fieldId="field-state_id_per" required={ADDRESS_REQUIRED_FIELDS.includes('state_id_per')} />
+          <InputField label="District" type="select" value={editedData.ais_officer_info.district_id_per || ''} onChange={(e) => handleChange(null, null, 'district_id_per', parseInt(e.target.value))} options={masters.district.filter((d) => d.state_id === editedData.ais_officer_info.state_id_per).map((d) => ({ value: d.district_id, label: d.district }))} disabled={editedData.ais_officer_info.fields?.district_id_per === 'SPARK_API'} error={errors.district_id_per} searchTerm={searchTerm} fieldId="field-district_id_per" required={ADDRESS_REQUIRED_FIELDS.includes('district_id_per')} />
+          <InputField label="Pin Code" type="number" value={editedData.ais_officer_info.pin_code_per || ''} onChange={(e) => handleChange(null, null, 'pin_code_per', parseInt(e.target.value) || '')} disabled={editedData.ais_officer_info.fields?.pin_code_per === 'SPARK_API'} error={errors.pin_code_per} searchTerm={searchTerm} fieldId="field-pin_code_per" required={ADDRESS_REQUIRED_FIELDS.includes('pin_code_per')} />
         </div>
       </div>
     </>
@@ -1276,6 +1549,26 @@ const EducationalQualifications = ({ editedData, handleChange, errors = {}, sear
 // CentralDeputation component
 const CentralDeputation = ({ editedData, handleChange, errors = {}, searchTerm = '' }) => {
   const masters = editedData._masters;
+  const getDeputationTypeValue = (dep) => {
+    if (dep.deputation_type === null || dep.deputation_type === undefined || dep.deputation_type === '') {
+      return '';
+    }
+
+    if (typeof dep.deputation_type === 'number') {
+      return dep.deputation_type;
+    }
+
+    const numericValue = parseInt(dep.deputation_type, 10);
+    if (!Number.isNaN(numericValue) && String(numericValue) === String(dep.deputation_type).trim()) {
+      return numericValue;
+    }
+
+    const matchedType = masters.deputationType?.find(
+      (item) => item.deputation_type?.toLowerCase() === String(dep.deputation_type).toLowerCase()
+    );
+
+    return matchedType?.deputation_type_id || '';
+  };
   
   return (
     <div className="space-y-4">
@@ -1283,7 +1576,7 @@ const CentralDeputation = ({ editedData, handleChange, errors = {}, searchTerm =
         <div key={`cendep-${dep.cen_dep_id}-${index}`} className="bg-gray-50 p-4 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InputField label="Designation" value={dep.cen_designation || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'cen_designation', e.target.value)} disabled={dep.fields?.cen_designation === 'SPARK_API'} error={errors[`cendep_${index}_cen_designation`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_cen_designation`} />
-            <InputField label="Phone No" type="tel" value={dep.phone_no || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'phone_no', e.target.value)} disabled={dep.fields?.phone_no === 'SPARK_API'} error={errors[`cendep_${index}_phone_no`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_phone_no`} />
+            <InputField label="Phone No" type="tel" value={dep.phone_no || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'phone_no', e.target.value)} disabled={dep.fields?.phone_no === 'SPARK_API'} error={errors[`cendep_${index}_phone_no`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_phone_no`} maxLength={10} />
             <InputField label="Start Date" type="date" value={dep.start_date?.split('T')[0] || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'start_date', e.target.value)} disabled={dep.fields?.start_date === 'SPARK_API'} error={errors[`cendep_${index}_start_date`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_start_date`} />
             <InputField label="End Date" type="date" value={dep.end_date?.split('T')[0] || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'end_date', e.target.value)} disabled={dep.fields?.end_date === 'SPARK_API'} min={dep.start_date?.split('T')[0]} error={errors[`cendep_${index}_end_date`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_end_date`} />
             <InputField label="State" type="select" value={dep.state_id || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'state_id', parseInt(e.target.value))} options={masters.state.map((s) => ({ value: s.state_id, label: s.state }))} disabled={dep.fields?.state_id === 'SPARK_API'} error={errors[`cendep_${index}_state_id`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_state_id`} />
@@ -1291,6 +1584,7 @@ const CentralDeputation = ({ editedData, handleChange, errors = {}, searchTerm =
             <InputField label="Ministry" type="select" value={dep.cen_min_id || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'cen_min_id', parseInt(e.target.value))} options={masters.ministry.map((m) => ({ value: m.ministry_id, label: m.ministry }))} disabled={dep.fields?.cen_min_id === 'SPARK_API'} error={errors[`cendep_${index}_cen_min_id`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_cen_min_id`} />
             <InputField label="Department" type="select" value={dep.cen_dept_id || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'cen_dept_id', parseInt(e.target.value))} options={masters.administrativeDepartment.map((d) => ({ value: d.administrative_department_id, label: d.administrative_department }))} disabled={dep.fields?.cen_dept_id === 'SPARK_API'} error={errors[`cendep_${index}_cen_dept_id`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_cen_dept_id`} />
             <InputField label="Organization" type="select" value={dep.cen_org_id || ''} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'cen_org_id', parseInt(e.target.value))} options={masters.agency.map((a) => ({ value: a.agency_id, label: a.agency }))} disabled={dep.fields?.cen_org_id === 'SPARK_API'} error={errors[`cendep_${index}_cen_org_id`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_cen_org_id`} />
+            <InputField label="Deputation Type" type="select" value={getDeputationTypeValue(dep)} onChange={(e) => handleChange('ais_central_deputation', dep.cen_dep_id, 'deputation_type', e.target.value === '' ? '' : parseInt(e.target.value, 10))} options={(masters.deputationType || []).map((d) => ({ value: d.deputation_type_id, label: d.deputation_type }))} disabled={dep.fields?.deputation_type === 'SPARK_API'} error={errors[`cendep_${index}_deputation_type`]} searchTerm={searchTerm} fieldId={`field-cendep_${index}_deputation_type`} />
           </div>
         </div>
       ))}
@@ -1306,11 +1600,32 @@ const CentralDeputation = ({ editedData, handleChange, errors = {}, searchTerm =
 // ServiceDetails component
 const ServiceDetails = ({ editedData, handleChange, errors = {}, searchTerm = '' }) => {
   const masters = editedData._masters;
+  const duplicateMetaMap = getServiceDuplicateMetaMap(editedData.ais_service_history || []);
+  const hasDuplicateServices = duplicateMetaMap.size > 0;
+  const getDuplicateMeta = (service) => {
+    const key = getServiceDuplicateKey(service);
+    if (!key) return null;
+    return duplicateMetaMap.get(key) || null;
+  };
   
   return (
     <div className="space-y-4">
+      {hasDuplicateServices && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+          Some duplicated time period service records are detected. Please remove any one saved duplicate card.
+        </div>
+      )}
       {editedData.ais_service_history.map((service, index) => (
-        <div key={`service-${service.ais_ser_id}-${index}`} className="bg-gray-50 p-4 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+        <div key={`service-${service.ais_ser_id}-${index}`} className={`p-4 rounded-lg border dark:bg-gray-800 ${
+          getDuplicateMeta(service)
+            ? 'bg-amber-50 border-amber-300 dark:border-amber-600 dark:bg-amber-900/10'
+            : 'bg-gray-50 border-gray-200 dark:border-gray-700'
+        }`}>
+          {getDuplicateMeta(service) && (
+            <div className="mb-3 rounded-md border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+              Duplicate period detected. Delete any one saved duplicate card.
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <InputField label="Designation" type="select" value={service.designation_id || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'designation_id', parseInt(e.target.value))} options={masters.designation.map((d) => ({ value: d.designation_id, label: d.designation }))} disabled={service.fields?.designation_id === 'SPARK_API'} error={errors[`service_${index}_designation_id`]} searchTerm={searchTerm} fieldId={`field-service_${index}_designation_id`} />
             <InputField label="Address" value={service.address || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'address', e.target.value)} disabled={service.fields?.address === 'SPARK_API'} error={errors[`service_${index}_address`]} searchTerm={searchTerm} fieldId={`field-service_${index}_address`} />
@@ -1327,7 +1642,7 @@ const ServiceDetails = ({ editedData, handleChange, errors = {}, searchTerm = ''
             <InputField label="Grade" type="select" value={service.grade_id || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'grade_id', parseInt(e.target.value))} options={masters.grade.map((g) => ({ value: g.grade_id, label: g.grade }))} disabled={service.fields?.grade_id === 'SPARK_API'} error={errors[`service_${index}_grade_id`]} searchTerm={searchTerm} fieldId={`field-service_${index}_grade_id`} />
             <InputField label="Posting Type" type="select" value={service.posting_type_id || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'posting_type_id', parseInt(e.target.value))} options={masters.postingType.map((p) => ({ value: p.posting_type_id, label: p.posting_types }))} disabled={service.fields?.posting_type_id === 'SPARK_API'} error={errors[`service_${index}_posting_type_id`]} searchTerm={searchTerm} fieldId={`field-service_${index}_posting_type_id`} />
             <InputField label="Other Details" value={service.other_details || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'other_details', e.target.value)} disabled={service.fields?.other_details === 'SPARK_API'} error={errors[`service_${index}_other_details`]} searchTerm={searchTerm} fieldId={`field-service_${index}_other_details`} />
-            <InputField label="Basic Pay" type="number" value={service.basic_pay || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'basic_pay', parseFloat(e.target.value) || '')} disabled={service.fields?.basic_pay === 'SPARK_API'} error={errors[`service_${index}_basic_pay`]} searchTerm={searchTerm} fieldId={`field-service_${index}_basic_pay`} />
+            <InputField label="Basic Pay" type="number" value={service.basic_pay || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'basic_pay', e.target.value)} disabled={service.fields?.basic_pay === 'SPARK_API'} error={errors[`service_${index}_basic_pay`]} min="0" step="0.01" searchTerm={searchTerm} fieldId={`field-service_${index}_basic_pay`} />
             <InputField label="Order No" value={service.order_no || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'order_no', e.target.value)} disabled={service.fields?.order_no === 'SPARK_API'} error={errors[`service_${index}_order_no`]} searchTerm={searchTerm} fieldId={`field-service_${index}_order_no`} />
             <InputField label="Order Date" type="date" value={service.order_date?.split('T')[0] || ''} onChange={(e) => handleChange('ais_service_history', service.ais_ser_id, 'order_date', e.target.value)} disabled={service.fields?.order_date === 'SPARK_API'} error={errors[`service_${index}_order_date`]} searchTerm={searchTerm} fieldId={`field-service_${index}_order_date`} />
           </div>
@@ -1392,12 +1707,18 @@ const TrainingDetails = ({ editedData, handleChange, errors = {}, searchTerm = '
 
 // AwardsPublications component with document viewing
 const AwardsPublications = ({ editedData, handleChange, errors = {}, searchTerm = '' }) => {
+  const awardCategoryOptions = [
+    { value: "Personal Award", label: "Personal Award" },
+    { value: "Organizational Award", label: "Organizational Award" },
+  ];
+
   return (
     <div className="space-y-4">
       {editedData.ais_rewards.map((reward, index) => (
         <div key={`reward-${reward.ais_rew_id}-${index}`} className="bg-gray-50 p-4 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField label="Award/Publication Name" value={reward.rew_name || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'rew_name', e.target.value)} disabled={reward.fields?.rew_name === 'SPARK_API'} error={errors[`reward_${index}_rew_name`]} searchTerm={searchTerm} fieldId={`field-reward_${index}_rew_name`} />
+            <InputField label="Award/Publication Name" value={reward.rew_name || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'rew_name', e.target.value)} disabled={reward.fields?.rew_name === 'SPARK_API'} error={errors[`reward_${index}_rew_name`]} searchTerm={searchTerm} fieldId={`field-reward_${index}_rew_name`} maxLength={100} />
+            <InputField label="Award Category" type="select" value={reward.reward_type || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'reward_type', e.target.value)} disabled={reward.fields?.reward_type === 'SPARK_API'} error={errors[`reward_${index}_reward_type`]} options={awardCategoryOptions} searchTerm={searchTerm} fieldId={`field-reward_${index}_reward_type`} />
             <InputField label="Award/Publication From" value={reward.rew_from || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'rew_from', e.target.value)} disabled={reward.fields?.rew_from === 'SPARK_API'} error={errors[`reward_${index}_rew_from`]} searchTerm={searchTerm} fieldId={`field-reward_${index}_rew_from`} />
             <InputField label="Award/Publication Received On" type="date" value={reward.received_on?.split('T')[0] || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'received_on', e.target.value)} disabled={reward.fields?.received_on === 'SPARK_API'} error={errors[`reward_${index}_received_on`]} searchTerm={searchTerm} fieldId={`field-reward_${index}_received_on`} />
             <InputField label="Award/Publication Description" type="textarea" value={reward.rew_description || ''} onChange={(e) => handleChange('ais_rewards', reward.ais_rew_id, 'rew_description', e.target.value)} disabled={reward.fields?.rew_description === 'SPARK_API'} error={errors[`reward_${index}_rew_description`]} searchTerm={searchTerm} fieldId={`field-reward_${index}_rew_description`} />
@@ -1445,6 +1766,7 @@ const SuspensionDetails = ({ editedData, handleChange, handleAddSuspension, hand
   };
   const joiningDate = editedData?.ais_officer_info?.date_of_joining?.split('T')[0] || '';
   const retirementDate = editedData?.ais_officer_info?.retirement_date?.split('T')[0] || '';
+  const disciplinaryMaxDate = getDisciplinaryMaxDate(joiningDate, retirementDate);
    const handleFileUpload = async (suspensionId, file) => {
     try {
       const metadata = {
@@ -1471,7 +1793,8 @@ const SuspensionDetails = ({ editedData, handleChange, handleAddSuspension, hand
       throw new Error("Document upload failed");
     } catch (err) {
       console.error('Error uploading document:', err);
-      toast.error('Failed to upload document');
+      const errorMessage = extractErrorMessage(err) || 'Failed to upload document';
+      toast.error(errorMessage);
       return null;
     }
   };
@@ -1572,10 +1895,11 @@ return (
                 onChange={(e) => handleChange('ais_suspension_info', sus.ais_sub_id, 'from_period', e.target.value)} 
                 disabled={sus.fields?.from_period === 'SPARK_API'}
                 min={joiningDate}
-                max={retirementDate}
+                max={disciplinaryMaxDate}
                 error={errors[`suspension_${index}_from_period`]} 
                 searchTerm={searchTerm} 
                 fieldId={`field-suspension_${index}_from_period`} 
+                useNativeDatePicker
               />
               <InputField 
                 label="To Period *" 
@@ -1584,16 +1908,19 @@ return (
                 onChange={(e) => handleChange('ais_suspension_info', sus.ais_sub_id, 'to_period', e.target.value)} 
                 disabled={sus.fields?.to_period === 'SPARK_API'} 
                 min={sus.from_period?.split('T')[0] || joiningDate}
-                max={retirementDate}
+                max={disciplinaryMaxDate}
                 error={errors[`suspension_${index}_to_period`]} 
                 searchTerm={searchTerm} 
                 fieldId={`field-suspension_${index}_to_period`} 
+                useNativeDatePicker
               />
               <InputField 
                 label="Disciplinary  Details *" 
+                type="textarea"
                 value={sus.suspension_details || ''} 
                 onChange={(e) => handleChange('ais_suspension_info', sus.ais_sub_id, 'suspension_details', e.target.value)} 
                 disabled={sus.fields?.suspension_details === 'SPARK_API'} 
+                maxLength={500}
                 error={errors[`suspension_${index}_suspension_details`]} 
                 searchTerm={searchTerm} 
                 fieldId={`field-suspension_${index}_suspension_details`} 
@@ -1603,6 +1930,7 @@ return (
                 value={sus.sus_order_number || ''} 
                 onChange={(e) => handleChange('ais_suspension_info', sus.ais_sub_id, 'sus_order_number', e.target.value)} 
                 disabled={sus.fields?.sus_order_number === 'SPARK_API'} 
+                maxLength={20}
                 error={errors[`suspension_${index}_sus_order_number`]} 
                 searchTerm={searchTerm} 
                 fieldId={`field-suspension_${index}_sus_order_number`} 
@@ -1631,7 +1959,7 @@ return (
                   <p className="text-xs text-gray-500 dark:text-gray-300">
                     Allowed types: PDF, JPG, JPEG, PNG. Max size: 5MB
                   </p>
-                </div>
+                </div> 
               </div>
             </div>
           </div>
@@ -1683,6 +2011,64 @@ const ExperienceDetails = ({ editedData, handleChange, errors = {}, searchTerm =
 // DisabilityDetails component with document viewing
 const DisabilityDetails = ({ editedData, handleChange, errors = {}, searchTerm = '' }) => {
   const masters = editedData._masters;
+
+  const handleDisabilityFileUpload = async (disabilityId, file) => {
+    try {
+      const metadata = {
+        document_type: "ER-Profile",
+        document_sub_type: "Disability",
+        document_number: `DIS_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        title: file.name,
+        issuing_authority: "GAD Department",
+        issue_date: new Date().toISOString().split('T')[0],
+        created_by: "unknown",
+      };
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("metadata", JSON.stringify(metadata));
+
+      const response = await axiosInstance.post("/doc-uploader/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data.message === "Uploaded & saved") {
+        return response.data.document_id;
+      }
+      throw new Error("Document upload failed");
+    } catch (err) {
+      console.error('Error uploading disability document:', err);
+      const errorMessage = extractErrorMessage(err) || 'Failed to upload disability document';
+      toast.error(errorMessage);
+      return null;
+    }
+  };
+
+  const handleDisabilityFileChange = async (disabilityId, file) => {
+    if (!file) {
+      handleChange('ais_officer_disability', disabilityId, 'disability_proof', null);
+      return;
+    }
+
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const maxSize = 2 * 1024 * 1024;
+
+    if (fileExtension !== 'pdf' && file.type !== 'application/pdf') {
+      toast.error('Only PDF files are allowed');
+      return;
+    }
+
+    if (file.size > maxSize) {
+      toast.error('File size must be less than 2MB');
+      return;
+    }
+
+    const documentId = await handleDisabilityFileUpload(disabilityId, file);
+    if (documentId) {
+      handleChange('ais_officer_disability', disabilityId, 'disability_proof', documentId);
+      toast.success('Disability proof uploaded successfully');
+    }
+  };
   
   return (
     <div className="space-y-4">
@@ -1690,8 +2076,9 @@ const DisabilityDetails = ({ editedData, handleChange, errors = {}, searchTerm =
         <div key={`disability-${dis.ais_des_id}-${index}`} className="bg-gray-50 p-4 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InputField label="Disability Type" type="select" value={dis.disability_type_id || ''} onChange={(e) => handleChange('ais_officer_disability', dis.ais_des_id, 'disability_type_id', parseInt(e.target.value))} options={masters.disability.map((d) => ({ value: d.disability_id, label: d.disability }))} disabled={dis.fields?.disability_type_id === 'SPARK_API'} error={errors[`disability_${index}_disability_type_id`]} searchTerm={searchTerm} fieldId={`field-disability_${index}_disability_type_id`} />
-            <InputField label="Percentage" type="number" value={dis.disability_perc || ''} onChange={(e) => handleChange('ais_officer_disability', dis.ais_des_id, 'disability_perc', parseInt(e.target.value) || '')} disabled={dis.fields?.disability_perc === 'SPARK_API'} error={errors[`disability_${index}_disability_perc`]} searchTerm={searchTerm} fieldId={`field-disability_${index}_disability_perc`} />
+            <InputField label="Percentage" type="number" value={dis.disability_perc || ''} onChange={(e) => handleChange('ais_officer_disability', dis.ais_des_id, 'disability_perc', e.target.value === '' ? '' : Number(e.target.value))} disabled={dis.fields?.disability_perc === 'SPARK_API'} error={errors[`disability_${index}_disability_perc`]} min="0" max="100" searchTerm={searchTerm} fieldId={`field-disability_${index}_disability_perc`} />
             <InputField label="Valid Up To" type="date" value={dis.dis_valid_up_to?.split('T')[0] || ''} onChange={(e) => handleChange('ais_officer_disability', dis.ais_des_id, 'dis_valid_up_to', e.target.value)} disabled={dis.fields?.dis_valid_up_to === 'SPARK_API'} min={new Date().toISOString().split('T')[0]} error={errors[`disability_${index}_dis_valid_up_to`]} searchTerm={searchTerm} fieldId={`field-disability_${index}_dis_valid_up_to`} />
+            <InputField label="UDID Document Number" value={dis.udid_number || ''} onChange={(e) => handleChange('ais_officer_disability', dis.ais_des_id, 'udid_number', normalizeUdidNumberInput(e.target.value))} disabled={dis.fields?.udid_number === 'SPARK_API'} error={errors[`disability_${index}_udid_number`]} maxLength={18} searchTerm={searchTerm} fieldId={`field-disability_${index}_udid_number`} />
             
             {/* Proof Document */}
             <div className="col-span-2">
@@ -1704,6 +2091,18 @@ const DisabilityDetails = ({ editedData, handleChange, errors = {}, searchTerm =
               ) : (
                 <p className="text-base text-gray-600 bg-white p-3 rounded-lg border border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">No proof document available</p>
               )}
+              <div className="mt-3 space-y-2">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => handleDisabilityFileChange(dis.ais_des_id, e.target.files[0])}
+                  disabled={dis.fields?.disability_proof === 'SPARK_API'}
+                  className="mt-1 block w-full text-sm text-gray-500 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-gray-700 dark:file:text-indigo-200 dark:hover:file:bg-gray-600"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-300">
+                  Allowed type: PDF. Max size: 2MB
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -1737,6 +2136,7 @@ const ProfileEditPage = () => {
   const [suspensionErrors, setSuspensionErrors] = useState({});
   const [experienceErrors, setExperienceErrors] = useState({});
   const [disabilityErrors, setDisabilityErrors] = useState({});
+  const savingSectionsRef = useRef(new Set());
 
   const errorSetters = {
     'Personal Details': setPersonalErrors,
@@ -1780,61 +2180,65 @@ const ProfileEditPage = () => {
       try {
         const aisPerId = getAisPerId();
         if (!aisPerId) throw new Error('No profile ID found in session storage.');
-        
-        const [officerResponse, ...masterResponses] = await Promise.all([
+
+        const [officerResponse, masterPayload] = await Promise.all([
           axiosInstance.post('/as-II/officer-preview', { ais_per_id: aisPerId }),
-          axiosInstance.get('/masters/recruitment-all'),
-          axiosInstance.get('/masters/cadre-all'),
-          axiosInstance.get('/masters/gender-all'),
-          axiosInstance.get('/masters/state-all'),
-          axiosInstance.get('/masters/tenure-all'),
-          axiosInstance.get('/masters/district-all'),
-          axiosInstance.get('/masters/designation-all'),
-          axiosInstance.get('/masters/language-all'),
-          axiosInstance.get('/masters/category-all'),
-          axiosInstance.get('/masters/occupation-category-all'),
-          axiosInstance.get('/masters/institution-all'),
-          axiosInstance.get('/masters/training_type-all'),
-          axiosInstance.get('/masters/country-all'),
-          axiosInstance.get('/masters/ministry-all'),
-          axiosInstance.get('/masters/administrative_department-all'),
-          axiosInstance.get('/masters/agency-all'),
-          axiosInstance.get('/masters/qualification-all'),
-          axiosInstance.get('/masters/level-all'),
-          axiosInstance.get('/masters/grade-all'),
-          axiosInstance.get('/masters/posting_type-all'),
-          axiosInstance.get('/masters/disability-all'),
-          axiosInstance.get('/masters/blood-groups'),
-          axiosInstance.get('/masters/relation'),
+          fetchBulkMasters([
+            'recruitment',
+            'cadre',
+            'gender',
+            'state',
+            'tenure',
+            'district',
+            'designation',
+            'language',
+            'category',
+            'occupation_category',
+            'institution',
+            'training_type',
+            'country',
+            'ministry',
+            'administrative_department',
+            'agency',
+            'qualification',
+            'level',
+            'grade',
+            'posting_type',
+            'deputation_type',
+            'disability',
+            'blood_group',
+            'relation',
+          ]),
         ]);
 
         if (officerResponse.data.success) {
           const officerData = officerResponse.data.data.officer_data;
-          const masters = {
-            recruitment: masterResponses[0].data.data.recruitment || [],
-            cadre: masterResponses[1].data.data.cadre || [],
-            gender: masterResponses[2].data.data.gender || [],
-            state: masterResponses[3].data.data.state || [],
-            tenure: masterResponses[4].data.data.tenure || [],
-            district: masterResponses[5].data.data.district || [],
-            designation: masterResponses[6].data.data.designation || [],
-            language: masterResponses[7].data.data.languages || [],
-            category: masterResponses[8].data.data.category || [],
-            occupationCategory: masterResponses[9].data.data.categories || [],
-            institution: masterResponses[10].data.data.institutions || [],
-            trainingType: masterResponses[11].data.data.training_type || [],
-            country: masterResponses[12].data.data.country || [],
-            ministry: masterResponses[13].data.data.ministry || [],
-            administrativeDepartment: masterResponses[14].data.data.departments || [],
-            agency: masterResponses[15].data.data || [],
-            qualification: masterResponses[16].data.data.qualification || [],
-            level: masterResponses[17].data.data.level || [],
-            grade: masterResponses[18].data.data.grade || [],
-            postingType: masterResponses[19].data.data.posting_type || [],
-            disability: masterResponses[20].data.data.disability || [],
-            bloodGroup: masterResponses[21].data.data['blood-group'] || [],
-            relation: masterResponses[22].data.data.relation || [],
-          };
+          const masters = mapBulkMasters(masterPayload, {
+            recruitment: 'recruitment',
+            cadre: 'cadre',
+            gender: 'gender',
+            state: 'state',
+            tenure: 'tenure',
+            district: 'district',
+            designation: 'designation',
+            language: 'language',
+            category: 'category',
+            occupationCategory: 'occupation_category',
+            institution: 'institution',
+            trainingType: 'training_type',
+            country: 'country',
+            ministry: 'ministry',
+            administrativeDepartment: 'administrative_department',
+            agency: 'agency',
+            qualification: 'qualification',
+            level: 'level',
+            grade: 'grade',
+            postingType: 'posting_type',
+            deputationType: 'deputation_type',
+            disability: 'disability',
+            bloodGroup: 'blood_group',
+            relation: 'relation',
+          });
           
           officerData._masters = masters;
           setOriginalData(officerData);
@@ -1912,8 +2316,47 @@ const ProfileEditPage = () => {
   const validateData = (sectionTitle) => {
     const errors = {};
     const userDob = editedData.ais_officer_info.dob;
+    const joiningDate = editedData?.ais_officer_info?.date_of_joining?.split('T')[0] || '';
+    const retirementDate = editedData?.ais_officer_info?.retirement_date?.split('T')[0] || '';
 
-    if (sectionTitle === 'Dependents Details') {
+    if (sectionTitle === 'Personal Details') {
+      addRequiredFieldErrors(errors, editedData?.ais_officer_info, PERSONAL_REQUIRED_FIELDS);
+
+      const praanNumberError = validatePRANNumber(editedData?.ais_officer_info?.praan_number);
+      if (praanNumberError) {
+        errors.praan_number = praanNumberError;
+      }
+
+      if (editedData?.ais_officer_info?.fields?.pf_number !== 'SPARK_API') {
+        const pfNumberError = validatePFNumber(editedData?.ais_officer_info?.pf_number);
+        if (pfNumberError) {
+          errors.pf_number = pfNumberError;
+        }
+      }
+
+      const alternativeMobileError = validatePhoneOrMobile(
+        editedData?.ais_officer_info?.alternative_mobile_no,
+        'Alternative Mobile No'
+      );
+      if (alternativeMobileError) {
+        errors.alternative_mobile_no = alternativeMobileError;
+      }
+
+      const primaryEmail = String(editedData?.ais_officer_info?.email || '').trim().toLowerCase();
+      const alternativeEmail = String(editedData?.ais_officer_info?.alternative_email || '').trim().toLowerCase();
+      if (primaryEmail && alternativeEmail && primaryEmail === alternativeEmail) {
+        errors.alternative_email = 'Alternative Email must be different from Email';
+      }
+
+      const normalizePhoneValue = (phone) => String(phone || '').replace(/[\s\-()+]/g, '').trim();
+      const primaryMobile = normalizePhoneValue(editedData?.ais_officer_info?.mobile_no);
+      const alternativeMobile = normalizePhoneValue(editedData?.ais_officer_info?.alternative_mobile_no);
+      if (primaryMobile && alternativeMobile && primaryMobile === alternativeMobile) {
+        errors.alternative_mobile_no = 'Alternative Mobile No must be different from Mobile No';
+      }
+    } else if (sectionTitle === 'Address Details') {
+      addRequiredFieldErrors(errors, editedData?.ais_officer_info, ADDRESS_REQUIRED_FIELDS);
+    } else if (sectionTitle === 'Dependents Details') {
       editedData.family.forEach((dep, index) => {
         const dobError = validateDate(dep.dob, userDob, dep.relation, 'Date of Birth');
         if (dobError) errors[`family_${index}_dob`] = dobError;
@@ -1922,16 +2365,66 @@ const ProfileEditPage = () => {
       editedData.ais_central_deputation.forEach((dep, index) => {
         const rangeError = validateDateRange(dep.start_date, dep.end_date, 'Deputation');
         if (rangeError) errors[`cendep_${index}_end_date`] = rangeError;
+
+        if (dep.phone_no) {
+          const trimmed = dep.phone_no.toString().trim();
+          if (!/^\d{10}$/.test(trimmed)) {
+            errors[`cendep_${index}_phone_no`] = 'Phone number must be exactly 10 digits.';
+          }
+        }
       });
     } else if (sectionTitle === 'Service Details') {
+      const dojDt = editedData?.ais_officer_info?.date_of_joining ? new Date(editedData.ais_officer_info.date_of_joining) : null;
+      const retirementDt = editedData?.ais_officer_info?.retirement_date ? new Date(editedData.ais_officer_info.retirement_date) : null;
+      const todayDt = new Date();
+      todayDt.setHours(0, 0, 0, 0);
+
       editedData.ais_service_history.forEach((service, index) => {
         const rangeError = validateDateRange(service.start_date, service.end_date, 'Service');
         if (rangeError) errors[`service_${index}_end_date`] = rangeError;
+
+        const phoneError = validatePhoneOrMobile(service.phone_no, 'Phone No');
+        if (phoneError) errors[`service_${index}_phone_no`] = phoneError;
+
+        const basicPayError = validateBasicPay(service.basic_pay);
+        if (basicPayError) errors[`service_${index}_basic_pay`] = basicPayError;
+
+        const startDt = service.start_date ? new Date(service.start_date) : null;
+        const orderDt = service.order_date ? new Date(service.order_date) : null;
+
+        const is2020OrLater = startDt && !isNaN(startDt.getTime()) && startDt >= new Date('2020-01-01');
+        if (is2020OrLater) {
+          if (!service.order_no || service.order_no.toString().trim() === '') {
+            errors[`service_${index}_order_no`] = 'Order number is required for service periods from 2020 onwards';
+          }
+          if (!service.order_date || service.order_date.toString().trim() === '') {
+            errors[`service_${index}_order_date`] = 'Order date is required for service periods from 2020 onwards';
+          }
+        }
+
+        if (service.order_date && service.order_date.toString().trim() !== '' && orderDt && !isNaN(orderDt.getTime())) {
+          if (orderDt > todayDt) {
+            errors[`service_${index}_order_date`] = 'Order date cannot be in the future';
+          }
+          if (retirementDt && !isNaN(retirementDt.getTime()) && orderDt > retirementDt) {
+            errors[`service_${index}_order_date`] = 'Order date cannot be after retirement date';
+          }
+        }
       });
     } else if (sectionTitle === 'Training Details') {
       editedData.ais_training_info.forEach((training, index) => {
         const rangeError = validateDateRange(training.training_from, training.training_to, 'Training');
         if (rangeError) errors[`training_${index}_training_to`] = rangeError;
+      });
+    } else if (sectionTitle === 'Awards and Publications') {
+      const validCategories = ["Personal Award", "Organizational Award"];
+      editedData.ais_rewards.forEach((reward, index) => {
+        if (reward.rew_name && reward.rew_name.length > 100) {
+          errors[`reward_${index}_rew_name`] = 'Award Name must be 100 characters or fewer.';
+        }
+        if (reward.reward_type && !validCategories.includes(reward.reward_type)) {
+          errors[`reward_${index}_reward_type`] = 'Please select a valid award category.';
+        }
       });
     } else if (sectionTitle === 'Disciplinary Action') {
       editedData.ais_suspension_info.forEach((sus, index) => {
@@ -1948,13 +2441,84 @@ const ProfileEditPage = () => {
       errors[`suspension_${index}_sus_order_number`] = 'Order Number is required';
     }
 
-    const rangeError = validateDateRange(sus.from_period, sus.to_period, 'Disciplinary ');
-    if (rangeError) errors[`suspension_${index}_to_period`] = rangeError;
+    if (sus.suspension_details && String(sus.suspension_details).length > 500) {
+      errors[`suspension_${index}_suspension_details`] = 'Disciplinary Details cannot exceed 500 characters';
+    }
+
+    if (sus.sus_order_number && String(sus.sus_order_number).length > 20) {
+      errors[`suspension_${index}_sus_order_number`] = 'Order Number cannot exceed 20 characters';
+    }
+
+    // Validate from_period is not before joining date
+    if (sus.from_period && joiningDate) {
+      const fromDate = new Date(sus.from_period);
+      const joinDate = new Date(joiningDate);
+      if (fromDate < joinDate) {
+        errors[`suspension_${index}_from_period`] = 'From Period cannot be before Date of Joining';
+      }
+    }
+
+    // Validate to_period is not before joining date
+    if (sus.to_period && joiningDate) {
+      const toDate = new Date(sus.to_period);
+      const joinDate = new Date(joiningDate);
+      if (toDate < joinDate) {
+        errors[`suspension_${index}_to_period`] = 'To Period cannot be before Date of Joining';
+      }
+    }
+
+    const disciplinaryMaxDate = getDisciplinaryMaxDate(joiningDate, retirementDate);
+
+    // Validate from_period is not after allowed maximum
+    if (sus.from_period) {
+      const fromDate = new Date(sus.from_period);
+      const maxAllowedDate = new Date(disciplinaryMaxDate);
+      if (fromDate > maxAllowedDate) {
+        errors[`suspension_${index}_from_period`] = retirementDate
+          ? 'From Period cannot be after Retirement Date'
+          : 'From Period cannot be after Date of Joining + 100 years';
+      }
+    }
+
+    // Validate to_period is not after allowed maximum
+    if (sus.to_period) {
+      const toDate = new Date(sus.to_period);
+      const maxAllowedDate = new Date(disciplinaryMaxDate);
+      if (toDate > maxAllowedDate) {
+        errors[`suspension_${index}_to_period`] = retirementDate
+          ? 'To Period cannot be after Retirement Date'
+          : 'To Period cannot be after Date of Joining + 100 years';
+      }
+    }
+
+    // Validate date range: from_period should not be after to_period
+    if (sus.from_period && sus.to_period) {
+      const fromDate = new Date(sus.from_period);
+      const toDate = new Date(sus.to_period);
+      if (fromDate > toDate) {
+        errors[`suspension_${index}_to_period`] = 'To Period must be on or after From Period';
+      }
+    }
       });
     } else if (sectionTitle === 'Experience Details') {
       editedData.ais_experience.forEach((exp, index) => {
         const rangeError = validateDateRange(exp.from_period, exp.to_period, 'Experience');
         if (rangeError) errors[`exp_${index}_to_period`] = rangeError;
+      });
+    } else if (sectionTitle === 'Disability Details') {
+      editedData.ais_officer_disability.forEach((dis, index) => {
+        if (dis.disability_perc !== null && dis.disability_perc !== undefined && dis.disability_perc !== '') {
+          const percentage = Number(dis.disability_perc);
+          if (Number.isNaN(percentage) || percentage <= 0 || percentage > 100) {
+            errors[`disability_${index}_disability_perc`] = 'Disability Percentage must be between 1 and 100';
+          }
+        }
+
+        if (dis.udid_number && String(dis.udid_number).length > 18) {
+          errors[`disability_${index}_udid_number`] = 'UDID Document Number cannot exceed 18 characters';
+        } else if (dis.udid_number && !udidPattern.test(String(dis.udid_number))) {
+          errors[`disability_${index}_udid_number`] = 'UDID Document Number must start with 2 letters followed by digits only';
+        }
       });
     }
 
@@ -1976,13 +2540,48 @@ const ProfileEditPage = () => {
                            section === 'ais_officer_disability' ? 'ais_des_id' : null;
         
         if (sectionKey) {
-          const index = newData[section].findIndex((item) => item[sectionKey] === id);
+          const index = newData[section].findIndex((item) => {
+            if (section === 'ais_suspension_info') {
+              return item[sectionKey] === id || item._temp_id === id;
+            }
+            return item[sectionKey] === id;
+          });
           if (index !== -1) {
-            newData[section][index] = { ...newData[section][index], [field]: value };
+            let nextValue = value;
+
+            if (section === 'ais_service_history' && field === 'basic_pay') {
+              const normalizedValue = typeof value === 'string' ? value.trim() : value?.toString?.() ?? '';
+
+              if (normalizedValue === '') {
+                nextValue = '';
+              } else if (/^\d{0,8}(\.\d{0,2})?$/.test(normalizedValue)) {
+                nextValue = normalizedValue;
+              } else {
+                return prev;
+              }
+            }
+
+            if (section === 'ais_suspension_info' && field === 'sus_order_number') {
+              nextValue = typeof value === 'string' ? value.slice(0, 20) : value;
+            }
+
+            if (section === 'ais_suspension_info' && field === 'suspension_details') {
+              nextValue = typeof value === 'string' ? value.slice(0, 500) : value;
+            }
+
+            newData[section][index] = { ...newData[section][index], [field]: nextValue };
           }
         }
       } else {
         newData.ais_officer_info = { ...newData.ais_officer_info, [field]: value };
+
+        if (field === 'state_id_com') {
+          newData.ais_officer_info.district_id_com = '';
+        }
+
+        if (field === 'state_id_per') {
+          newData.ais_officer_info.district_id_per = '';
+        }
       }
       return newData;
     });
@@ -2050,11 +2649,13 @@ const handleAddSuspension = () => {
     return;
   }
 
+  const tempId = `new_${Date.now()}`;
   const newSuspension = {
-    ais_sub_id: `new_${Date.now()}`,
+    ais_sub_id: tempId,
+    _temp_id: tempId,
     from_period: '',
     to_period: '',
-    suspension_details: '',
+    suspension_details: '', 
     sus_order_number: '',
     suspension_document: null, // NEW FIELD
     fields: {
@@ -2154,6 +2755,13 @@ const handleAddSuspension = () => {
 
  // handleSaveSection function with document upload support
 const handleSaveSection = async (section, idKey, urlPrefix, sectionTitle) => {
+  if (savingSectionsRef.current.has(section)) {
+    return;
+  }
+
+  savingSectionsRef.current.add(section);
+
+  try {
   const errors = validateData(sectionTitle);
   errorSetters[sectionTitle](errors);
   if (Object.keys(errors).length > 0) {
@@ -2418,6 +3026,9 @@ const handleSaveSection = async (section, idKey, urlPrefix, sectionTitle) => {
                       'Failed to save section';
   toast.error(` ${errorMessage}`);
 }
+  } finally {
+    savingSectionsRef.current.delete(section);
+  }
 };
 
   const handleSaveCompletely = () => {
@@ -2465,7 +3076,7 @@ const handleSaveSection = async (section, idKey, urlPrefix, sectionTitle) => {
     <div className="flex justify-center items-center min-h-screen text-gray-600 dark:text-gray-300">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-        <p className="text-sm">Loading profile data...</p>
+        <p className="text-sm">Fetching Data from spark...</p>
       </div>
     </div>
   );
@@ -2492,35 +3103,23 @@ const handleSaveSection = async (section, idKey, urlPrefix, sectionTitle) => {
             <ArrowLeftIcon className="h-4 w-4" />
             Back
           </button>
-          <div className="mb-2 p-3 bg-gray-100 rounded-lg border border-gray-300 dark:bg-gray-800 dark:border-gray-700">
-      
-        <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center p-0.5 rounded-full bg-orange-100 text-orange-600">
-              <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-              </svg>
+          <div className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-gray-100 px-3 text-sm dark:border-gray-700 dark:bg-gray-800">
+            <span className="whitespace-nowrap text-sm font-semibold text-gray-700 dark:text-gray-200">
+              Field Indicators
             </span>
-            <span className="text-xs text-gray-600 dark:text-gray-300">SPARK Synced</span>
+            <div className="flex items-center gap-2">
+              <LegendBadge
+                tone="indigo"
+                label="AIS Officer"
+                icon={(
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                  </svg>
+                )}
+              />
+              <ReadOnlyIndicator title="Locked: synced from SPARK and cannot be edited" />
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center p-0.5 rounded-full bg-indigo-100 text-indigo-600">
-              <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-              </svg>
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-300">AIS Officer</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-200 rounded-full text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-300">Read-only (SPARK)</span>
-          </div>
-        </div>
-      </div>
           <div className="relative flex-1 max-w-md mx-4">
             <input
               type="text"

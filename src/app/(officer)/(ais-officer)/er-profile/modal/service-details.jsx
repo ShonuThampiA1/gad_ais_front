@@ -23,6 +23,13 @@ export function ModalServiceDetails({
   levelRes,
   designationRes,
 }) {
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [formData, setFormData] = useState({
     designation_id: '',
     level_id: '',
@@ -54,19 +61,26 @@ export function ModalServiceDetails({
   const [implementingAgencies, setImplementingAgencies] = useState([]);
   const [states, setStates] = useState([]);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditing = Boolean(service?.ais_ser_id);
   const [userDates, setUserDates] = useState({ doj: null, retirementDate: null });
   const [servicePeriod, setServicePeriod] = useState('past');
-  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD, e.g., "2025-12-16"
+  const todayStr = getLocalDateString();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayStr = getLocalDateString(yesterdayDate);
 
   const allowedCharsRegex = /^[a-zA-Z0-9 ().,&/_\n-]+$/;
   const orderNoRegex = /^[a-zA-Z0-9.,&()-/ ]+$/;
   const showDojWarning = userDates.doj === null;
   const isCurrentPeriod = servicePeriod === 'current';
+  const isFuturePeriod = servicePeriod === 'future';
   const isSparkDateRangeLockedToPast =
     service?.fieldSources?.start_date === 'SPARK' &&
     service?.fieldSources?.end_date === 'SPARK' &&
     Boolean(formData.start_date) &&
     Boolean(formData.end_date);
+  const showFutureOption = isFuturePeriod;
 
   // Define required fields
   const requiredFields = [
@@ -98,6 +112,52 @@ export function ModalServiceDetails({
     }
   };
 
+  const normalizeDateForInput = (dateValue) => {
+    if (!dateValue) return '';
+
+    const datePart = String(dateValue).trim().split(' ')[0];
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      return datePart;
+    }
+
+    if (isValidDDMMYYYY(datePart)) {
+      return parseDateFromDDMMYYYY(datePart) || '';
+    }
+
+    if (/^\d{2}-\d{2}-\d{4}$/.test(datePart)) {
+      const [day, month, year] = datePart.split('-');
+      return `${year}-${month}-${day}`;
+    }
+
+    const parsedDate = new Date(datePart);
+    if (isNaN(parsedDate.getTime())) return '';
+
+    return parsedDate.toISOString().split('T')[0];
+  };
+
+  const parseComparableDate = (dateValue) => {
+    const normalizedDate = normalizeDateForInput(dateValue);
+    if (!normalizedDate) return null;
+
+    const parsedDate = new Date(`${normalizedDate}T00:00:00`);
+    return isNaN(parsedDate.getTime()) ? null : parsedDate;
+  };
+
+  const classifyServicePeriod = (startDateValue, endDateValue) => {
+    const today = parseComparableDate(getLocalDateString());
+
+    const start = parseComparableDate(startDateValue);
+    const end = parseComparableDate(endDateValue);
+
+    if (!start) return 'past';
+    if (start > today) return 'future';
+    if (!end || end >= today) return 'current';
+    return 'past';
+  };
+
+  const getTodayComparableDate = () => parseComparableDate(getLocalDateString());
+
   // Load master data
   useEffect(() => {
     setDesignations(designationRes);
@@ -115,7 +175,7 @@ export function ModalServiceDetails({
   useEffect(() => {
   const rawDoj = sessionStorage.getItem('date_of_joining');
   const rawRetirement = sessionStorage.getItem('retirement_date');
-  console.log("Raw date of joining from sessionStorage:", rawDoj); // Debug: Check raw value
+// Debug: Check raw value
 
   // Parse DOJ (handle 'DD/MM/YYYY' from SPARK or 'YYYY-MM-DD' from user input)
   let parsedDoj = null;
@@ -123,13 +183,13 @@ export function ModalServiceDetails({
     const datePart = rawDoj.split(' ')[0]; // Strip any time/extra parts
     if (isValidDDMMYYYY(datePart)) {
       parsedDoj = parseDateFromDDMMYYYY(datePart); // Convert 'DD/MM/YYYY' to 'YYYY-MM-DD'
-      console.log("Parsed DOJ (from DD/MM/YYYY):", parsedDoj); // Debug
+// Debug
     } else {
       // Fallback: Assume it's already 'YYYY-MM-DD' or parsable
       const dojDate = new Date(datePart);
       if (!isNaN(dojDate.getTime())) {
         parsedDoj = dojDate.toISOString().split('T')[0];
-        console.log("Parsed DOJ (fallback YYYY-MM-DD):", parsedDoj); // Debug
+// Debug
       } else {
         console.error("Invalid DOJ format:", datePart); // Debug: Log failures
       }
@@ -142,7 +202,7 @@ export function ModalServiceDetails({
     const datePart = rawRetirement.split(' ')[0];
     if (isValidDDMMYYYY(datePart)) {
       parsedRetirement = parseDateFromDDMMYYYY(datePart);
-      console.log("Parsed retirement date:", parsedRetirement); // Debug
+// Debug
     }
   }
 
@@ -155,23 +215,9 @@ export function ModalServiceDetails({
   // Initialize form data when modal opens
   useEffect(() => {
     if (open && service !== null) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const start = service.start_date ? new Date(service.start_date) : null;
-      const end = service.end_date ? new Date(service.end_date) : null;
-      const isActive = Boolean(
-        start &&
-        !isNaN(start.getTime()) &&
-        (!end || !isNaN(end.getTime())) &&
-        start <= today &&
-        (!end || end >= today)
-      );
-      const isSparkDateRange = Boolean(
-        service?.fieldSources?.start_date === 'SPARK' &&
-        service?.fieldSources?.end_date === 'SPARK' &&
-        service?.start_date &&
-        service?.end_date
-      );
+      const normalizedStartDate = normalizeDateForInput(service.start_date);
+      const normalizedEndDate = normalizeDateForInput(service.end_date);
+      const normalizedOrderDate = normalizeDateForInput(service.order_date);
       setFormData({
         designation_id: service.designation_id || '',
         level_id: service.level_id || '',
@@ -187,14 +233,14 @@ export function ModalServiceDetails({
         is_additional_charge:
           service.is_additional_charge === true || service.is_additional_charge === 'yes' ? 'yes' :
           service.is_additional_charge === false || service.is_additional_charge === 'no' ? 'no' : '',
-        start_date: service.start_date || '',
-        end_date: service.end_date || '',
+        start_date: normalizedStartDate,
+        end_date: normalizedEndDate,
         other_details: service.other_details ? service.other_details.trim() : '',
         basic_pay: service.basic_pay || null,
         order_no: service.order_no ? service.order_no.trim() : '',
-        order_date: service.order_date || null,
+        order_date: normalizedOrderDate || null,
       });
-      setServicePeriod(isSparkDateRange ? 'past' : (isActive ? 'current' : 'past'));
+      setServicePeriod(classifyServicePeriod(normalizedStartDate, normalizedEndDate));
       setFilteredDistricts(
         service.state_id
           ? districtRes.filter((district) => district.state_id === parseInt(service.state_id, 10))
@@ -365,6 +411,14 @@ export function ModalServiceDetails({
     
     // Special handling for basic_pay
     if (name === 'basic_pay') {
+      const rawValue = value === '' ? '' : String(value);
+      if (rawValue && !/^\d{0,8}(\.\d{0,2})?$/.test(rawValue)) {
+        setErrors((prev) => ({
+          ...prev,
+          basic_pay: `${getBasicPayLabel()} must have at most 8 digits before decimal and 2 digits after decimal`,
+        }));
+        return;
+      }
       const val = value === '' ? null : parseFloat(value);
       setFormData((prev) => ({ ...prev, [name]: val }));
       setErrors((prev) => {
@@ -381,6 +435,38 @@ export function ModalServiceDetails({
         return;
       }
       setServicePeriod(value);
+      // Keep dates aligned to selected status without showing extra status errors.
+      setFormData((prev) => {
+        const next = { ...prev };
+        const today = getTodayComparableDate();
+        const start = parseComparableDate(next.start_date);
+        const end = parseComparableDate(next.end_date);
+
+      if (value === 'past') {
+          if (start && start >= today) {
+            next.start_date = '';
+          }
+          if (end && end >= today) {
+            next.end_date = '';
+          }
+        } else if (value === 'current') {
+          if (start && start > today) {
+            next.start_date = '';
+          }
+          if (end && end < today) {
+            next.end_date = '';
+          }
+        } else if (value === 'future') {
+          if (start && start <= today) {
+            next.start_date = '';
+          }
+          if (end && end <= today) {
+            next.end_date = '';
+          }
+        }
+
+        return next;
+      });
       return;
     }
     
@@ -412,8 +498,9 @@ export function ModalServiceDetails({
 
       // Special handling for start_date changes (existing)
       if (name === 'start_date') {
-        const newStartDt = value ? new Date(value) : null;
-        const is2020OrLater = newStartDt && !isNaN(newStartDt.getTime()) && newStartDt >= new Date('2020-01-01');
+        const newStartDt = parseComparableDate(value);
+        const cutoff2020 = parseComparableDate('2020-01-01');
+        const is2020OrLater = newStartDt && cutoff2020 && newStartDt >= cutoff2020;
 
         if (!is2020OrLater) {
           if (newErrors.order_no === 'Order number is required for service periods from 2020 onwards') {
@@ -436,30 +523,63 @@ export function ModalServiceDetails({
       const currentOrder = name === 'order_date' ? value : formData.order_date;
 
       // Parse to Date objects (only if value exists)
-      const dojDt = userDates.doj ? new Date(userDates.doj) : null;
-      const retirementDt = userDates.retirementDate ? new Date(userDates.retirementDate) : null;
-      const startDt = currentStart ? new Date(currentStart) : null;
-      const endDt = currentEnd ? new Date(currentEnd) : null;
-      const orderDt = currentOrder ? new Date(currentOrder) : null;
+      const dojDt = parseComparableDate(userDates.doj);
+      const retirementDt = parseComparableDate(userDates.retirementDate);
+      const startDt = parseComparableDate(currentStart);
+      const endDt = parseComparableDate(currentEnd);
+      const orderDt = parseComparableDate(currentOrder);
 
-      const todayDt = new Date();
-      todayDt.setHours(0, 0, 0, 0);
+      const todayDt = getTodayComparableDate();
 
-      const hasValidBounds = dojDt && !isNaN(dojDt.getTime()) && retirementDt && !isNaN(retirementDt.getTime());
+      const hasValidBounds = Boolean(dojDt && retirementDt);
+
+      setErrors((prev) => {
+        const nextErrors = { ...prev };
+        delete nextErrors.start_date;
+        delete nextErrors.end_date;
+        delete nextErrors.order_date;
+
+        if (hasValidBounds) {
+          if (startDt && (startDt < dojDt || startDt > retirementDt)) {
+            nextErrors.start_date = 'Start date must be between Date of Joining and retirement date';
+          }
+          if (endDt && (endDt < dojDt || endDt > retirementDt)) {
+            nextErrors.end_date = 'End date must be between Date of Joining and retirement date';
+          }
+          if (orderDt && (orderDt < dojDt || orderDt > retirementDt)) {
+            nextErrors.order_date = 'Order date must be between Date of Joining and retirement date';
+          }
+        }
+
+        if (startDt && endDt && endDt < startDt) {
+          nextErrors.end_date = 'End date must be after start date';
+        }
+
+        if (orderDt && service?.fieldSources?.order_date !== 'SPARK') {
+          if (orderDt > todayDt) {
+            nextErrors.order_date = 'Order date cannot be in the future';
+          } else if (startDt && orderDt > startDt) {
+            nextErrors.order_date = 'Order date must be on or before Start Date';
+          }
+        }
+
+        return nextErrors;
+      });
+      return;
 
       // Bounds checks (DOJ ≤ date ≤ retirement) - only if dates are valid
       if (hasValidBounds) {
-        if (startDt && !isNaN(startDt.getTime())) {
+        if (startDt) {
           if (startDt < dojDt || startDt > retirementDt) {
             setErrors(prev => ({ ...prev, start_date: 'Start date must be between Date of Joining and retirement date' }));
           }
         }
-        if (endDt && !isNaN(endDt.getTime())) {
+        if (endDt) {
           if (endDt < dojDt || endDt > retirementDt) {
             setErrors(prev => ({ ...prev, end_date: 'End date must be between Date of Joining and retirement date' }));
           }
         }
-        if (orderDt && !isNaN(orderDt.getTime())) {
+        if (orderDt) {
           if (orderDt < dojDt || orderDt > retirementDt) {
             setErrors(prev => ({ ...prev, order_date: 'Order date must be between Date of Joining and retirement date' }));
           }
@@ -467,20 +587,19 @@ export function ModalServiceDetails({
       }
 
       // End date must be ≥ start date (only if both exist and are valid)
-      if (startDt && endDt && !isNaN(startDt.getTime()) && !isNaN(endDt.getTime()) && endDt < startDt) {
+      if (startDt && endDt && endDt < startDt) {
         setErrors(prev => ({ ...prev, end_date: 'End date must be after start date' }));
       }
 
       // Order date specific rules (SKIP if from SPARK or if empty)
       if (
         orderDt &&
-        !isNaN(orderDt.getTime()) &&
         service?.fieldSources?.order_date !== 'SPARK'
       ) {
         if (orderDt > todayDt) {
           setErrors(prev => ({ ...prev, order_date: 'Order date cannot be in the future' }));
         }
-        if (startDt && !isNaN(startDt.getTime()) && orderDt > startDt) {
+        if (startDt && orderDt > startDt) {
           setErrors(prev => ({ ...prev, order_date: 'Order date must be on or before Start Date' }));
         }
       }
@@ -505,10 +624,9 @@ export function ModalServiceDetails({
       return false;
     }
 
-    const dojDt = userDates.doj ? new Date(userDates.doj) : null;
-    const retirementDt = userDates.retirementDate ? new Date(userDates.retirementDate) : null;
-    const todayDt = new Date();
-    todayDt.setHours(0, 0, 0, 0);
+    const dojDt = parseComparableDate(userDates.doj);
+    const retirementDt = parseComparableDate(userDates.retirementDate);
+    const todayDt = getTodayComparableDate();
 
     // Check standard required fields
     requiredFields.forEach((field) => {
@@ -560,12 +678,14 @@ export function ModalServiceDetails({
     newErrors.basic_pay = `${getBasicPayFieldName()} must be a positive number`;
     }
 
-    // Limit integer part to 7 digits
+    // Database numeric(10,2): max 8 digits before decimal and max 2 digits after decimal
     if (formData.basic_pay !== null && !isNaN(formData.basic_pay)) {
       const numStr = formData.basic_pay.toString();
-      const integerPart = numStr.split('.')[0];
-      if (integerPart.length > 7) {
-        newErrors.basic_pay = `${getBasicPayFieldName()} cannot exceed 7 digits`;
+      const [integerPart, decimalPart = ''] = numStr.split('.');
+      if (integerPart.length > 8) {
+        newErrors.basic_pay = `${getBasicPayFieldName()} cannot exceed 8 digits before decimal`;
+      } else if (decimalPart.length > 2) {
+        newErrors.basic_pay = `${getBasicPayFieldName()} cannot exceed 2 digits after decimal`;
       }
     }
 
@@ -579,8 +699,8 @@ export function ModalServiceDetails({
     }
 
     // Check if service is from 2020 onwards
-    const startDt = formData.start_date ? new Date(formData.start_date) : null;
-    const is2020OrLater = startDt && !isNaN(startDt.getTime()) && startDt >= new Date('2020-01-01');
+    const startDt = parseComparableDate(formData.start_date);
+    const is2020OrLater = startDt && startDt >= parseComparableDate('2020-01-01');
 
     // CONDITIONAL VALIDATION FOR ORDER_NO AND ORDER_DATE
     if (is2020OrLater) {
@@ -615,17 +735,20 @@ export function ModalServiceDetails({
     }
 
     // Date validations
-    if (startDt && !isNaN(startDt.getTime())) {
+    if (startDt) {
       if (dojDt && startDt < dojDt) {
         newErrors.start_date = 'Start date cannot be before Date of Joining';
       }
       if (retirementDt && startDt > retirementDt) {
         newErrors.start_date = 'Start date cannot be after retirement date';
       }
+      if (startDt > todayDt && !isFuturePeriod) {
+        newErrors.start_date = 'Future service cannot be added';
+      }
     }
 
-    const endDt = formData.end_date ? new Date(formData.end_date) : null;
-    if (endDt && !isNaN(endDt.getTime())) {
+    const endDt = parseComparableDate(formData.end_date);
+    if (endDt) {
       if (dojDt && endDt < dojDt) {
         newErrors.end_date = 'End date cannot be before Date of Joining';
       }
@@ -638,7 +761,7 @@ export function ModalServiceDetails({
     }
 
     // Order date validation (SKIP if from SPARK)
-    const orderDt = formData.order_date ? new Date(formData.order_date) : null;
+    const orderDt = parseComparableDate(formData.order_date);
     if (
       formData.order_date &&
       formData.order_date.trim() !== '' &&
@@ -661,12 +784,29 @@ export function ModalServiceDetails({
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (isSubmitting) return;
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      const firstKey = Object.keys(validationErrors).find((key) => validationErrors[key] && key !== 'general');
+      if (firstKey && typeof document !== 'undefined') {
+        window.setTimeout(() => {
+          const target =
+            document.querySelector(`[name="${firstKey}"]`) ||
+            document.querySelector(`[data-field="${firstKey}"]`) ||
+            document.getElementById(firstKey);
+          target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target?.focus?.();
+        }, 0);
+      }
+      return;
+    }
+
+    setIsSubmitting(true);
 
     const submitData = {
       ...formData,
@@ -695,7 +835,9 @@ export function ModalServiceDetails({
       }
     });
 
-    save({ spark_data, user_data });
+    Promise.resolve(save({ spark_data, user_data })).finally(() => {
+      setIsSubmitting(false);
+    });
     setOpen(false);
   };
 
@@ -913,6 +1055,7 @@ export function ModalServiceDetails({
                         <div className="flex items-center space-x-4 mt-1">
                           {[
                             { id: 'current', name: 'Current' },
+                            ...(showFutureOption ? [{ id: 'future', name: 'Future' }] : []),
                             { id: 'past', name: 'Past' },
                           ].map((item) => (
                             <label key={item.id} className="inline-flex items-center">
@@ -944,7 +1087,13 @@ export function ModalServiceDetails({
                           name="start_date"
                           value={formData.start_date}
                           min={userDates.doj || ''}
-                          max={userDates.retirementDate || ''}
+                          max={
+                            isCurrentPeriod
+                              ? (userDates.retirementDate && userDates.retirementDate < todayStr ? userDates.retirementDate : todayStr)
+                              : isFuturePeriod
+                                ? (userDates.retirementDate || '')
+                                : (userDates.retirementDate && userDates.retirementDate < yesterdayStr ? userDates.retirementDate : yesterdayStr)
+                          }
                           onChange={handleChange}
                           disabled={showDojWarning || isDisabled('start_date')}
                           className={getFieldClassName('start_date')}
@@ -967,8 +1116,24 @@ export function ModalServiceDetails({
                           onChange={handleChange}
                           disabled={showDojWarning || isDisabled('end_date')}
                           className={getFieldClassName('end_date')}
-                          min={formData.start_date || userDates.doj || ''}
-                          max={userDates.retirementDate || ''}
+                          min={
+                            isCurrentPeriod
+                              ? (
+                                  formData.start_date && formData.start_date > todayStr
+                                    ? formData.start_date
+                                    : todayStr
+                                )
+                              : isFuturePeriod
+                                ? (formData.start_date || todayStr)
+                              : (formData.start_date || userDates.doj || '')
+                          }
+                          max={
+                            isCurrentPeriod
+                              ? (userDates.retirementDate || '')
+                              : isFuturePeriod
+                                ? (userDates.retirementDate || '')
+                                : (userDates.retirementDate && userDates.retirementDate < yesterdayStr ? userDates.retirementDate : yesterdayStr)
+                          }
                         />
                         {errors.end_date && <p className="text-red-500 text-sm mt-1">{errors.end_date}</p>}
                       </div>
@@ -1032,6 +1197,8 @@ export function ModalServiceDetails({
                           onChange={handleChange}
                           disabled={isDisabled('basic_pay')}
                           className={getFieldClassName('basic_pay')}
+                          step="0.01"
+                          min="0"
                         />
                         {errors.basic_pay && <p className="text-red-500 text-sm mt-1">{errors.basic_pay}</p>}
                       </div>
@@ -1066,14 +1233,14 @@ export function ModalServiceDetails({
                     </button>
                     <button
                       type="submit"
-                      disabled={showDojWarning}
+                      disabled={showDojWarning || isSubmitting}
                       className={`rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                        showDojWarning
+                        (showDojWarning || isSubmitting)
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-indigo-600 hover:bg-indigo-500 focus-visible:outline-indigo-600'
                       }`}
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                     </button>
                   </div>
                 </div>

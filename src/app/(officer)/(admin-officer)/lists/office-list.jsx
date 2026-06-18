@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { PencilSquareIcon, PlusIcon , TrashIcon } from '@heroicons/react/16/solid'
 import axiosInstance from '@/utils/apiClient'
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters'
 import { ModalAddOfficeDetails } from '../modal/add-office-details'
 import ConfirmModal from '../../../components/confirmModal' 
 import { toast } from 'react-toastify';
@@ -46,14 +47,13 @@ export function OfficeList() {
   
   const fetchMasterData = async () => {
     try {
-      const [districtRes, stateRes] = await Promise.all([
-        axiosInstance.get('/masters/district/'),
-        axiosInstance.get('/masters/state/'),
-      ])
-      setMasterData({
-        district: districtRes.data?.data?.district || [],
-        state: stateRes.data?.data?.state || [],
-      })
+      const payload = await fetchBulkMasters(['district', 'state'])
+      setMasterData(
+        mapBulkMasters(payload, {
+          district: 'district',
+          state: 'state',
+        }),
+      )
     } catch (error) {
       console.error('Error fetching master data:', error)
     }

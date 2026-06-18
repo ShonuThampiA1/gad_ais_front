@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function PostingTypeList() {
   const fetchPostingType = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/posting_type-all`);
-      console.log("Fetched postingTypeList:", response.data.data.posting_type);
-      setPostingTypeList(response.data.data.posting_type);
+      const payload = await fetchBulkMasters(["posting_type"], { admin: true, includeInactive: true });
+      setPostingTypeList(payload.posting_type || []);
     } catch (error) {
       console.error("Error fetching Posting Type:", error);
       toast.error("Failed to load posting types.");
@@ -71,8 +71,6 @@ const handleAddOrUpdate = async (PostingTypeData) => {
     : "";
 
   try {
-    console.log("Input posting type:", trimmedPostingType);
-    console.log("Current postingTypeList:", postingTypeList);
 
       // Check for existing posting type
       const existing = postingTypeList.find(
@@ -81,7 +79,6 @@ const handleAddOrUpdate = async (PostingTypeData) => {
 
       // Case: Posting type exists and is deactivated
       if (existing && !existing.is_active && !PostingTypeData.posting_type_id) {
-        console.log("Found deactivated posting type:", existing);
         setPostingTypeToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -129,7 +126,6 @@ const handleAddOrUpdate = async (PostingTypeData) => {
           (type) => type.posting_types.toLowerCase() === trimmedPostingType
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated posting type:", updatedExisting);
           setPostingTypeToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -195,7 +191,6 @@ const handleAddOrUpdate = async (PostingTypeData) => {
 
   const handleReactivateClick = (posting_type_id) => {
     const postingType = postingTypeList.find((p) => p.posting_type_id === posting_type_id);
-    console.log("Reactivating posting type:", postingType);
     setPostingTypeToReactivate(postingType);
     setConfirmReactivateOpen(true);
   };

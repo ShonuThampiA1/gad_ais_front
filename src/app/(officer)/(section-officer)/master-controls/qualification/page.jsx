@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function QualificationList() {
   const fetchQualification = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/qualification-all`);
-      console.log("Fetched qualificationList:", response.data.data.qualification);
-      setQualificationList(response.data.data.qualification);
+      const payload = await fetchBulkMasters(["qualification"], { admin: true, includeInactive: true });
+      setQualificationList(payload.qualification || []);
     } catch (error) {
       console.error("Error fetching Qualification:", error);
       toast.error("Failed to load qualifications.");
@@ -65,8 +65,6 @@ export default function QualificationList() {
 
     try {
       const trimmedQualification = QualificationData.qualification.trim().toLowerCase();
-      console.log("Input qualification:", trimmedQualification);
-      console.log("Current qualificationList:", qualificationList);
 
       // Check for existing qualification
       const existing = qualificationList.find(
@@ -75,7 +73,6 @@ export default function QualificationList() {
 
       // Case: Qualification exists and is deactivated
       if (existing && !existing.is_active && !QualificationData.qualification_id) {
-        console.log("Found deactivated qualification:", existing);
         setQualificationToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function QualificationList() {
           (q) => q.qualification.toLowerCase() === trimmedQualification
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated qualification:", updatedExisting);
           setQualificationToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -181,7 +177,6 @@ export default function QualificationList() {
 
   const handleReactivateClick = (qualification_id) => {
     const qualification = qualificationList.find((q) => q.qualification_id === qualification_id);
-    console.log("Reactivating qualification:", qualification);
     setQualificationToReactivate(qualification);
     setConfirmReactivateOpen(true);
   };

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BriefcaseIcon, ChartBarIcon, BuildingOffice2Icon, GlobeAltIcon, MapPinIcon, HomeIcon, PencilSquareIcon, PlusIcon, DocumentTextIcon, CalendarIcon, EyeIcon, TrashIcon} from '@heroicons/react/24/outline';
 import { BoltIcon, UserIcon, ExclamationCircleIcon, CheckCircleIcon, ArrowDownTrayIcon,ChevronDownIcon, ListBulletIcon, ClockIcon, Squares2X2Icon } from '@heroicons/react/24/solid';
 import { ModalServiceDetails } from '../modal/service-details';
@@ -9,10 +9,14 @@ import axiosInstance from '@/utils/apiClient';
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import ConfirmModal from '@/app/components/confirmModal';
 import moment from 'moment';
+import { buildMappedServiceDetails } from '../service-details-utils';
 // import { ExportButtons, exportToCSV, exportToPDF, exportToExcel } from '@/components/dataTableControls'; // Adjust import path as needed
 import { ExportButtons, exportToCSV, exportToPDF, exportToExcel } from '@/app/components/dataTableControls'; // Adjust import path as needed
 import { jsPDF } from 'jspdf';
-export function ServiceDetails({ masterData, profileData }) {
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
+import { canEditErProfile, readStoredErProfileWorkflowContext } from '@/utils/erProfileWorkflow';
+export function ServiceDetails({ masterData: sharedMasterData, profileData, sharedMastersReady = false }) {
+  const saveInFlightRef = useRef(false);
   const [isModalOpen, setModalOpen] = useState(false);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
@@ -27,9 +31,11 @@ export function ServiceDetails({ masterData, profileData }) {
   const [postingTypes, setPostingTypes] = useState([]);
   const [implementingAgencies, setImplementingAgencies] = useState([]);
   const [states, setStates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [mastersLoading, setMastersLoading] = useState(true);
   const [roleId, setRoleId] = useState(null);
   const [officerUserId, setOfficerUserId] = useState(null);
+  const [localProfileData, setLocalProfileData] = useState(profileData);
   const [officerFields, setOfficerFields] = useState({
     GAD_OFFICER: [],
     AIS_OFFICER: [],
@@ -46,8 +52,33 @@ export function ServiceDetails({ masterData, profileData }) {
    
  
   // Get profile status from sessionStorage
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3'; // Disable for submitted or approved
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
+  const updateProfileServiceHistory = useCallback((nextServiceHistory) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            service_history: nextServiceHistory,
+          },
+        },
+      };
+
+      sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+      if (typeof window !== 'undefined') {
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('er-profile-data-updated'));
+        }, 0);
+      }
+      return updatedProfileData;
+    });
+  }, [profileData]);
   const normalize = (str) => str?.toString().trim().toLowerCase() || '';
   const getDesignationName = useCallback((id) => designations.find((item) => item.designation_id === id)?.designation || ' ', [designations]);
   const getLevelName = useCallback((id) => levels.find((item) => item.level_id === id)?.level || ' ', [levels]);
@@ -61,183 +92,84 @@ export function ServiceDetails({ masterData, profileData }) {
   const getOtherDetails = useCallback((value) => value || ' ', []);
   const getOrderNo = useCallback((value) => value || ' ', []);
   const getOrderDate = useCallback((value) => value ? moment(value).format('DD/MM/YYYY') : ' ', []);
-  const mapServiceDetails = useCallback((serviceDetails, dbServices = []) => {
-    const sparkKeys = new Set();
-    const tempServiceList = serviceDetails.map((service, index) => {
-      const designationMatch = designations.find((d) => normalize(d.designation) === normalize(service.designation));
-      const departmentMatch = departments.find((d) => normalize(d.administrative_department) === normalize(service.department));
-      const districtMatch = districts.find((d) => normalize(d.district) === normalize(service.district));
-      const stateMatch = states.find((s) => normalize(s.state) === normalize(service.state || 'Kerala'));
-      const serviceData = {
-        ais_ser_id: `spark_${index}`,
-        designation_id: designationMatch ? designationMatch.designation_id : null,
-        level_id: null,
-        ministry_id: null,
-        administrative_department_id: departmentMatch ? departmentMatch.administrative_department_id : null,
-        state_id: stateMatch ? stateMatch.state_id : null,
-        district_id: districtMatch ? districtMatch.district_id : null,
-        start_date: service.date_from ? moment(service.date_from.split(' ')[0], 'DD/MM/YYYY').format('YYYY-MM-DD') : '',
-        end_date: service.date_to ? moment(service.date_to.split(' ')[0], 'DD/MM/YYYY').format('YYYY-MM-DD') : '',
-        grade_id: null,
-        posting_type_id: null,
-        address: service.office || ' ',
-        phone_no: ' ',
-        is_additional_charge: false,
-        other_details: service.remarks || ' ',
-        basic_pay: service.basic_pay || null,
-        order_no: service.order_no || ' ',
-        order_date: service.order_date ? moment(service.order_date.split(' ')[0], 'DD/MM/YYYY').format('YYYY-MM-DD') : null,
-        _source: 'SPARK',
-        isSaved: false,
-        fieldSources: {
-          designation_id: designationMatch ? 'SPARK' : 'USER',
-          level_id: 'USER',
-          ministry_id: 'USER',
-          administrative_department_id: departmentMatch ? 'SPARK' : 'USER',
-          state_id: stateMatch ? 'SPARK' : 'USER',
-          district_id: districtMatch ? 'SPARK' : 'USER',
-          start_date: service.date_from ? 'SPARK' : 'USER',
-          end_date: service.date_to ? 'SPARK' : 'USER',
-          grade_id: 'USER',
-          posting_type_id: 'USER',
-          address: service.office ? 'SPARK' : 'USER',
-          phone_no: 'USER',
-          is_additional_charge: 'USER',
-          other_details: service.remarks ? 'SPARK' : 'USER',
-          basic_pay: service.basic_pay ? 'SPARK' : 'USER',
-          order_no: service.order_no ? 'SPARK' : 'USER',
-          order_date: service.order_date ? 'SPARK' : 'USER',
-        },
-      };
-      if (service.designation && designationMatch) sparkKeys.add(`designation_id_${index}`);
-      if (service.department && departmentMatch) sparkKeys.add(`administrative_department_id_${index}`);
-      if (service.district && districtMatch) sparkKeys.add(`district_id_${index}`);
-      if (service.state && stateMatch) sparkKeys.add(`state_id_${index}`);
-      if (service.date_from) sparkKeys.add(`start_date_${index}`);
-      if (service.date_to) sparkKeys.add(`end_date_${index}`);
-      if (service.office) sparkKeys.add(`address_${index}`);
-      if (service.remarks) sparkKeys.add(`other_details_${index}`);
-      if (service.basic_pay) sparkKeys.add(`basic_pay_${index}`);
-      if (service.order_no) sparkKeys.add(`order_no_${index}`);
-      if (service.order_date) sparkKeys.add(`order_date_${index}`);
-      return serviceData;
-    });
-    const dbServicesList = dbServices.map((dbService) => {
-      const fields = dbService.fields || {};
-      const merged = {};
-      const fieldSourcesLocal = {};
-     Object.keys(fields).forEach(sourceKey => {
-        Object.entries(fields[sourceKey]|| {}).forEach(([key, value]) => {
-          merged[key] = value;
-          fieldSourcesLocal[key] = sourceKey === 'DB_SPARK_API' ? 'SPARK' : 'USER';
-        });
-      });
-      const parsedMerged = {
-        designation_id: merged.designation_id ? parseInt(merged.designation_id, 10) : null,
-        level_id: merged.level_id ? parseInt(merged.level_id, 10) : null,
-        ministry_id: merged.ministry_id ? parseInt(merged.ministry_id, 10) : null,
-        administrative_department_id: merged.administrative_department_id ? parseInt(merged.administrative_department_id, 10) : null,
-        agency_id: merged.agency_id ? parseInt(merged.agency_id, 10) : null,
-        state_id: merged.state_id ? parseInt(merged.state_id, 10) : null,
-        district_id: merged.district_id ? parseInt(merged.district_id, 10) : null,
-        start_date: merged.start_date || '',
-        end_date: merged.end_date || '',
-        grade_id: merged.grade_id ? parseInt(merged.grade_id, 10) : null,
-        posting_type_id: merged.posting_type_id ? parseInt(merged.posting_type_id, 10) : null,
-        address: merged.address || ' ',
-        phone_no: merged.phone_no || ' ',
-        is_additional_charge: merged.is_additional_charge === 'true' || merged.is_additional_charge === true ? true : false,
-        other_details: merged.other_details || ' ',
-        basic_pay: merged.basic_pay ? parseFloat(merged.basic_pay) : null,
-        order_no: merged.order_no || ' ',
-        order_date: merged.order_date || null,
-      };
-      const sourcesSet = new Set(Object.values(fieldSourcesLocal));
-      const _source = sourcesSet.size > 1 ? 'MIXED' : sourcesSet.has('SPARK') ? 'SPARK' : 'USER';
-      return {
-        ais_ser_id: String(dbService.ais_ser_id),
-        ...parsedMerged,
-        _source,
-        isSaved: true,
-        fieldSources: fieldSourcesLocal,
-      };
-    });
-    const matchedSparkIndices = new Set();
-    dbServicesList.forEach((dbService) => {
-      const matchedIndex = tempServiceList.findIndex((sparkService, sparkIndex) => {
-        const sparkDesignation = normalize(designations.find((d) => d.designation_id === sparkService.designation_id)?.designation || '');
-        const dbDesignation = normalize(designations.find((d) => d.designation_id === dbService.designation_id)?.designation || '');
-        const sparkDepartment = normalize(departments.find((d) => d.administrative_department_id === sparkService.administrative_department_id)?.administrative_department || '');
-        const dbDepartment = normalize(departments.find((d) => d.administrative_department_id === dbService.administrative_department_id)?.administrative_department || '');
-        const sparkStartDate = sparkService.start_date;
-        const dbStartDate = dbService.start_date;
-        return sparkDesignation === dbDesignation && sparkDepartment === dbDepartment && sparkStartDate === dbStartDate;
-      });
-      if (matchedIndex !== -1) {
-        matchedSparkIndices.add(matchedIndex);
-        tempServiceList[matchedIndex].isSaved = true;
-        tempServiceList[matchedIndex].ais_ser_id = dbService.ais_ser_id;
-        Object.keys(dbService).forEach(key => {
-          if (!['ais_ser_id', '_source', 'isSaved', 'fieldSources'].includes(key) && dbService[key] !== null && dbService[key] !== undefined && dbService[key] !== '') {
-            tempServiceList[matchedIndex][key] = dbService[key];
-          }
-        });
-        tempServiceList[matchedIndex].fieldSources = {
-          ...tempServiceList[matchedIndex].fieldSources,
-          ...dbService.fieldSources,
-        };
-        const newFieldSources = tempServiceList[matchedIndex].fieldSources;
-        const sourcesSet = new Set(Object.values(newFieldSources));
-        tempServiceList[matchedIndex]._source = sourcesSet.size > 1 ? 'MIXED' : sourcesSet.has('SPARK') ? 'SPARK' : 'USER';
-      }
-    });
-    const finalDetails = [
-      ...tempServiceList.filter((_, index) => !matchedSparkIndices.has(index)),
-      ...tempServiceList.filter((_, index) => matchedSparkIndices.has(index)),
-      ...dbServicesList,
-    ].reduce((unique, current) => {
-      if (!unique.some((item) => String(item.ais_ser_id) === String(current.ais_ser_id))) {
-        unique.push(current);
-      }
-      return unique;
-    }, []);
-    finalDetails.sort((a, b) => moment(b.start_date).valueOf() - moment(a.start_date).valueOf());
-    return { details: finalDetails, sparkKeys };
-  }, [designations, departments, districts, states]);
+  const hasCardMasterData = useMemo(
+    () => [designations, departments, districts, states].every((items) => items.length > 0),
+    [designations, departments, districts, states]
+  );
+  const showInitialSkeleton = servicesLoading && serviceList.length === 0;
+  const mapServiceDetails = useCallback(
+    (serviceDetails, dbServices = []) =>
+      buildMappedServiceDetails({
+        serviceDetails,
+        dbServices,
+        designations,
+        departments,
+        districts,
+        states,
+      }),
+    [designations, departments, districts, states]
+  );
   const isActiveService = (startDate, endDate) => {
     const currentDate = moment();
     const start = moment(startDate);
     const end = endDate ? moment(endDate) : null;
     return start.isSameOrBefore(currentDate) && (!end || end.isSameOrAfter(currentDate));
   };
+  const getServicePeriodStatus = useCallback((startDate, endDate) => {
+    const currentDate = moment(moment().format('YYYY-MM-DD'), 'YYYY-MM-DD', true);
+    const start = startDate ? moment(moment(startDate).format('YYYY-MM-DD'), 'YYYY-MM-DD', true) : null;
+    const end = endDate ? moment(moment(endDate).format('YYYY-MM-DD'), 'YYYY-MM-DD', true) : null;
+
+    if (!start || !start.isValid()) return 'past';
+    if (start.isAfter(currentDate)) return 'future';
+    if (!end || end.isSameOrAfter(currentDate)) return 'current';
+    return 'past';
+  }, []);
+  const applyDropdownData = useCallback((mappedMasters) => {
+    setDepartments(mappedMasters?.departments || []);
+    setDesignations(mappedMasters?.designations || []);
+    setDistricts(mappedMasters?.districts || []);
+    setStates(mappedMasters?.states || []);
+    setLevels(mappedMasters?.levels || []);
+    setMinistries(mappedMasters?.ministries || []);
+    setGrades(mappedMasters?.grades || []);
+    setPostingTypes(mappedMasters?.postingTypes || []);
+    setImplementingAgencies(mappedMasters?.implementingAgencies || []);
+    setMastersLoading(false);
+  }, []);
+
   useEffect(() => {
     const storedRoleId = parseInt(sessionStorage.getItem('role_id'), 10);
     const storedOfficerId = sessionStorage.getItem('OfficerUserId');
     setRoleId(storedRoleId);
     setOfficerUserId(storedOfficerId);
-    fetchDropdownData();
   }, []);
+
+  useEffect(() => {
+    if (!profileData) return;
+
+    const storedProfileData = sessionStorage.getItem('profileData');
+    if (storedProfileData) {
+      try {
+        setLocalProfileData(JSON.parse(storedProfileData));
+        return;
+      } catch {
+        sessionStorage.removeItem('profileData');
+      }
+    }
+
+    setLocalProfileData(profileData);
+  }, [profileData]);
+
 useEffect(() => {
-  const storedServices = sessionStorage.getItem('service_details');
+  if (!localProfileData || !hasCardMasterData) return;
  
-  if (storedServices) {
-    console.log("Loading service details from sessionStorage");
-    const parsedServices = JSON.parse(storedServices);
-    setServiceList(parsedServices);
-    setLoading(false);
-    return;
-  }
- 
-  if (!profileData) return;
-  console.log("Processing service details from API data");
- 
-  setLoading(true);
+  setServicesLoading(true);
   try {
-    const sparkServiceDetails = profileData.spark_data?.data?.service_details || [];
-    const dbServices = profileData?.officer_data?.get_all_officer_info_by_user_id?.service_history || [];
-    console.log("dbServices:", dbServices);
+    const sparkServiceDetails = localProfileData.spark_data?.data?.service_details || [];
+    const dbServices = localProfileData?.officer_data?.get_all_officer_info_by_user_id?.service_history || [];
    
-    const officerInfo = profileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+    const officerInfo = localProfileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
     const officerFieldsData = {
       GAD_OFFICER: officerInfo?.fields?.GAD_OFFICER ? Object.keys(officerInfo.fields.GAD_OFFICER) : [],
       AIS_OFFICER: officerInfo?.fields?.AIS_OFFICER ? Object.keys(officerInfo.fields.AIS_OFFICER) : [],
@@ -246,7 +178,6 @@ useEffect(() => {
     setOfficerFields(officerFieldsData);
     const { details: mappedServices, sparkKeys } = mapServiceDetails(sparkServiceDetails, dbServices);
    
-    console.log("Mapped service details:", mappedServices);
    
     setServiceList(mappedServices);
     setSparkFields(sparkKeys);
@@ -259,52 +190,58 @@ useEffect(() => {
       progressClassName: "bg-red-200",
     });
   } finally {
-    setLoading(false);
+    setServicesLoading(false);
   }
-}, [profileData, mapServiceDetails]);
-  const fetchDropdownData = async () => {
-    setLoading(true);
+}, [localProfileData, mapServiceDetails, hasCardMasterData]);
+  const fetchDropdownData = useCallback(async () => {
+    setMastersLoading(true);
     try {
-      const [
-        levelRes,
-        ministryRes,
-        departmentRes,
-        gradeRes,
-        postingTypeRes,
-        implementingAgencyRes,
-        designationRes,
-        districtRes,
-        stateRes,
-      ] = await Promise.all([
-        axiosInstance.get('/masters/level-all'),
-        axiosInstance.get('/masters/ministry-all'),
-        axiosInstance.get('/masters/administrative_department-all'),
-        axiosInstance.get('/masters/grade-all'),
-        axiosInstance.get('/masters/posting_type-all'),
-        axiosInstance.get('/masters/agency-all'),
-        axiosInstance.get('/masters/designation-all'),
-        axiosInstance.get('/masters/district-all'),
-        axiosInstance.get('/masters/state-all'),
+      const payload = await fetchBulkMasters([
+        'administrative_department',
+        'designation',
+        'district',
+        'state',
+        'level',
+        'ministry',
+        'grade',
+        'posting_type',
+        'agency',
       ]);
-      setLevels(levelRes.data.data.level || []);
-      setMinistries(ministryRes.data.data.ministry || []);
-      setDepartments(departmentRes.data.data.departments || []);
-      setGrades(gradeRes.data.data.grade || []);
-      setPostingTypes(postingTypeRes.data.data.posting_type || []);
-      setImplementingAgencies(implementingAgencyRes.data.data || []);
-      setDesignations(designationRes.data.data.designation || []);
-      setDistricts(districtRes.data.data.district || []);
-      setStates(stateRes.data.data.state || []);
+
+      const mappedMasters = mapBulkMasters(payload, {
+        departments: 'administrative_department',
+        designations: 'designation',
+        districts: 'district',
+        states: 'state',
+        levels: 'level',
+        ministries: 'ministry',
+        grades: 'grade',
+        postingTypes: 'posting_type',
+        implementingAgencies: 'agency',
+      });
+      applyDropdownData(mappedMasters);
     } catch (error) {
       console.error('Error fetching dropdown data:', error);
       toast.error('Failed to load dropdown data', {
         className: 'bg-red-500 text-white',
         progressClassName: 'bg-red-200',
       });
-    } finally {
-      setLoading(false);
+      setMastersLoading(false);
     }
-  };
+  }, [applyDropdownData]);
+
+  useEffect(() => {
+    if (!sharedMastersReady) {
+      return;
+    }
+
+    if (sharedMasterData) {
+      applyDropdownData(sharedMasterData);
+      return;
+    }
+
+    fetchDropdownData();
+  }, [applyDropdownData, fetchDropdownData, sharedMasterData, sharedMastersReady]);
   const handleDeleteClick = useCallback((service) => {
    
     setServiceToDelete(service);
@@ -320,13 +257,10 @@ const handleDeleteConfirm = useCallback(async () => {
     });
     return;
   }
-  console.log("Delete service with ID:", serviceId);
   // Handle spark data (not saved in DB)
   if (typeof serviceId === "string" && serviceId.startsWith("spark_")) {
     const updatedList = serviceList.filter(q => q.ais_ser_id !== serviceId);
     setServiceList(updatedList);
-    // Update session storage
-    sessionStorage.setItem("service_details", JSON.stringify(updatedList));
     toast.success("Service removed successfully", {
       className: "bg-primary-500 text-white",
       progressClassName: "bg-primary-200",
@@ -344,11 +278,14 @@ const handleDeleteConfirm = useCallback(async () => {
       // Use the same filtering logic as in save function
       const updatedList = serviceList.filter(q => String(q.ais_ser_id) !== String(serviceId));
       setServiceList(updatedList);
+      const currentOfficerData =
+        localProfileData?.officer_data?.get_all_officer_info_by_user_id || {};
+      updateProfileServiceHistory(
+        (currentOfficerData.service_history || []).filter(
+          (service) => String(service?.ais_ser_id) !== String(serviceId)
+        )
+      );
      
-      // Ensure session storage is updated
-      sessionStorage.setItem("service_details", JSON.stringify(updatedList));
-     
-      console.log("Service deleted, session storage updated:", updatedList);
       toast.success("Service deleted successfully", {
         className: "bg-primary-500 text-white",
         progressClassName: "bg-primary-200",
@@ -367,13 +304,17 @@ const handleDeleteConfirm = useCallback(async () => {
     setIsDeleteModalOpen(false);
     setServiceToDelete(null);
   }
-}, [isButtonDisabled, serviceList, serviceToDelete]);
+}, [isButtonDisabled, serviceList, serviceToDelete, localProfileData, updateProfileServiceHistory]);
 
 
  const handleSave = useCallback(
   async (updatedData) => {
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setTimeout(() => {
+        saveInFlightRef.current = false;
+      }, 2500);
     try {
-      console.log("Incoming updatedData:", JSON.stringify(updatedData, null, 2));
       const isSparkEntry = selectedService && selectedService.ais_ser_id && typeof selectedService.ais_ser_id === "string" && selectedService.ais_ser_id.startsWith("spark_");
       const isUpdate = selectedService && selectedService.ais_ser_id && !isSparkEntry;
       const isNew = !selectedService || !selectedService.ais_ser_id;
@@ -401,7 +342,6 @@ const handleDeleteConfirm = useCallback(async () => {
           order_date: null,
         },
       };
-      console.log("Request body:", JSON.stringify(requestBody, null, 2));
       if (!requestBody.user_data || typeof requestBody.user_data !== "object") {
         throw new Error("Invalid user_data structure");
       }
@@ -423,9 +363,7 @@ const handleDeleteConfirm = useCallback(async () => {
         }
       }
       if (response.data.success) {
-        console.log("response==", response);
         const savedService = response.data.data.service_history;
-        console.log("savedService==", savedService);
         const fieldSources = {
           designation_id: requestBody.user_data.designation_id ? "USER" : requestBody.spark_data.designation_id ? "SPARK" : "USER",
           level_id: requestBody.user_data.level_id ? "USER" : requestBody.spark_data.level_id ? "SPARK" : "USER",
@@ -488,11 +426,77 @@ const handleDeleteConfirm = useCallback(async () => {
           } else {
             newServiceList = [...prevData, updatedService];
           }
-          // Store updated service details in sessionStorage
-          sessionStorage.setItem('service_details', JSON.stringify(newServiceList));
-         
           return newServiceList;
         });
+        const currentOfficerData =
+          localProfileData?.officer_data?.get_all_officer_info_by_user_id || {};
+        const currentServiceHistory = currentOfficerData.service_history || [];
+        const userSource = roleId === 3 ? 'GAD_OFFICER' : 'AIS_OFFICER';
+        const userFieldPayload = Object.fromEntries(
+          Object.entries(requestBody.user_data || {}).filter(([, value]) => value !== null && value !== undefined)
+        );
+        const existingServiceRecord = currentServiceHistory.find(
+          (service) => String(service?.ais_ser_id) === String(savedService.ais_ser_id || selectedService?.ais_ser_id)
+        );
+        const mergedSavedService = {
+          ...(existingServiceRecord || {}),
+          ...savedService,
+          ais_ser_id: savedService.ais_ser_id,
+          user_id: profileData?.user_id || savedService.user_id,
+          email: profileData?.email || savedService.email,
+          first_name: currentOfficerData.officer_info?.[0]?.first_name || existingServiceRecord?.first_name || '',
+          last_name: currentOfficerData.officer_info?.[0]?.last_name || existingServiceRecord?.last_name || '',
+          fields: {
+            ...(existingServiceRecord?.fields || {}),
+            ...(requestBody.spark_data
+              ? {
+                  DB_SPARK_API: {
+                    ...(existingServiceRecord?.fields?.DB_SPARK_API || {}),
+                    ...requestBody.spark_data,
+                  },
+                }
+              : {}),
+            ...(Object.keys(userFieldPayload).length
+              ? {
+                  [userSource]: {
+                    ...(existingServiceRecord?.fields?.[userSource] || {}),
+                    ...userFieldPayload,
+                  },
+                }
+              : {}),
+            UNKNOWN: existingServiceRecord?.fields?.UNKNOWN || savedService.fields?.UNKNOWN || {},
+          },
+        };
+        let updatedServiceHistory = [...currentServiceHistory];
+
+        if (isSparkEntry) {
+          const sparkServiceIndex = updatedServiceHistory.findIndex((service) => {
+            const dbSparkFields = service?.fields?.DB_SPARK_API || {};
+            return (
+              String(dbSparkFields.start_date || service?.start_date || '').trim().toLowerCase() ===
+                String(selectedService?.start_date || '').trim().toLowerCase() &&
+              String(dbSparkFields.end_date || service?.end_date || '').trim().toLowerCase() ===
+                String(selectedService?.end_date || '').trim().toLowerCase() &&
+              String(dbSparkFields.designation_id || service?.designation_id || '').trim().toLowerCase() ===
+                String(selectedService?.designation_id || '').trim().toLowerCase()
+            );
+          });
+
+          if (sparkServiceIndex !== -1) {
+            updatedServiceHistory[sparkServiceIndex] = mergedSavedService;
+          } else {
+            updatedServiceHistory.push(mergedSavedService);
+          }
+        } else if (isUpdate) {
+          updatedServiceHistory = updatedServiceHistory.map((service) =>
+            String(service?.ais_ser_id) === String(selectedService?.ais_ser_id)
+              ? mergedSavedService
+              : service
+          );
+        } else {
+          updatedServiceHistory.push(mergedSavedService);
+        }
+        updateProfileServiceHistory(updatedServiceHistory);
         setSparkFields((prev) => {
           const newSparkFields = new Set(prev);
           if (isSparkEntry) {
@@ -547,17 +551,17 @@ const handleDeleteConfirm = useCallback(async () => {
       });
     }
   },
-  [selectedService, roleId, officerUserId]
+  [selectedService, roleId, officerUserId, localProfileData, profileData, updateProfileServiceHistory]
 );
 
 
   useEffect(() => {
-    if (!loading && serviceList) {
+    if (!servicesLoading && serviceList) {
       const total = serviceList.length;
       const completed = serviceList.filter((s) => s.isSaved).length;
       updateSectionProgress('service', total === 0 ? 0 : completed, total === 0 ? 0 : total);
     }
-  }, [loading, updateSectionProgress, serviceList?.length, serviceList?.map((s) => s.isSaved).join(',')]);
+  }, [servicesLoading, updateSectionProgress, serviceList?.length, serviceList?.map((s) => s.isSaved).join(',')]);
  
   const renderSparkIndicator = (fieldKey, fieldSource) => {
     if (fieldSource !== 'SPARK') return null;
@@ -649,15 +653,24 @@ const handleDeleteConfirm = useCallback(async () => {
     // { label: 'Order Date', key: 'order_date', icon: CalendarIcon, getValue: getOrderDate },
   ];
   const sortedServices = [...serviceList].sort((a, b) => {
-    const aIsActive = isActiveService(a.start_date, a.end_date);
-    const bIsActive = isActiveService(b.start_date, b.end_date);
-    if (aIsActive && !bIsActive) return -1;
-    if (!aIsActive && bIsActive) return 1;
+    const order = { current: 0, future: 1, past: 2 };
+    const aStatus = getServicePeriodStatus(a.start_date, a.end_date);
+    const bStatus = getServicePeriodStatus(b.start_date, b.end_date);
+    if (order[aStatus] !== order[bStatus]) return order[aStatus] - order[bStatus];
     return moment(b.start_date).valueOf() - moment(a.start_date).valueOf();
   });
+  const mainServicesCount = sortedServices.filter((service) => !service.is_additional_charge).length;
+  const additionalChargeCount = sortedServices.filter((service) => service.is_additional_charge).length;
   const filteredServices = sortedServices.filter((service) =>
     activeTab === 'main' ? !service.is_additional_charge : service.is_additional_charge
   );
+  const activeServiceTypeLabel = activeTab === 'main' ? 'Main Services' : 'Additional Charge';
+  const activeViewModeLabel =
+    viewMode === 'cards' ? 'Card View' : viewMode === 'list' ? 'List View' : 'Timeline View';
+  const showCardContentSkeleton =
+    viewMode === 'cards' &&
+    filteredServices.length > 0 &&
+    (servicesLoading || mastersLoading || !hasCardMasterData);
   const duplicatePeriodColorPalette = useMemo(() => ([
     {
       cardBorder: 'border-amber-300 dark:border-amber-500 hover:border-amber-400 dark:hover:border-amber-400',
@@ -705,8 +718,22 @@ const handleDeleteConfirm = useCallback(async () => {
     let duplicateGroupIndex = 0;
     groupedByPeriod.forEach((services, key) => {
       if (services.length > 1) {
+        const savedCount = services.filter((service) => service?.isSaved).length;
+        const sparkOnlyCount = services.filter(
+          (service) => !service?.isSaved && service?._source === 'SPARK'
+        ).length;
+        const isSparkOnlyDuplicate = sparkOnlyCount === services.length;
+        const hasSavedDuplicate = savedCount > 1 || (savedCount > 0 && services.length > savedCount);
+
         duplicateMap.set(key, {
           count: services.length,
+          services,
+          savedCount,
+          isSparkOnlyDuplicate,
+          hasSavedDuplicate,
+          warningMessage: isSparkOnlyDuplicate
+            ? 'Duplicate service records are coming from SPARK. Please correct them in SPARK first, then use Refresh or re-sync and proceed with saving here.'
+            : 'Duplicate period detected. Delete any one saved duplicate card.',
           color: duplicatePeriodColorPalette[duplicateGroupIndex % duplicatePeriodColorPalette.length],
         });
         duplicateGroupIndex += 1;
@@ -720,6 +747,21 @@ const handleDeleteConfirm = useCallback(async () => {
     return duplicatePeriodMetaMap.get(key) || null;
   }, [duplicatePeriodMetaMap, getPeriodKey]);
   const hasDuplicatePeriods = duplicatePeriodMetaMap.size > 0;
+  const duplicatePeriodSummary = useMemo(() => {
+    const duplicateGroups = Array.from(duplicatePeriodMetaMap.values());
+    const hasSparkOnlyDuplicate = duplicateGroups.some((group) => group.isSparkOnlyDuplicate);
+    const hasSavedDuplicate = duplicateGroups.some((group) => group.hasSavedDuplicate);
+
+    if (hasSparkOnlyDuplicate && !hasSavedDuplicate) {
+      return 'Duplicate service records are coming from SPARK. Please correct them in SPARK first, then use Refresh or re-sync and proceed with saving here.';
+    }
+
+    if (hasSparkOnlyDuplicate && hasSavedDuplicate) {
+      return 'Some duplicate service periods are coming from SPARK and must be corrected in SPARK first. If any duplicate period is already saved in KARMASRI, remove one saved duplicate card here after reviewing it.';
+    }
+
+    return 'Some duplicated time period service records are detected. Please remove any one saved duplicate card.';
+  }, [duplicatePeriodMetaMap]);
   const handleCardClick = (service) => {
     setViewService(service);
     setViewModalOpen(true);
@@ -798,7 +840,7 @@ const handleDeleteConfirm = useCallback(async () => {
     startY: 50,
     theme: 'grid',
     styles: {
-      fontSize: 7, // Reduced for more space
+      fontSize: 6, // Reduced for more space
       cellPadding: 2,
       overflow: 'linebreak', // Enable text wrapping
       halign: 'left',
@@ -815,21 +857,24 @@ const handleDeleteConfirm = useCallback(async () => {
     columnStyles: {
       0: { cellWidth: 60 }, // Period
       1: { cellWidth: 80 }, // Designation (long)
-      2: { cellWidth: 30 }, // Level
-      3: { cellWidth: 30 }, // Grade
-      4: { cellWidth: 50 }, // Ministry
-      5: { cellWidth: 80 }, // Department (long)
-      6: { cellWidth: 50 }, // Agency
-      7: { cellWidth: 30 }, // State
-      8: { cellWidth: 50 }, // District
-      9: { cellWidth: 50 }, // Posting Type
+      // 2: { cellWidth: 30 }, // Level
+      // 3: { cellWidth: 30 }, // Grade
+      // 4: { cellWidth: 50 }, // Ministry
+      // 5: { cellWidth: 80 }, // Department (long)
+      // 6: { cellWidth: 50 }, // Agency
+      // 7: { cellWidth: 30 }, // State
+      // 8: { cellWidth: 50 }, // District
+      // 9: { cellWidth: 50 }, // Posting Type
       10: { cellWidth: 100 }, // Address (longest, wrap)
-      11: { cellWidth: 40 }, // Phone No
-      12: { cellWidth: 40 }, // Scale of Pay
-      13: { cellWidth: 60 }, // Order No
-      14: { cellWidth: 50 }, // Order Date
+      // 11: { cellWidth: 40 }, // Phone No
+      // 12: { cellWidth: 40 }, // Scale of Pay
+      // 13: { cellWidth: 60 }, // Order No
+      // 14: { cellWidth: 50 }, // Order Date
       15: { cellWidth: 80 }, // Other Details (wrap)
     },
+    tableWidth: 'auto', // Let table width adjust based on content and specified column widths
+    pageBreak: 'auto',
+    rowPageBreak: 'auto',
   });
   doc.save(filename);
 }, [filteredServices, activeTab, getDesignationName, getLevelName, getGradeName, getMinistryName, getDepartmentName, getAgencyName, getStateName, getDistrictName, getPostingTypeName]);
@@ -855,6 +900,41 @@ const handleDeleteConfirm = useCallback(async () => {
     exportToExcel('Service Details', data, `service_details_${activeTab}.xlsx`);
   }, [filteredServices, activeTab, getDesignationName, getLevelName, getGradeName, getMinistryName, getDepartmentName, getAgencyName, getStateName, getDistrictName, getPostingTypeName]);
 
+  const getInclusiveCareerSpan = useCallback((startDate, endDate) => {
+    if (!startDate || !endDate) return '';
+
+    const start = moment(startDate).startOf('day');
+    const end = moment(endDate).startOf('day');
+
+    if (!start.isValid() || !end.isValid() || end.isBefore(start)) {
+      return '';
+    }
+
+    const exclusiveEnd = end.clone().add(1, 'day');
+    const spanCursor = start.clone();
+
+    const years = exclusiveEnd.diff(spanCursor, 'years');
+    spanCursor.add(years, 'years');
+
+    const months = exclusiveEnd.diff(spanCursor, 'months');
+    spanCursor.add(months, 'months');
+
+    const days = exclusiveEnd.diff(spanCursor, 'days');
+
+    const parts = [];
+    if (years > 0) {
+      parts.push(`${years} year${years === 1 ? '' : 's'}`);
+    }
+    if (months > 0) {
+      parts.push(`${months} month${months === 1 ? '' : 's'}`);
+    }
+    if (days > 0 || parts.length === 0) {
+      parts.push(`${days} day${days === 1 ? '' : 's'}`);
+    }
+
+    return parts.join(', ');
+  }, []);
+
 const renderTimeline = () => {
   const timelineServices = [...filteredServices];
   if (timelineServices.length === 0) {
@@ -871,6 +951,7 @@ const renderTimeline = () => {
   );
 
   const currentDate = new Date();
+  currentDate.setHours(0, 0, 0, 0);
   const minDate = new Date(Math.min(...sortedServices.map(s => new Date(s.start_date).getTime())));
   const maxDate = new Date(Math.max(...sortedServices.map(s => 
     s.end_date ? new Date(s.end_date).getTime() : currentDate.getTime()
@@ -878,6 +959,7 @@ const renderTimeline = () => {
 
   const startYear = minDate.getFullYear();
   const endYear = maxDate.getFullYear();
+  const careerSpanLabel = getInclusiveCareerSpan(minDate, maxDate);
 
   // Calculate employment gaps - EXCLUDING both end date and start date
   const chronologicalServices = [...sortedServices].sort((a, b) => 
@@ -925,17 +1007,14 @@ const renderTimeline = () => {
     nextDayAfterLastEnd.setDate(lastServiceEnd.getDate() + 1);
     
     if (nextDayAfterLastEnd < currentDate) {
-      const yesterday = new Date(currentDate);
-      yesterday.setDate(currentDate.getDate() - 1);
-      
-      const gapDays = Math.ceil((yesterday - nextDayAfterLastEnd) / (24 * 60 * 60 * 1000)) + 1;
+      const gapDays = Math.ceil((currentDate - nextDayAfterLastEnd) / (24 * 60 * 60 * 1000)) + 1;
       
       if (gapDays > 0) {
         gaps.push({
           from: lastServiceEnd,
           to: currentDate,
           gapStartExcluded: nextDayAfterLastEnd,
-          gapEndExcluded: yesterday,
+          gapEndExcluded: currentDate,
           duration: gapDays,
           afterService: getDesignationName(lastService.designation_id),
           beforeService: "Present",
@@ -975,7 +1054,7 @@ const renderTimeline = () => {
           Service Timeline ({startYear} - {endYear})
         </h3>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Career span: {endYear - startYear + 1} years | Total services: {sortedServices.length}
+          Career span: {careerSpanLabel} | Total services: {sortedServices.length}
           {gaps.length > 0 && ` | Gaps: ${gaps.length}`}
         </p>
       </div>
@@ -1048,7 +1127,7 @@ const renderTimeline = () => {
                             </div>
                             {isDuplicatePeriod && (
                               <div className="mb-2 rounded bg-amber-900/40 border border-amber-500 px-2 py-1 text-[10px] text-amber-200">
-                                Duplicate period detected. Delete any one saved duplicate card.
+                                {duplicateMeta.warningMessage}
                               </div>
                             )}
                             
@@ -1166,6 +1245,49 @@ const renderTimeline = () => {
     </div>
   );
 };
+
+  const renderCardContentSkeleton = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 animate-pulse">
+      {filteredServices.map((service, index) => (
+        <div
+          key={service.ais_ser_id || `service-skeleton-${index}`}
+          className="relative mt-5 flex flex-col rounded-xl border border-indigo-200 bg-white px-2 pt-3 dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div className="absolute top-[-10px] left-0 h-6 w-16 rounded-full bg-gray-200 dark:bg-gray-700" />
+
+          <div className="mb-2 flex items-center justify-between">
+            <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="flex gap-2">
+              <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
+            </div>
+          </div>
+
+          <div className="mb-2 rounded-lg border border-indigo-100 bg-indigo-100 p-2 dark:border-indigo-800 dark:bg-indigo-900/30">
+            <div className="h-4 w-5/6 rounded bg-indigo-200 dark:bg-gray-700" />
+          </div>
+
+          <div className="space-y-2 flex-1 mb-3">
+            {primaryFields.map((field) => (
+              <div
+                key={`skeleton-${field.key}`}
+                className="rounded-md border border-gray-100 bg-gray-50 p-2 dark:border-gray-600 dark:bg-gray-700/50"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-indigo-100 dark:bg-indigo-900/50" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-4 w-full rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-4 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const renderList = () => {
   if (filteredServices.length === 0) {
@@ -1444,10 +1566,8 @@ const renderEditButton = (service) => {
   return (
     <div className="p-2 mx-auto w-full bg-white dark:bg-gray-900 relative z-[1]">
       <div className="bg-white dark:bg-gray-700 rounded-lg">
-        {loading ? (
-          <div className="flex justify-center items-center py-6">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
-          </div>
+        {showInitialSkeleton ? (
+          renderLoadingSkeleton()
         ) : (
           <>
 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
@@ -1463,7 +1583,7 @@ const renderEditButton = (service) => {
         }`}
         onClick={() => setActiveTab('main')}
       >
-        Main Services
+        Main Services ({mainServicesCount})
       </button>
       <button
         className={`px-4 py-2 rounded-r-lg text-sm font-medium transition-colors ${
@@ -1473,7 +1593,7 @@ const renderEditButton = (service) => {
         }`}
         onClick={() => setActiveTab('additional')}
       >
-        Additional Charge
+        Additional Charge ({additionalChargeCount})
       </button>
     </div>
 
@@ -1519,6 +1639,14 @@ const renderEditButton = (service) => {
   {renderAddButton()}
 </div>
 
+            <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-700 dark:bg-sky-950/30 dark:text-sky-100">
+              Showing <span className="font-semibold">{activeServiceTypeLabel}</span> in{' '}
+              <span className="font-semibold">{activeViewModeLabel}</span>
+              {filteredServices.length >= 0 && (
+                <span className="text-sky-700 dark:text-sky-200"> ({filteredServices.length} records in this view)</span>
+              )}
+            </div>
+
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
               <div className="flex items-center space-x-2 min-w-[120px]">
                 <span className="inline-flex items-center rounded-full bg-orange-100 p-0.5 text-xs text-orange-600">
@@ -1555,109 +1683,115 @@ const renderEditButton = (service) => {
             </div>
             {hasDuplicatePeriods && (
               <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                Some duplicated time period service records are detected. Please remove any one saved duplicate card.
+                {duplicatePeriodSummary}
               </div>
             )}
             
              {viewMode === 'cards' ? (
             filteredServices.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                {filteredServices.map((service, index) => {
-                  const isActive = isActiveService(service.start_date, service.end_date);
-                  const duplicateMeta = getDuplicatePeriodMeta(service);
-                  const isDuplicatePeriod = Boolean(duplicateMeta);
-                  const dateRange = `${service.start_date ? moment(service.start_date).format('DD/MM/YYYY') : ' '} - ${service.end_date ? moment(service.end_date).format('DD/MM/YYYY') : 'Ongoing'}`;
-                  return (
-                    <div
-                      key={service.ais_ser_id}
-                      className={`relative mt-5 flex flex-col bg-white dark:bg-gray-800 rounded-xl pt-3 px-2 border transition-all hover:shadow-lg cursor-pointer ${
-                        isDuplicatePeriod
-                          ? duplicateMeta.color.cardBorder
-                          : 'border-indigo-200 dark:border-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-500'
-                      }`}
-                      onClick={() => handleCardClick(service)}
-                    >
-                      {/* Active/Past Badge - Positioned like DisabilityDetails */}
-                      <span
-                        className={`absolute top-[-10px] inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-sm border ${
-                          isActive
-                            ? 'bg-green-600 border-green-600 dark:bg-green-600 dark:border-green-600'
-                            : 'bg-indigo-600 border-indigo-600 dark:bg-indigo-900 dark:border-indigo-900'
+              showCardContentSkeleton ? (
+                renderCardContentSkeleton()
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                  {filteredServices.map((service, index) => {
+                    const serviceStatus = getServicePeriodStatus(service.start_date, service.end_date);
+                    const duplicateMeta = getDuplicatePeriodMeta(service);
+                    const isDuplicatePeriod = Boolean(duplicateMeta);
+                    const dateRange = `${service.start_date ? moment(service.start_date).format('DD/MM/YYYY') : ' '} - ${service.end_date ? moment(service.end_date).format('DD/MM/YYYY') : 'Ongoing'}`;
+                    return (
+                      <div
+                        key={service.ais_ser_id}
+                        className={`relative mt-5 flex flex-col bg-white dark:bg-gray-800 rounded-xl pt-3 px-2 border transition-all hover:shadow-lg cursor-pointer ${
+                          isDuplicatePeriod
+                            ? duplicateMeta.color.cardBorder
+                            : 'border-indigo-200 dark:border-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-500'
                         }`}
+                        onClick={() => handleCardClick(service)}
                       >
-                        {isActive ? 'Active' : 'Past'}
-                      </span>
-                      {isDuplicatePeriod && (
-                        <div className="absolute top-[-10px] right-2 group">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-sm border ${duplicateMeta.color.badge}`}>
-                            Duplication Detected
-                          </span>
-                          <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10 bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                            Delete any one of the saved duplicate cards to avoid duplication
+                        {/* Active/Past Badge - Positioned like DisabilityDetails */}
+                        <span
+                          className={`absolute top-[-10px] inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-sm border ${
+                            serviceStatus === 'current'
+                              ? 'bg-green-600 border-green-600 dark:bg-green-600 dark:border-green-600'
+                              : serviceStatus === 'future'
+                                ? 'bg-sky-600 border-sky-600 dark:bg-sky-700 dark:border-sky-700'
+                              : 'bg-indigo-600 border-indigo-600 dark:bg-indigo-900 dark:border-indigo-900'
+                          }`}
+                        >
+                          {serviceStatus === 'current' ? 'Current' : serviceStatus === 'future' ? 'Future' : 'Past'}
+                        </span>
+                        {isDuplicatePeriod && (
+                          <div className="absolute top-[-10px] right-2 group">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-sm border ${duplicateMeta.color.badge}`}>
+                              Duplication Detected
+                            </span>
+                            <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10 max-w-[260px] rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg whitespace-normal">
+                              {duplicateMeta.warningMessage}
+                            </div>
                           </div>
+                        )}
+                        <div className='mb-2'>
+                         
+                        {renderSavedIndicator(service.isSaved)}
+                        {/* Edit Button - Positioned on right */}
+                       <div className="flex items-center justify-end mb-2 gap-2">
+                        {renderEditButton(service, index)}
+                        {renderDeleteButton(service, isDuplicatePeriod)}
+                      </div>
                         </div>
-                      )}
-                      <div className='mb-2'>
                        
-                      {renderSavedIndicator(service.isSaved)}
-                      {/* Edit Button - Positioned on right */}
-                     <div className="flex items-center justify-end mb-2 gap-2">
-                      {renderEditButton(service, index)}
-                      {renderDeleteButton(service, isDuplicatePeriod)}
-                    </div>
-                      </div>
-                     
-                      {/* Date Range - Full Width */}
-                      <div className={`relative mb-2 p-2 rounded-lg border ${isDuplicatePeriod ? duplicateMeta.color.dateBox : 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-100 dark:border-indigo-800'}`}>
-                        {renderSparkIndicator(`start_date_${service.ais_ser_id}`, service.fieldSources.start_date)}
-                        {renderUserIndicator(`start_date_${service.ais_ser_id}`, service.fieldSources.end_date)}
-                        {renderGadOfficerIndicator('start_date')}
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="w-3 h-3 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                            {dateRange}
-                          </p>
-                        </div>
-                      </div>
-                      {/* Fields Section - Better spacing and alignment */}
-                      <div className="space-y-2 flex-1 mb-3">
-                        {primaryFields.map((field) => (
-                          <div
-                            key={field.key}
-                            className="relative bg-gray-50 dark:bg-gray-700/50 rounded-md p-2 border border-gray-100 dark:border-gray-600 min-h-[60px]"
-                          >
-                            {/* Field Indicators - Properly positioned */}
-                            <div className="absolute top-1 right-1 flex gap-1">
-                              {renderSparkIndicator(`${field.key}_${service.ais_ser_id}`, service.fieldSources[field.key])}
-                              {renderUserIndicator(`${field.key}_${service.ais_ser_id}`, service.fieldSources[field.key])}
-                              {renderGadOfficerIndicator(field.key)}
-                            </div>
-                           
-                            {/* Field Content */}
-                            <div className="flex items-start gap-3 pr-8"> {/* Added padding for indicators */}
-                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                                <field.icon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 tracking-wide">
-                                  {field.label}
-                                </p>
-                                <p
-                                  className="text-sm font-semibold text-gray-900 dark:text-white break-words line-clamp-2"
-                                  title={field.getValue(service[field.key])}
-                                >
-                                  {field.getValue(service[field.key])}
-                                </p>
-                              </div>
-                            </div>
+                        {/* Date Range - Full Width */}
+                        <div className={`relative mb-2 p-2 rounded-lg border ${isDuplicatePeriod ? duplicateMeta.color.dateBox : 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-100 dark:border-indigo-800'}`}>
+                          {renderSparkIndicator(`start_date_${service.ais_ser_id}`, service.fieldSources.start_date)}
+                          {renderUserIndicator(`start_date_${service.ais_ser_id}`, service.fieldSources.end_date)}
+                          {renderGadOfficerIndicator('start_date')}
+                          <div className="flex items-center gap-2">
+                            <CalendarIcon className="w-3 h-3 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                              {dateRange}
+                            </p>
                           </div>
-                        ))}
+                        </div>
+                        {/* Fields Section - Better spacing and alignment */}
+                        <div className="space-y-2 flex-1 mb-3">
+                          {primaryFields.map((field) => (
+                            <div
+                              key={field.key}
+                              className="relative bg-gray-50 dark:bg-gray-700/50 rounded-md p-2 border border-gray-100 dark:border-gray-600 min-h-[60px]"
+                            >
+                              {/* Field Indicators - Properly positioned */}
+                              <div className="absolute top-1 right-1 flex gap-1">
+                                {renderSparkIndicator(`${field.key}_${service.ais_ser_id}`, service.fieldSources[field.key])}
+                                {renderUserIndicator(`${field.key}_${service.ais_ser_id}`, service.fieldSources[field.key])}
+                                {renderGadOfficerIndicator(field.key)}
+                              </div>
+                             
+                              {/* Field Content */}
+                              <div className="flex items-start gap-3 pr-8"> {/* Added padding for indicators */}
+                                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
+                                  <field.icon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 tracking-wide">
+                                    {field.label}
+                                  </p>
+                                  <p
+                                    className="text-sm font-semibold text-gray-900 dark:text-white break-words line-clamp-2"
+                                    title={field.getValue(service[field.key])}
+                                  >
+                                    {field.getValue(service[field.key])}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+            
                       </div>
-          
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               <div className="text-gray-500 dark:text-gray-400 text-sm text-center italic py-8">
                 No service records available for {activeTab === 'main' ? 'Main Services' : 'Additional Charge'}.
@@ -1723,3 +1857,49 @@ const renderEditButton = (service) => {
     </div>
   );
 }
+  const renderLoadingSkeleton = () => (
+    <>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2 animate-pulse">
+        <div className="flex items-center space-x-4">
+          <div className="flex">
+            <div className="h-10 w-32 rounded-l-lg bg-indigo-200 dark:bg-gray-600" />
+            <div className="h-10 w-36 rounded-r-lg bg-gray-200 dark:bg-gray-700" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-10 w-10 rounded-md bg-gray-200 dark:bg-gray-700" />
+            <div className="h-10 w-10 rounded-md bg-gray-200 dark:bg-gray-700" />
+          </div>
+        </div>
+        <div className="h-10 w-32 rounded-md bg-gray-200 dark:bg-gray-700" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 animate-pulse">
+        {[0, 1, 2, 3].map((index) => (
+          <div
+            key={index}
+            className="rounded-xl border border-indigo-200 bg-gradient-to-br from-white to-indigo-50/40 p-4 shadow-sm dark:border-gray-700 dark:from-gray-800 dark:to-gray-800"
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="space-y-2 flex-1">
+                <div className="h-5 w-2/3 rounded bg-indigo-200 dark:bg-gray-600" />
+                <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-700" />
+              </div>
+              <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[0, 1, 2, 3, 4, 5].map((fieldIndex) => (
+                <div
+                  key={fieldIndex}
+                  className="rounded-lg overflow-hidden border border-indigo-100 dark:border-gray-700"
+                >
+                  <div className="h-9 bg-indigo-100 dark:bg-gray-700" />
+                  <div className="h-10 bg-white dark:bg-gray-800" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );

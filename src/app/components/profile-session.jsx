@@ -49,7 +49,6 @@
 //       const response = await axiosInstance.get("/officer/officer");
       
 //       const officerData = response.data.data.officer_data.get_all_officer_info_by_user_id;
-//       console.log("Officer Data:", officerData.officer_info[0]?.fields);
 //       const profileImage = officerData.officer_info[0]?.fields?.AIS_OFFICER?.profile_image||officerData.officer_info[0]?.fields?.GAD_OFFICER?.profile_image||officerData.officer_info[0]?.fields?.UNKNOWN?.profile_image;
       
 //       if (profileImage) {

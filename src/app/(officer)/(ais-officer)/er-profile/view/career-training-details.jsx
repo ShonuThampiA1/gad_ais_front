@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   BookOpenIcon,
@@ -21,8 +21,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import ConfirmModal from "@/app/components/confirmModal";
 import moment from "moment";
+import { fetchBulkMasters, mapBulkMasters } from "@/utils/masters";
+import { canEditErProfile, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
-export function CareerTrainingDetails({ profileData }) {
+export function CareerTrainingDetails({ profileData, sharedMasterData, sharedMastersReady = false }) {
+  const saveInFlightRef = useRef(false);
   
   const { updateSectionProgress } = useProfileCompletion();
   const [isModalOpen, setModalOpen] = useState(false);
@@ -40,8 +43,28 @@ export function CareerTrainingDetails({ profileData }) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [trainingToDelete, setTrainingToDelete] = useState(null);
   
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3';
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
+  const updateProfileTrainingInfo = useCallback((nextTrainingInfo) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            training_info: nextTrainingInfo,
+          },
+        },
+      };
+
+      sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+      return updatedProfileData;
+    });
+  }, [profileData]);
   
   const [masterData, setMasterData] = useState({
     training_types: [],
@@ -55,6 +78,38 @@ export function CareerTrainingDetails({ profileData }) {
   const [sparkFields, setSparkFields] = useState(new Set());
   const [hasFetched, setHasFetched] = useState(false);
   const BASE_FILE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  useEffect(() => {
+    if (!profileData) return;
+
+    const storedProfileData = sessionStorage.getItem('profileData');
+    if (storedProfileData) {
+      try {
+        setLocalProfileData(JSON.parse(storedProfileData));
+        return;
+      } catch {
+        sessionStorage.removeItem('profileData');
+      }
+    }
+
+    setLocalProfileData(profileData);
+  }, [profileData]);
+
+  const loadTrainingMasters = useCallback(async () => {
+    if (!sharedMastersReady) {
+      return null;
+    }
+
+    if (sharedMasterData) {
+      return sharedMasterData;
+    }
+
+    const payload = await fetchBulkMasters(["training_type", "country"]);
+    return mapBulkMasters(payload, {
+      training_types: "training_type",
+      countries: "country",
+    });
+  }, [sharedMasterData, sharedMastersReady]);
 
   
   // Button Handlers
@@ -227,32 +282,12 @@ const calculateDuration = (from, to) => {
   if (start > end) return "N/A"; // invalid range
 
   // Same day → exactly 1 day
-  if (start.toDateString() === end.toDateString()) {
-    return "1 day";
-  }
-  
-  // Calculate months
-  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-  if (end.getDate() < start.getDate()) {
-    months -= 1;
-  }
-  
-  if (months < 0) months = 0;
-  
-  if (months > 0) {
-    return months > 1 ? `${months} months` : `${months} month`;
-  }
-  
-  // Calculate days
-  const diffTime = end.getTime() - start.getTime();
-  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (days > 0) {
-    return days > 1 ? `${days} days` : `${days} day`;
-  }
-  
-  // Fallback (should rarely happen)
-  return "Less than a day";
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const inclusiveDays = Math.floor((endDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (inclusiveDays <= 0) return "N/A";
+  return inclusiveDays > 1 ? `${inclusiveDays} days` : "1 day";
 };
 
 // Helper function to normalize date to YYYY-MM-DD format
@@ -469,47 +504,22 @@ const mapSparkDataToTrainingDetails = useCallback(
 );
 
   useEffect(() => {
-    // Check sessionStorage first
-    const storedTrainings = sessionStorage.getItem('training_data');
-    if (storedTrainings) {
-      const parsedTrainings = JSON.parse(storedTrainings);
-      setTrainingList(
-        parsedTrainings.map((t) => ({
-          ...t,
-          documents: Array.isArray(t.documents)
-            ? t.documents.filter((id) => id)
-            : typeof t.documents === "string"
-            ? t.documents.split(",").filter((id) => id.trim())
-            : [],
-        }))
-      );
-
-      setLoading(false);
-      
-      // Still need to load master data if not already loaded
-      if (!hasFetched) {
-        loadMasterData();
-      }
-      return;
-    }
+    if (!sharedMastersReady) return;
   
-    if (!profileData || hasFetched) return;
+    if (!localProfileData || hasFetched) return;
 
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [typesRes, countriesRes] = await Promise.all([
-          axiosInstance.get("/masters/training_type-all"),
-          axiosInstance.get("/masters/country-all"),
-        ]);
+        const mappedMasters = await loadTrainingMasters();
 
-        const dbTrainings = profileData?.officer_data?.get_all_officer_info_by_user_id?.training_info || [];
-        const sparkData = profileData?.spark_data?.data || {};
-        const officerInfo = profileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+        const dbTrainings = localProfileData?.officer_data?.get_all_officer_info_by_user_id?.training_info || [];
+        const sparkData = localProfileData?.spark_data?.data || {};
+        const officerInfo = localProfileData?.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
 
         const newMasterData = {
-          training_types: typesRes.data.data.training_type || [],
-          countries: countriesRes.data.data.country || [],
+          training_types: mappedMasters.training_types || [],
+          countries: mappedMasters.countries || [],
         };
         setMasterData(newMasterData);
 
@@ -525,9 +535,6 @@ const mapSparkDataToTrainingDetails = useCallback(
         setTrainingList(sparkMappedDetails);
         setSparkFields(sparkKeys);
         setHasFetched(true);
-        
-        // Store initial data in sessionStorage
-        sessionStorage.setItem('training_data', JSON.stringify(sparkMappedDetails));
       } catch (error) {
         console.error("Error fetching data:", error);
         setError("Failed to load training data");
@@ -541,20 +548,14 @@ const mapSparkDataToTrainingDetails = useCallback(
     };
 
     fetchData();
-  }, [profileData, mapSparkDataToTrainingDetails, hasFetched]);
+  }, [localProfileData, mapSparkDataToTrainingDetails, hasFetched, loadTrainingMasters, sharedMastersReady]);
 
   // Helper function to load master data separately
   const loadMasterData = async () => {
-    try {
-      const [typesRes, countriesRes] = await Promise.all([
-        axiosInstance.get("/masters/training_type-all"),
-        axiosInstance.get("/masters/country-all"),
-      ]);
+    if (!sharedMastersReady) return;
 
-      const newMasterData = {
-        training_types: typesRes.data.data.training_type || [],
-        countries: countriesRes.data.data.country || [],
-      };
+    try {
+      const newMasterData = await loadTrainingMasters();
       setMasterData(newMasterData);
       setHasFetched(true);
     } catch (error) {
@@ -609,10 +610,6 @@ const mapSparkDataToTrainingDetails = useCallback(
       // Remove from local state only
       setTrainingList(prev => prev.filter(t => t.ais_tr_id !== trainingId));
       
-      // Update sessionStorage
-      const updatedTrainingList = trainingList.filter(t => t.ais_tr_id !== trainingId);
-      sessionStorage.setItem('training_data', JSON.stringify(updatedTrainingList));
-      
       toast.success("Training removed successfully", {
         className: "bg-primary-500 text-white",
         progressClassName: "bg-primary-200",
@@ -631,10 +628,13 @@ const mapSparkDataToTrainingDetails = useCallback(
       if (response.data.success) {
         // Remove from local state
         setTrainingList(prev => prev.filter(t => String(t.ais_tr_id) !== String(trainingId)));
-        
-        // Update sessionStorage
-        const updatedTrainingList = trainingList.filter(t => String(t.ais_tr_id) !== String(trainingId));
-        sessionStorage.setItem('training_data', JSON.stringify(updatedTrainingList));
+        const currentOfficerData =
+          localProfileData?.officer_data?.get_all_officer_info_by_user_id || {};
+        updateProfileTrainingInfo(
+          (currentOfficerData.training_info || []).filter(
+            (training) => String(training?.ais_tr_id) !== String(trainingId)
+          )
+        );
         
         toast.success("Training deleted successfully", {
           className: "bg-primary-500 text-white",
@@ -655,11 +655,16 @@ const mapSparkDataToTrainingDetails = useCallback(
       setTrainingToDelete(null);
     }
     
-  }, [isButtonDisabled, trainingList, trainingToDelete]);
+  }, [isButtonDisabled, trainingToDelete, localProfileData, updateProfileTrainingInfo]);
 
 
   const handleSave = useCallback(
     async (updatedData) => {
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setTimeout(() => {
+        saveInFlightRef.current = false;
+      }, 2500);
       try {
         const isSparkEntry =
           selectedTraining &&
@@ -707,11 +712,25 @@ const mapSparkDataToTrainingDetails = useCallback(
         documentIds = await Promise.all(documentPromises);
       }
 
-      const existingDocs = updatedData.user_data.documents
+      const hasDocumentsField = Object.prototype.hasOwnProperty.call(
+        updatedData.user_data || {},
+        "documents"
+      );
+      const existingDocs = hasDocumentsField
         ? (Array.isArray(updatedData.user_data.documents)
             ? updatedData.user_data.documents
-            : updatedData.user_data.documents.split(",").filter(Boolean))
-        : [];
+            : String(updatedData.user_data.documents || "")
+                .split(",")
+                .map((docId) => docId.trim())
+                .filter(Boolean))
+        : Array.isArray(selectedTraining?.documents)
+          ? selectedTraining.documents
+          : selectedTraining?.documents
+            ? String(selectedTraining.documents)
+                .split(",")
+                .map((docId) => docId.trim())
+                .filter(Boolean)
+            : [];
 
       const userDataWithDocuments = {
         // training_name: updatedData.user_data.training_name || null,
@@ -722,8 +741,11 @@ const mapSparkDataToTrainingDetails = useCallback(
         place: updatedData.user_data.place || null,
         training_from: updatedData.user_data.training_from || null,
         training_to: updatedData.user_data.training_to || null,
-        documents: [...existingDocs, ...documentIds],
       };
+
+      if (hasDocumentsField || documentIds.length > 0) {
+        userDataWithDocuments.documents = [...existingDocs, ...documentIds];
+      }
 
       const requestBody = {
         spark_data: updatedData.spark_data || null,
@@ -867,9 +889,6 @@ const mapSparkDataToTrainingDetails = useCallback(
             newTrainingList = [...prevData, updatedTrainingData];
           }
 
-          // Store updated training list in sessionStorage
-          sessionStorage.setItem('training_data', JSON.stringify(newTrainingList));
-          
           return newTrainingList;
         });
 
@@ -967,14 +986,10 @@ const mapSparkDataToTrainingDetails = useCallback(
           },
         };
 
-        console.log("Updated profile data:", updatedProfileData);
         
         // Update localProfileData and sessionStorage
-        setLocalProfileData(updatedProfileData);
-        sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+        updateProfileTrainingInfo(updatedTrainingInfo);
         
-        console.log("Updated profile data saved to sessionStorage:", 
-          JSON.parse(sessionStorage.getItem('profileData')));
 
         toast.success(
           isUpdate ? "Training updated successfully" : "Training added successfully",
@@ -1000,7 +1015,7 @@ const mapSparkDataToTrainingDetails = useCallback(
       });
     }
   },
-  [selectedTraining, profileData, localProfileData, setLocalProfileData]
+  [selectedTraining, profileData, localProfileData, updateProfileTrainingInfo]
 );
 
 
@@ -1445,21 +1460,6 @@ useEffect(() => {
                 : t
             )
           );
-          // Also update sessionStorage
-          const updated = trainingList.map((t) =>
-            String(t.ais_tr_id) === String(selectedTraining?.ais_tr_id)
-              ? {
-                  ...t,
-                  documents: Array.isArray(t.documents)
-                    ? t.documents.filter((id) => id !== docId)
-                    : t.documents
-                        ?.split(",")
-                        .filter((id) => id.trim() && id.trim() !== docId)
-                        .join(","),
-                }
-              : t
-          );
-          sessionStorage.setItem('training_data', JSON.stringify(updated));
         }}
       />
 

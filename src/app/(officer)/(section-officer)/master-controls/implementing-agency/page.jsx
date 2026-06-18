@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -45,9 +46,8 @@ export default function ImplementingAgencyList() {
   const fetchAgencies = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/agency-all`);
-      console.log("Fetched agencyList:", response.data.data);
-      setAgencyList(response.data.data || []);
+      const payload = await fetchBulkMasters(["agency"], { admin: true, includeInactive: true });
+      setAgencyList(payload.agency || []);
     } catch (error) {
       console.error("Error fetching Implementing Agencies:", error);
       toast.error("Failed to load implementing agencies.");
@@ -72,8 +72,6 @@ export default function ImplementingAgencyList() {
 
     try {
       const trimmedAgency = decodeHtml(AgencyData.agency).trim().toLowerCase();
-      console.log("Input agency:", trimmedAgency);
-      console.log("Current agencyList:", agencyList);
 
       // Check for existing agency
       const existing = agencyList.find(
@@ -82,7 +80,6 @@ export default function ImplementingAgencyList() {
 
       // Case: Agency exists and is deactivated
       if (existing && !existing.is_active && !AgencyData.agency_id) {
-        console.log("Found deactivated agency:", existing);
         setAgencyToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -130,7 +127,6 @@ export default function ImplementingAgencyList() {
           (agency) => decodeHtml(agency.agency).toLowerCase() === trimmedAgency
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated agency:", updatedExisting);
           setAgencyToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -196,7 +192,6 @@ export default function ImplementingAgencyList() {
 
   const handleReactivateClick = (agency_id) => {
     const agency = agencyList.find((a) => a.agency_id === agency_id);
-    console.log("Reactivating agency:", agency);
     setAgencyToReactivate(agency);
     setConfirmReactivateOpen(true);
   };

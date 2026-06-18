@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -45,9 +46,8 @@ export default function AdministrativeDepartmentList() {
   const fetchDepartments = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/administrative_department-all`);
-      console.log("Fetched departmentList:", response.data.data.departments);
-      setDepartmentList(response.data.data.departments);
+      const payload = await fetchBulkMasters(["administrative_department"], { admin: true, includeInactive: true });
+      setDepartmentList(payload.administrative_department || []);
     } catch (error) {
       console.error("Error fetching Administrative Departments:", error);
       toast.error("Failed to load administrative departments.");
@@ -72,8 +72,6 @@ export default function AdministrativeDepartmentList() {
 
     try {
       const trimmedDepartment = decodeHtml(DepartmentData.administrative_department).trim().toLowerCase();
-      console.log("Input department:", trimmedDepartment);
-      console.log("Current departmentList:", departmentList);
 
       // Check for existing department
       const existing = departmentList.find(
@@ -82,7 +80,6 @@ export default function AdministrativeDepartmentList() {
 
       // Case: Department exists and is deactivated
       if (existing && !existing.is_active && !DepartmentData.administrative_department_id) {
-        console.log("Found deactivated department:", existing);
         setDepartmentToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -130,7 +127,6 @@ export default function AdministrativeDepartmentList() {
           (dept) => decodeHtml(dept.administrative_department).toLowerCase() === trimmedDepartment
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated department:", updatedExisting);
           setDepartmentToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -196,7 +192,6 @@ export default function AdministrativeDepartmentList() {
 
   const handleReactivateClick = (administrative_department_id) => {
     const department = departmentList.find((d) => d.administrative_department_id === administrative_department_id);
-    console.log("Reactivating department:", department);
     setDepartmentToReactivate(department);
     setConfirmReactivateOpen(true);
   };

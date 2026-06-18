@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   PlusIcon,
@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import ConfirmModal from "@/app/components/confirmModal";
 import moment from 'moment';
+import { canEditErProfile, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
 // Helper function to safely format dates using moment.js – now in DD/MM/YYYY
 const formatDate = (dateString) => {
@@ -37,7 +38,10 @@ export function AwardsAndPublications({ profileData }) {
   const { updateSectionProgress } = useProfileCompletion();
   const [isModalOpen, setModalOpen] = useState(false);
   const [awardsList, setAwardsList] = useState([]);
+  const [localProfileData, setLocalProfileData] = useState(profileData);
   const [selectedAward, setSelectedAward] = useState(null);
+  const [isSavingAward, setIsSavingAward] = useState(false);
+  const saveInProgressRef = useRef(false);
   const [isDocumentModalOpen, setDocumentModalOpen] = useState(false);
   const [documentData, setDocumentData] = useState(null);
   const [loadingDocument, setLoadingDocument] = useState(false);
@@ -50,14 +54,35 @@ export function AwardsAndPublications({ profileData }) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [awardToDelete, setAwardToDelete] = useState(null);
   
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3';
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
   const [officerFields, setOfficerFields] = useState({
     GAD_OFFICER: [],
     AIS_OFFICER: [],
     DB_SPARK_API: [],
     UNKNOWN: [],
   });
+
+  const updateProfileRewards = useCallback((nextRewards) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            rewards: nextRewards,
+          },
+        },
+      };
+
+      sessionStorage.setItem("profileData", JSON.stringify(updatedProfileData));
+      return updatedProfileData;
+    });
+  }, [profileData]);
 
   const fields = [
     {
@@ -151,15 +176,29 @@ export function AwardsAndPublications({ profileData }) {
           reward_doc: "USER",
         };
 
-        for (const src in dbAward.fields) {
+        const dbFields =
+          dbAward?.fields && typeof dbAward.fields === "object" ? dbAward.fields : {};
+
+        for (const src of Object.keys(dbFields)) {
           const mappedSource = sourceMap[src] || "USER";
-          const sourceFields = dbAward.fields[src] || {};
+          const sourceFields = dbFields[src] || {};
           for (const key of fields.map((f) => f.key)) {
             if (sourceFields[key] && String(sourceFields[key]).trim()) {
               merged[key] = String(sourceFields[key]).trim();
               fieldSources[key] = mappedSource;
             }
           }
+        }
+
+        // Fallback: some API payloads may include flattened columns (e.g. `dbAward.rew_name`)
+        // even when per-source `fields` are missing or incomplete.
+        for (const key of fields.map((f) => f.key)) {
+          if (merged[key]) continue;
+          const v = dbAward?.[key];
+          if (v === null || v === undefined) continue;
+          const s = String(v).trim();
+          if (!s) continue;
+          merged[key] = s;
         }
 
         return {
@@ -179,25 +218,63 @@ export function AwardsAndPublications({ profileData }) {
       const matchedSparkIndices = new Set();
       const matchedDbIds = new Set();
 
-      dbAwardsList.forEach((dbAward) => {
-        const matchedIndex = tempSparkList.findIndex((sparkAward, sparkIndex) => {
-          const sparkName = String(sparkAward.rew_name || "").trim().toLowerCase();
-          const dbName = String(dbAward.rew_name || "").trim().toLowerCase();
+      const norm = (v) => String(v ?? "").trim().toLowerCase();
+      const buildKey = (name, from, desc) => `${norm(name)}|${norm(from)}|${norm(desc)}`;
 
-          const isMatch = sparkName == dbName;
-          if (isMatch) {
-            matchedSparkIndices.add(sparkIndex);
-            matchedDbIds.add(dbAward.ais_rew_id);
-            tempSparkList[sparkIndex].isSaved = true;
-            tempSparkList[sparkIndex].ais_rew_id = String(dbAward.ais_rew_id);
-            tempSparkList[sparkIndex].fieldSources = { ...tempSparkList[sparkIndex].fieldSources, ...dbAward.fieldSources };
-            tempSparkList[sparkIndex].received_on = dbAward.received_on;
-            tempSparkList[sparkIndex].reward_type = dbAward.reward_type;
-            tempSparkList[sparkIndex].reward_doc = dbAward.reward_doc;
-            tempSparkList[sparkIndex]._source = dbAward._source;
-          }
-          return isMatch;
-        });
+      // Prefer a strong key match (name+from+description) to handle duplicate names coming from SPARK.
+      const dbByStrongKey = new Map();
+      for (const dbAward of dbAwardsList) {
+        const key = buildKey(dbAward.rew_name, dbAward.rew_from, dbAward.rew_description);
+        if (!key || key === "||") continue;
+        if (!dbByStrongKey.has(key)) dbByStrongKey.set(key, []);
+        dbByStrongKey.get(key).push(dbAward);
+      }
+
+      const takeFirstUnused = (candidates) => {
+        if (!Array.isArray(candidates)) return null;
+        for (const c of candidates) {
+          if (!matchedDbIds.has(String(c.ais_rew_id))) return c;
+        }
+        return null;
+      };
+
+      tempSparkList.forEach((sparkAward, sparkIndex) => {
+        const strongKey = buildKey(sparkAward.rew_name, sparkAward.rew_from, sparkAward.rew_description);
+        let match = takeFirstUnused(dbByStrongKey.get(strongKey));
+
+        // Fallbacks (in case one field differs slightly): name+from, then name only.
+        if (!match) {
+          const sparkName = norm(sparkAward.rew_name);
+          const sparkFrom = norm(sparkAward.rew_from);
+          match =
+            dbAwardsList.find(
+              (dbAward) =>
+                !matchedDbIds.has(String(dbAward.ais_rew_id)) &&
+                norm(dbAward.rew_name) === sparkName &&
+                norm(dbAward.rew_from) === sparkFrom
+            ) ||
+            dbAwardsList.find(
+              (dbAward) =>
+                !matchedDbIds.has(String(dbAward.ais_rew_id)) &&
+                norm(dbAward.rew_name) === sparkName
+            ) ||
+            null;
+        }
+
+        if (!match) return;
+
+        matchedSparkIndices.add(sparkIndex);
+        matchedDbIds.add(String(match.ais_rew_id));
+        tempSparkList[sparkIndex].isSaved = true;
+        tempSparkList[sparkIndex].ais_rew_id = String(match.ais_rew_id);
+        tempSparkList[sparkIndex].fieldSources = {
+          ...tempSparkList[sparkIndex].fieldSources,
+          ...match.fieldSources,
+        };
+        tempSparkList[sparkIndex].received_on = match.received_on;
+        tempSparkList[sparkIndex].reward_type = match.reward_type;
+        tempSparkList[sparkIndex].reward_doc = match.reward_doc;
+        tempSparkList[sparkIndex]._source = match._source;
       });
 
       const finalDetails = [
@@ -222,27 +299,33 @@ export function AwardsAndPublications({ profileData }) {
   );
 
   useEffect(() => {
-    const storedAwards = sessionStorage.getItem('awards_and_publications');
-    
-    if (storedAwards) {
-      console.log("Loading awards from sessionStorage");
-      const parsedAwards = JSON.parse(storedAwards);
-      setAwardsList(parsedAwards);
-      setLoading(false);
-      return;
-    }
-    
     if (!profileData) return;
 
-    console.log("Processing awards from API data");
+    const storedProfileData = sessionStorage.getItem("profileData");
+    if (storedProfileData) {
+      try {
+        setLocalProfileData(JSON.parse(storedProfileData));
+        return;
+      } catch (e) {
+        console.warn("Invalid profileData cache in sessionStorage, clearing.", e);
+        sessionStorage.removeItem("profileData");
+      }
+    }
+
+    setLocalProfileData(profileData);
+  }, [profileData]);
+
+  useEffect(() => {
+    if (!localProfileData) return;
+
     const processAwardsData = async () => {
       setLoading(true);
       try {
-        const sparkData = profileData.spark_data?.data || {};
+        const sparkData = localProfileData.spark_data?.data || {};
         const officerInfo =
-          profileData.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+          localProfileData.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
         const dbAwards =
-          profileData.officer_data?.get_all_officer_info_by_user_id?.rewards || [];
+          localProfileData.officer_data?.get_all_officer_info_by_user_id?.rewards || [];
 
         const officerFieldsData = {
           GAD_OFFICER: officerInfo?.fields?.GAD_OFFICER
@@ -265,9 +348,28 @@ export function AwardsAndPublications({ profileData }) {
           dbAwards
         );
 
-        console.log("Mapped awards:", sparkMappedDetails);
-        
-        setAwardsList(sparkMappedDetails);
+        const buildDedupeKey = (award) => {
+          const id = award?.ais_rew_id;
+          if (id !== null && id !== undefined && String(id).trim() !== "") return `id:${String(id)}`;
+
+          const rewName = String(award?.rew_name || "").trim().toLowerCase();
+          const rewFrom = String(award?.rew_from || "").trim().toLowerCase();
+          const receivedOn = String(award?.received_on || "").trim();
+          const rewDesc = String(award?.rew_description || "").trim().toLowerCase();
+          return `f:${rewName}|${rewFrom}|${receivedOn}|${rewDesc}`;
+        };
+
+        const combined = [...sparkMappedDetails];
+        const seen = new Set();
+        const mergedAwards = [];
+        for (const award of combined) {
+          const key = buildDedupeKey(award);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          mergedAwards.push(award);
+        }
+
+        setAwardsList(mergedAwards);
         setSparkFields(sparkKeys);
         
       } catch (error) {
@@ -283,7 +385,7 @@ export function AwardsAndPublications({ profileData }) {
     };
 
     processAwardsData();
-  }, [profileData, mapSparkDataToAwards]);
+  }, [localProfileData, mapSparkDataToAwards]);
 
   const handleAdd = useCallback(() => {
     setSelectedAward({
@@ -331,7 +433,6 @@ export function AwardsAndPublications({ profileData }) {
       return;
     }
 
-    console.log("Delete award with ID:", awardId);
 
     setDeleteLoading(awardId);
     try {
@@ -341,7 +442,6 @@ export function AwardsAndPublications({ profileData }) {
           updatedList = prev.filter((q) => q.ais_rew_id !== awardId);
           return updatedList;
         });
-        sessionStorage.setItem('awards_and_publications', JSON.stringify(updatedList));
         toast.success("Award removed successfully", {
           className: "bg-primary-500 text-white",
           progressClassName: "bg-primary-200",
@@ -358,7 +458,14 @@ export function AwardsAndPublications({ profileData }) {
           return updatedList;
         });
 
-        sessionStorage.setItem('awards_and_publications', JSON.stringify(updatedList));
+        const currentProfileData = localProfileData || {};
+        const currentOfficerData =
+          currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+        updateProfileRewards(
+          (currentOfficerData.rewards || []).filter(
+            (award) => String(award?.ais_rew_id) !== String(awardId)
+          )
+        );
 
         toast.success("Award deleted Successfully", {
           className: "bg-primary-500 text-white",
@@ -378,7 +485,7 @@ export function AwardsAndPublications({ profileData }) {
       setIsDeleteModalOpen(false);
       setAwardToDelete(null);
     }
-  }, [isButtonDisabled, awardsList, awardToDelete]);
+  }, [isButtonDisabled, awardToDelete, localProfileData, updateProfileRewards]);
 
   const sourceMap = {
     DB_SPARK_API: "SPARK",
@@ -389,6 +496,9 @@ export function AwardsAndPublications({ profileData }) {
 
   const handleAddOrUpdate = useCallback(
     async (updatedData) => {
+      if (saveInProgressRef.current) return;
+      saveInProgressRef.current = true;
+      setIsSavingAward(true);
       try {
         const isSparkEntry =
           selectedAward &&
@@ -496,6 +606,7 @@ export function AwardsAndPublications({ profileData }) {
         if (response.data.success) {
           const savedAward = response.data.data.award_info || {};
           const isNewDoc = documentIds.length > 0;
+          const userSource = sessionStorage.getItem("role_id") === "3" ? "GAD_OFFICER" : "AIS_OFFICER";
 
           const originalFieldSources = selectedAward?.fieldSources || {};
           const updatedFieldSources = { ...originalFieldSources };
@@ -575,10 +686,94 @@ export function AwardsAndPublications({ profileData }) {
               newAwardsList = [...prevData, updatedAward];
             }
 
-            sessionStorage.setItem('awards_and_publications', JSON.stringify(newAwardsList));
-            
             return newAwardsList;
           });
+
+          const currentProfileData = localProfileData || {};
+          const currentOfficerData =
+            currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+          const currentRewards = currentOfficerData.rewards || [];
+          const existingRewardRecord = currentRewards.find(
+            (award) => String(award?.ais_rew_id) === String(savedAward.ais_rew_id || selectedAward?.ais_rew_id)
+          );
+          const userFieldPayload = Object.fromEntries(
+            Object.entries(userDataWithDocuments).filter(([, value]) => value !== null && value !== undefined)
+          );
+          const mergedSavedAward = {
+            ...(existingRewardRecord || {}),
+            ...savedAward,
+            ais_rew_id: savedAward.ais_rew_id,
+            user_id: profileData?.user_id || savedAward.user_id,
+            email: profileData?.email || savedAward.email,
+            first_name: currentOfficerData.officer_info?.[0]?.first_name || existingRewardRecord?.first_name || "",
+            last_name: currentOfficerData.officer_info?.[0]?.last_name || existingRewardRecord?.last_name || "",
+            rew_name: savedAward.rew_name || "",
+            reward_type: savedAward.reward_type || "",
+            rew_from: savedAward.rew_from || "",
+            received_on: savedAward.received_on || "",
+            rew_description: savedAward.rew_description || "",
+            reward_doc: savedAward.reward_doc || "",
+            fields: {
+              ...(existingRewardRecord?.fields || {}),
+              ...(requestBody.spark_data
+                ? {
+                    DB_SPARK_API: {
+                      ...(existingRewardRecord?.fields?.DB_SPARK_API || {}),
+                      ...requestBody.spark_data,
+                    },
+                  }
+                : {}),
+              ...(Object.keys(userFieldPayload).length
+                ? {
+                    [userSource]: {
+                      ...(existingRewardRecord?.fields?.[userSource] || {}),
+                      ...userFieldPayload,
+                    },
+                  }
+                : {}),
+              UNKNOWN: existingRewardRecord?.fields?.UNKNOWN || savedAward.fields?.UNKNOWN || {},
+            },
+          };
+          let updatedRewards = [...(currentOfficerData.rewards || [])];
+
+          if (isSparkEntry) {
+            const sparkAwardIndex = updatedRewards.findIndex((award) => {
+              const dbSparkFields = award?.fields?.DB_SPARK_API || {};
+              return (
+                String(dbSparkFields.nature || award?.rew_name || "").trim().toLowerCase() ===
+                  String(selectedAward?.rew_name || "").trim().toLowerCase() &&
+                String(
+                  dbSparkFields.office ||
+                    dbSparkFields.department ||
+                    award?.rew_from ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase() ===
+                  String(selectedAward?.rew_from || "").trim().toLowerCase() &&
+                String(dbSparkFields.purpose || award?.rew_description || "")
+                  .trim()
+                  .toLowerCase() ===
+                  String(selectedAward?.rew_description || "").trim().toLowerCase()
+              );
+            });
+
+            if (sparkAwardIndex !== -1) {
+              updatedRewards[sparkAwardIndex] = mergedSavedAward;
+            } else {
+              updatedRewards.push(mergedSavedAward);
+            }
+          } else if (isUpdate) {
+            updatedRewards = updatedRewards.map((award) =>
+              String(award?.ais_rew_id) === String(selectedAward?.ais_rew_id)
+                ? mergedSavedAward
+                : award
+            );
+          } else {
+            updatedRewards.push(mergedSavedAward);
+          }
+
+          updateProfileRewards(updatedRewards);
 
           setSparkFields((prev) => {
             const newSparkFields = new Set(prev);
@@ -631,9 +826,12 @@ export function AwardsAndPublications({ profileData }) {
           className: "bg-red-500 text-white",
           progressClassName: "bg-red-200",
         });
+      } finally {
+        saveInProgressRef.current = false;
+        setIsSavingAward(false);
       }
     },
-    [selectedAward, profileData, awardsList]
+    [selectedAward, profileData, awardsList, localProfileData, updateProfileRewards]
   );
 
   const openDocumentModal = useCallback(async (documentId) => {
@@ -933,14 +1131,7 @@ export function AwardsAndPublications({ profileData }) {
                         {field.display}
                       </p>
                       <p 
-                        className={`text-sm font-bold text-gray-900 dark:text-white break-words line-clamp-5`}
-                        // title={
-                        //   field.type === "file"
-                        //     ? renderDocumentButton(award[field.key], award.rew_name)
-                        //     : field.type === "date"
-                        //     ? field.getValue(award[field.key])
-                        //     : award[field.key] || "N/A"
-                        // }
+                        className={`text-sm font-bold text-gray-900 dark:text-white break-words ${field.key === 'rew_description' ? '' : 'line-clamp-5'}`}
                       >
                         {field.type === "file"
                           ? renderDocumentButton(award[field.key], award.rew_name)
@@ -1063,6 +1254,7 @@ export function AwardsAndPublications({ profileData }) {
             open={isModalOpen}
             setOpen={setModalOpen}
             save={handleAddOrUpdate}
+            saving={isSavingAward}
             awards={selectedAward}
             sparkFields={sparkFields}
             officerFields={officerFields}

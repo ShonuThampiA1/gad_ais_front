@@ -44,6 +44,19 @@ const initialFormData = {
 
 const disabledFields = ['age'];
 
+const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
+const isFutureDateValue = (value) => {
+  if (!value) return false;
+  return value > getTodayDateString();
+};
+
+const hasMeaningfulValue = (value) => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+};
+
 const resetAisVerification = ({
   setFormData,
   setIsVerified,
@@ -98,6 +111,28 @@ export function ModalDependentDetails({
     }
   };
 
+  const getUploadErrorMessage = (error, fallbackMessage) => {
+    const detail = error?.response?.data?.detail;
+
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail.join(' ');
+    }
+
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail.trim();
+    }
+
+    if (typeof error?.response?.data?.message === 'string' && error.response.data.message.trim()) {
+      return error.response.data.message.trim();
+    }
+
+    if (typeof error?.message === 'string' && error.message.trim()) {
+      return error.message.trim();
+    }
+
+    return fallbackMessage;
+  };
+
   const [formData, setFormData] = useState(initialFormData);
   const [childrenCount, setChildrenCount] = useState(0);
   const [isVerified, setIsVerified] = useState(false);
@@ -107,8 +142,9 @@ export function ModalDependentDetails({
   const [showDobVerification, setShowDobVerification] = useState(false);
   const [verificationDob, setVerificationDob] = useState('');
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [originalSparkData, setOriginalSparkData] = useState({});
-  const [profileStatus, setProfileStatus] = useState('');
+  const [nameMismatchWarning, setNameMismatchWarning] = useState('');
   const [deathCertificateFile, setDeathCertificateFile] = useState(null);
   const [marriageCertificateFile, setMarriageCertificateFile] = useState(null);
   const [divorceDocumentFile, setDivorceDocumentFile] = useState(null);
@@ -131,6 +167,7 @@ export function ModalDependentDetails({
   const [existingDeathCertificateId, setExistingDeathCertificateId] = useState(null);
   const [existingMarriageCertificateId, setExistingMarriageCertificateId] = useState(null);
   const [existingDivorceDocumentId, setExistingDivorceDocumentId] = useState(null);
+  const isEditing = Boolean(dependentDetails?.ais_fam_id);
   
   // New states for restrictions
   const [isRelationChangeRestricted, setIsRelationChangeRestricted] = useState(false);
@@ -225,23 +262,6 @@ export function ModalDependentDetails({
     const newErrors = {};
     
     // Debug log
-    console.log('Validating govt servant fields:', {
-      is_govt_servant: data.is_govt_servant,
-      is_ais_officer: data.is_ais_officer,
-      is_alive: data.is_alive,
-      relation_id: data.relation_id,
-      spouse_status: data.spouse_status,
-      category_id: data.category_id,
-      institution_id: data.institution_id,
-      institution_name: data.institution_name,
-      conditions: {
-        is_govt_servant: data.is_govt_servant === true,
-        is_ais_officer: data.is_ais_officer === false,
-        is_alive: data.is_alive !== false,
-        not_divorced_spouse: !(data.relation_id === '1' && data.spouse_status === 'divorced'),
-        not_deceased_spouse: !(data.relation_id === '1' && data.spouse_status === 'deceased')
-      }
-    });
     
     // Only validate if all conditions are met
     const shouldValidateGovtFields = 
@@ -251,7 +271,6 @@ export function ModalDependentDetails({
       !(data.relation_id === '1' && data.spouse_status === 'divorced')&& !(data.relation_id === '1' && data.spouse_status === 'deceased');
     
     if (!shouldValidateGovtFields) {
-      console.log("newErrors=1=",newErrors)
       return newErrors;
     }
     
@@ -292,7 +311,6 @@ export function ModalDependentDetails({
         }
       }
     }
-    console.log("newErrors==",newErrors)
     return newErrors;
   }, []);
 
@@ -437,6 +455,12 @@ export function ModalDependentDetails({
         delete newErrors.divorce_date;
         delete newErrors.sup_doc_for_remv;
       }
+    } else {
+      // Never keep spouse-only validation errors after switching to a non-spouse relation.
+      delete newErrors.death_date;
+      delete newErrors.death_certificate;
+      delete newErrors.divorce_date;
+      delete newErrors.sup_doc_for_remv;
     }
 
     // Child specific validation
@@ -526,15 +550,13 @@ export function ModalDependentDetails({
 
   // Update the useEffect to initialize document IDs and restrictions
   useEffect(() => {
-    const status = sessionStorage.getItem('profile_status');
-    setProfileStatus(status);
-
     if (open) {
       setIsVerified(false);
       setUserUpdatedFields(new Set());
       setShowDobVerification(false);
       setTempFetchedData(null);
       setVerificationDob('');
+      setNameMismatchWarning('');
       setErrors({}); // Clear all errors
       setOriginalSparkData({});
       setDeathCertificateFile(null);
@@ -584,12 +606,6 @@ setAvailableSpouses(allSpouses);
       );
       setExistingCurrentSpouse(currentSpouse);
 
-      console.log('Modal opening with dependentDetails:', dependentDetails);
-      console.log('Document IDs in dependent:', {
-        death_certificate: dependentDetails?.death_certificate,
-        marriage_certificate_proof: dependentDetails?.marriage_certificate_proof,
-        sup_doc_for_remv: dependentDetails?.sup_doc_for_remv
-      });
 
       if (dependentDetails && dependentDetails.ais_fam_id) {
         // Store original values for restriction checks
@@ -651,13 +667,6 @@ setAvailableSpouses(allSpouses);
         // Determine spouse status - use actual data from the dependent
         let spouse_status = originalSpouseStatusValue;
 
-        console.log('Determined spouse_status:', spouse_status, 'for dependent:', {
-          removing_reason: dependentDetails.removing_reason,
-          is_alive: dependentDetails.is_alive,
-          death_date: dependentDetails.death_date,
-          divorce_date: dependentDetails.divorce_date,
-          relation_id: dependentDetails.relation_id
-        });
 
         // For non-spouse deceased persons
         let is_alive = true;
@@ -687,11 +696,6 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
   const fatherId = dependentDetails.father_id ? dependentDetails.father_id.toString() : null;
   const motherId = dependentDetails.mother_id ? dependentDetails.mother_id.toString() : null;
   
-  console.log('Child parent IDs (string):', {
-    father_id: fatherId,
-    mother_id: motherId,
-    availableSpouses: allSpouses.map(s => s.ais_fam_id?.toString())
-  });
   
   // Check if father_id exists in availableSpouses (compare as strings)
   if (fatherId) {
@@ -700,7 +704,6 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
     );
     if (fatherSpouse) {
       spouse_id = fatherId;
-      console.log('Found father as spouse:', fatherSpouse);
     }
   }
   
@@ -711,7 +714,6 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
     );
     if (motherSpouse) {
       spouse_id = motherId;
-      console.log('Found mother as spouse:', motherSpouse);
     }
   }
   
@@ -720,8 +722,15 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
     spouse_id = dependentDetails.spouse_id.toString();
   }
   
-  console.log('Final spouse_id for child:', spouse_id);
 }
+
+        const normalizedSourceMap = { ...(dependentDetails.sourceMap || {}) };
+        if (
+          (normalizedSourceMap.last_name === 'DB_SPARK_API' || normalizedSourceMap.last_name === 'SPARK') &&
+          !hasMeaningfulValue(dependentDetails.last_name)
+        ) {
+          delete normalizedSourceMap.last_name;
+        }
 
         const updatedForm = {
   ...initialFormData,
@@ -733,7 +742,7 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
   spouse_id: spouse_id, // Use the determined spouse_id
   verifiedFields,
   relation_id: dependentDetails.relation_id?.toString() || '',
-  sourceMap: dependentDetails.sourceMap || {},
+  sourceMap: normalizedSourceMap,
   is_alive: is_alive,
   death_date: dependentDetails.death_date || '',
   death_certificate: dependentDetails.death_certificate || null,
@@ -748,7 +757,6 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
   showChildFields: relationId === masterData.relationship?.find(r => r.rel_status_name === 'Child')?.rel_status_id,
 };
 
-        console.log('Updated form data for edit:', updatedForm);
 
         // Auto-set gender based on child type if not set
         if (updatedForm.relation_id === '2' && updatedForm.child_type && !updatedForm.gender_id) {
@@ -759,13 +767,19 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           }
         }
 
-        const sparkKeys = Object.keys(dependentDetails.sourceMap || {}).filter(
-          k => dependentDetails.sourceMap[k] === 'DB_SPARK_API' || dependentDetails.sourceMap[k] === 'SPARK'
+        const sparkKeys = Object.keys(normalizedSourceMap).filter(
+          k => normalizedSourceMap[k] === 'DB_SPARK_API' || normalizedSourceMap[k] === 'SPARK'
         );
         setSparkFields(new Set(sparkKeys));
 
         if (isFromSpark) {
-          setSparkFields(prev => new Set([...prev, 'first_name', 'last_name', 'relation_id']));
+          setSparkFields(prev => {
+            const next = new Set(prev);
+            next.add('relation_id');
+            if (hasMeaningfulValue(dependentDetails.first_name)) next.add('first_name');
+            if (hasMeaningfulValue(dependentDetails.last_name)) next.add('last_name');
+            return next;
+          });
           setUserUpdatedFields(new Set(['relation_id']));
         }
 
@@ -798,25 +812,30 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
         setFormData(updatedForm);
         setIsVerified(dependentDetails.is_ais_officer && dependentDetails.user_id);
       } else {
-        console.log('Setting initial form data for new dependent');
         setFormData({
           ...initialFormData,
           // Set initial children count
           showChildFields: false,
         });
+        setNameMismatchWarning('');
         setSparkFields(new Set());
         const children = dependentDetailsList?.filter(dep => {
           const relName = getMasterValue(dep.relation_id, 'relation_id');
           return relName === 'Child';
         }) || [];
         setChildrenCount(children.length);
-        console.log('Children count:', children.length);
       }
       
       // Reset the ref when modal opens
       hasCheckedSpouseRef.current = false;
     }
   }, [open, dependentDetails, dependentDetailsList, masterData.institution, masterData.relationship, checkSpouseLinkedToChild]);
+
+  useEffect(() => {
+    if (!open) {
+      setNameMismatchWarning('');
+    }
+  }, [open]);
 
   const calculateAge = (dob, referenceDate) => {
     const birthDate = new Date(dob);
@@ -915,10 +934,11 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
       toast.success('Death certificate uploaded successfully');
     } catch (error) {
       console.error('Death cert upload error:', error);
-      showToastOnce('error', 'Failed to upload death certificate', 'dep-death-upload-failed');
+      const uploadErrorMessage = getUploadErrorMessage(error, 'Failed to upload death certificate');
+      showToastOnce('error', uploadErrorMessage, 'dep-death-upload-failed');
       setDeathCertificateFile(null);
       setUploadFailures(prev => ({ ...prev, death_certificate: true }));
-      setUploadFailureMessages(prev => ({ ...prev, death_certificate: 'Upload failed. Please re-upload to continue.' }));
+      setUploadFailureMessages(prev => ({ ...prev, death_certificate: uploadErrorMessage }));
       setFormData(prev => ({ ...prev, death_certificate: null }));
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -964,10 +984,11 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
       toast.success('Divorce document uploaded successfully');
     } catch (error) {
       console.error('Divorce doc upload error:', error);
-      showToastOnce('error', 'Failed to upload divorce document', 'dep-divorce-upload-failed');
+      const uploadErrorMessage = getUploadErrorMessage(error, 'Failed to upload divorce document');
+      showToastOnce('error', uploadErrorMessage, 'dep-divorce-upload-failed');
       setDivorceDocumentFile(null);
       setUploadFailures(prev => ({ ...prev, sup_doc_for_remv: true }));
-      setUploadFailureMessages(prev => ({ ...prev, sup_doc_for_remv: 'Upload failed. Please re-upload to continue.' }));
+      setUploadFailureMessages(prev => ({ ...prev, sup_doc_for_remv: uploadErrorMessage }));
       setFormData(prev => ({ ...prev, sup_doc_for_remv: null }));
       if (divorceDocInputRef.current) {
         divorceDocInputRef.current.value = '';
@@ -1006,10 +1027,11 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
       toast.success('Marriage certificate uploaded successfully');
     } catch (error) {
       console.error('Marriage cert upload error:', error);
-      showToastOnce('error', 'Failed to upload marriage certificate', 'dep-marriage-upload-failed');
+      const uploadErrorMessage = getUploadErrorMessage(error, 'Failed to upload marriage certificate');
+      showToastOnce('error', uploadErrorMessage, 'dep-marriage-upload-failed');
       setMarriageCertificateFile(null);
       setUploadFailures(prev => ({ ...prev, marriage_certificate_proof: true }));
-      setUploadFailureMessages(prev => ({ ...prev, marriage_certificate_proof: 'Upload failed. Please re-upload to continue.' }));
+      setUploadFailureMessages(prev => ({ ...prev, marriage_certificate_proof: uploadErrorMessage }));
       setFormData(prev => ({ ...prev, marriage_certificate_proof: null }));
       if (marriageCertInputRef.current) {
         marriageCertInputRef.current.value = '';
@@ -1054,19 +1076,23 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
 
   const handleChange = e => {
     const { name, value, type } = e.target;
+    const normalizedValue =
+      name === 'mobile_number'
+        ? value.replace(/\D/g, '').slice(0, 10)
+        : value;
     
     // Check for relation change restriction
     if (name === 'relation_id') {
-      const isRestricted = checkRelationChangeRestriction(value, originalRelationId);
+      const isRestricted = checkRelationChangeRestriction(normalizedValue, originalRelationId);
       if (isRestricted) {
-        toast.error('Cannot change relation type for an existing dependent. Please remove this and add as new.');
+        showToastOnce('error', 'Cannot change relation type for an existing dependent. Please remove this and add as new.', 'dep-relation-change-restricted');
         return;
       }
       const isNewDependent = !dependentDetails?.ais_fam_id && !formData?.ais_fam_id;
       const hasUnsavedSparkInSameRelation = isNewDependent && dependentDetailsList.some((dep) => {
         const depId = dep?.ais_fam_id?.toString?.() || '';
         const depRelationId = dep?.relation_id?.toString?.() || '';
-        return depId.startsWith('spark_') && depRelationId === (value?.toString?.() || '');
+        return depId.startsWith('spark_') && depRelationId === (normalizedValue?.toString?.() || '');
       });
       if (hasUnsavedSparkInSameRelation) {
         showToastOnce('warn', 'Please save the SPARK details first, otherwise details may be overwritten and mismatched.', 'dep-spark-save-first');
@@ -1076,9 +1102,9 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
     
     // Check for spouse status change restriction
     if (name === 'spouse_status') {
-      const isRestricted = checkSpouseStatusChangeRestriction(value, originalSpouseStatus);
+      const isRestricted = checkSpouseStatusChangeRestriction(normalizedValue, originalSpouseStatus);
       if (isRestricted) {
-        toast.error('Cannot change deceased spouse to other status.');
+        showToastOnce('error', 'Cannot change deceased spouse to other status.', 'dep-deceased-spouse-status-restricted');
         return;
       }
       setIsSpouseStatusChangeRestricted(false);
@@ -1087,18 +1113,32 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
     setFormData(prevState => {
       let updatedData = {
         ...prevState,
-        [name]: type === 'radio' ? (value === 'true') : value,
+        [name]: type === 'radio' ? (normalizedValue === 'true') : normalizedValue,
       };
       setUserUpdatedFields(prev => new Set([...prev, name]));
 
+      if (
+        name === 'last_name' &&
+        !hasMeaningfulValue(originalSparkData.last_name)
+      ) {
+        setSparkFields(prev => {
+          const next = new Set(prev);
+          next.delete('last_name');
+          return next;
+        });
+        updatedData.sourceMap = {
+          ...(prevState.sourceMap || {}),
+          last_name: 'AIS_OFFICER',
+        };
+      }
+
       if (name === 'relation_id') {
-        const relName = masterData.relationship.find(r => r.rel_status_id === Number(value))?.rel_status_name;
-        console.log('Relation changed to:', relName, 'value:', value);
+        const relName = masterData.relationship.find(r => r.rel_status_id === Number(normalizedValue))?.rel_status_name;
         
         // Initialize updatedData first
         updatedData = {
           ...updatedData,
-          relation_id: value,
+          relation_id: normalizedValue,
         };
         
         if (relName === 'Spouse') {
@@ -1131,7 +1171,7 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
               
               // Show toast once after state update
               setTimeout(() => {
-                toast.info('A current spouse already exists. You can add this as a divorced spouse.');
+                showToastOnce('info', 'A current spouse already exists. You can add this as a divorced/deceased spouse.', 'dep-current-spouse-exists');
               }, 0);
             } else {
               // No current spouse exists, set to current
@@ -1154,7 +1194,16 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData = {
             ...updatedData,
             spouse_status: undefined,
+            divorce_date: '',
+            sup_doc_for_remv: null,
+            death_date: '',
+            death_certificate: null,
+            marriage_certificate_proof: null,
+            removing_reason: '0',
           };
+          setDeathCertificateFile(null);
+          setDivorceDocumentFile(null);
+          setMarriageCertificateFile(null);
         }
         
         if (relName === 'Child') {
@@ -1188,10 +1237,40 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData.child_type = '';
           updatedData.spouse_id = '';
         }
+
+        // Clear stale validation/upload state from the previous relation mode so hidden
+        // spouse-only or child-only errors do not keep Save disabled.
+        setErrors(prev => {
+          const next = { ...prev };
+          [
+            'death_date',
+            'death_certificate',
+            'divorce_date',
+            'sup_doc_for_remv',
+            'child_type',
+            'spouse_id',
+            'category_id',
+            'institution_id',
+            'institution_name',
+            'dob',
+            'email_id',
+            'mobile_number',
+          ].forEach((field) => delete next[field]);
+          return next;
+        });
+        setUploadFailures({
+          death_certificate: false,
+          sup_doc_for_remv: false,
+          marriage_certificate_proof: false,
+        });
+        setUploadFailureMessages({
+          death_certificate: '',
+          sup_doc_for_remv: '',
+          marriage_certificate_proof: '',
+        });
       }
 
       if (name === 'child_type') {
-        console.log('Child type changed to:', value);
         if (formData.relation_id === '2') {
           if (value === '1' || value === '3') {
             updatedData.gender_id = '1';
@@ -1204,7 +1283,6 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
       }
 
       if (name === 'spouse_status') {
-        console.log('Spouse status changed to:', value);
         updatedData.spouse_status = value;
         if (value === 'divorced') {
           updatedData.is_alive = true;
@@ -1212,6 +1290,7 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData.death_date = '';
           updatedData.death_certificate = null;
           setDeathCertificateFile(null);
+          setExistingDeathCertificateId(null);
           // Clear govt servant fields for divorced spouse
           updatedData.is_govt_servant = false;
           updatedData.is_ais_officer = false;
@@ -1220,12 +1299,19 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData.institution_name = '';
           setUploadFailures(prev => ({ ...prev, death_certificate: false }));
           setUploadFailureMessages(prev => ({ ...prev, death_certificate: '' }));
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.death_date;
+            delete newErrors.death_certificate;
+            return newErrors;
+          });
         } else if (value === 'deceased') {
           updatedData.is_alive = false;
           updatedData.removing_reason = '2';
           updatedData.divorce_date = '';
           updatedData.sup_doc_for_remv = null;
           setDivorceDocumentFile(null);
+          setExistingDivorceDocumentId(null);
 
           updatedData.is_govt_servant = false;
           updatedData.is_ais_officer = false;
@@ -1234,6 +1320,12 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData.institution_name = '';
           setUploadFailures(prev => ({ ...prev, sup_doc_for_remv: false }));
           setUploadFailureMessages(prev => ({ ...prev, sup_doc_for_remv: '' }));
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.divorce_date;
+            delete newErrors.sup_doc_for_remv;
+            return newErrors;
+          });
         } else {
           updatedData.is_alive = true;
           updatedData.removing_reason = '0';
@@ -1243,6 +1335,8 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
           updatedData.death_certificate = null;
           setDeathCertificateFile(null);
           setDivorceDocumentFile(null);
+          setExistingDeathCertificateId(null);
+          setExistingDivorceDocumentId(null);
           setUploadFailures(prev => ({
             ...prev,
             death_certificate: false,
@@ -1253,6 +1347,34 @@ if (dependentDetails && isSpouse === false && relationId === masterData.relation
             death_certificate: '',
             sup_doc_for_remv: '',
           }));
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.death_date;
+            delete newErrors.death_certificate;
+            delete newErrors.divorce_date;
+            delete newErrors.sup_doc_for_remv;
+            return newErrors;
+          });
+        }
+      }
+
+      if (name === 'is_alive') {
+        const isAliveValue = value === 'true';
+        updatedData.is_alive = isAliveValue;
+
+        if (isAliveValue) {
+          updatedData.death_date = '';
+          updatedData.death_certificate = null;
+          setDeathCertificateFile(null);
+          setExistingDeathCertificateId(null);
+          setUploadFailures(prev => ({ ...prev, death_certificate: false }));
+          setUploadFailureMessages(prev => ({ ...prev, death_certificate: '' }));
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.death_date;
+            delete newErrors.death_certificate;
+            return newErrors;
+          });
         }
       }
 
@@ -1365,25 +1487,27 @@ if (name === 'institution_name') {
 
       // Add error clearing for death date
       if (name === 'death_date') {
-        // Clear death date error when user enters a value
-        if (errors.death_date) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          if (isFutureDateValue(value)) {
+            newErrors.death_date = 'Date Of Death cannot be a future date.';
+          } else {
             delete newErrors.death_date;
-            return newErrors;
-          });
-        }
+          }
+          return newErrors;
+        });
       }
 
       if (name === 'divorce_date') {
-        // Clear divorce date error when user enters a value
-        if (errors.divorce_date) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          if (isFutureDateValue(value)) {
+            newErrors.divorce_date = 'Divorce Date cannot be a future date.';
+          } else {
             delete newErrors.divorce_date;
-            return newErrors;
-          });
-        }
+          }
+          return newErrors;
+        });
       }
 
       if (name === 'gender_id') {
@@ -1457,6 +1581,33 @@ if (name === 'institution_name') {
       return;
     }
     if (verificationDob === tempFetchedData.dob) {
+      const normalizedSparkFirstName = (originalSparkData.first_name || '').trim().toLowerCase();
+      const normalizedSparkLastName = (originalSparkData.last_name || '').trim().toLowerCase();
+      const normalizedFetchedFirstName = (tempFetchedData.first_name || '').trim().toLowerCase();
+      const normalizedFetchedLastName = (tempFetchedData.last_name || '').trim().toLowerCase();
+      const hasSparkName =
+        Boolean(normalizedSparkFirstName) || Boolean(normalizedSparkLastName);
+      const fetchedNameDiffersFromSpark =
+        hasSparkName &&
+        (
+          normalizedSparkFirstName !== normalizedFetchedFirstName ||
+          normalizedSparkLastName !== normalizedFetchedLastName
+        );
+      const sparkFullName = [originalSparkData.first_name, originalSparkData.last_name]
+        .filter((value) => value && value.toString().trim())
+        .join(' ')
+        .trim();
+      const fetchedFullName = [tempFetchedData.first_name, tempFetchedData.last_name]
+        .filter((value) => value && value.toString().trim())
+        .join(' ')
+        .trim();
+
+      const hasFirstName = Boolean(tempFetchedData.first_name?.toString().trim());
+      const hasGender = Boolean(
+        tempFetchedData.gender_id &&
+        tempFetchedData.gender_id.toString().trim() !== '' &&
+        tempFetchedData.gender_id.toString().trim() !== '0'
+      );
       const verified = new Set(['first_name', 'last_name', 'dob', 'email_id', 'mobile_number', 'gender_id']);
       setFormData(prev => ({
         ...prev,
@@ -1476,7 +1627,24 @@ if (name === 'institution_name') {
       setShowDobVerification(false);
       setVerificationDob('');
       setTempFetchedData(null);
-      toast.success('DOB verified. Details populated successfully!');
+      if (fetchedNameDiffersFromSpark) {
+        const warningMessage = `Fetched name differs from SPARK name. SPARK: ${sparkFullName || 'Not available'}. Fetched: ${fetchedFullName || 'Not available'}. If the names differ, please correct them either in SPARK or in our system to identify the person accurately.`;
+        setNameMismatchWarning(warningMessage);
+        toast.warn(warningMessage);
+      } else {
+        setNameMismatchWarning('');
+      }
+      if (!hasFirstName || !hasGender) {
+        const missingFields = [];
+        if (!hasFirstName) missingFields.push('first name');
+        if (!hasGender) missingFields.push('gender');
+
+        toast.warn(
+          `${missingFields.join(' and ')} details are not available in our system. Please inform the other officer to update their personal details. After that, the details will be auto-populated here properly.`
+        );
+      } else {
+        toast.success('DOB verified. Details fetched successfully!');
+      }
     } else {
       toast.error('DOB does not match. Please try again or enter manually.');
       setVerificationDob('');
@@ -1507,6 +1675,7 @@ if (name === 'institution_name') {
     setShowDobVerification(false);
     setTempFetchedData(null);
     setVerificationDob('');
+    setNameMismatchWarning('');
   };
 
   const getMasterValue = (id, key) => {
@@ -1514,6 +1683,15 @@ if (name === 'institution_name') {
     if (key === 'relation_id') {
       const match = masterData.relationship.find((rel) => rel.rel_status_id === Number(id));
       return match ? match.rel_status_name : 'Not Specified';
+    }
+    if (key === 'child_type') {
+      const childTypeMap = {
+        1: 'Son',
+        2: 'Daughter',
+        3: 'Step Son',
+        4: 'Step Daughter',
+      };
+      return childTypeMap[Number(id)] || 'Not Specified';
     }
     return 'Not Specified';
 
@@ -1545,6 +1723,8 @@ if (name === 'institution_name') {
     // Only Date of Death and Death Certificate are required for deceased persons
     if (!formData.death_date) {
       newErrors.death_date = 'Date Of Death is required for deceased persons.';
+    } else if (isFutureDateValue(formData.death_date)) {
+      newErrors.death_date = 'Date Of Death cannot be a future date.';
     }
     if (!formData.death_certificate && !existingDeathCertificateId) {
       newErrors.death_certificate = 'Death certificate is required for deceased persons.';
@@ -1566,6 +1746,8 @@ if (name === 'institution_name') {
     if (formData.spouse_status === 'deceased') {
       if (!formData.death_date) {
         newErrors.death_date = 'Date Of Death is required for deceased spouse.';
+      } else if (isFutureDateValue(formData.death_date)) {
+        newErrors.death_date = 'Date Of Death cannot be a future date.';
       }
       if (!formData.death_certificate && !existingDeathCertificateId) {
         newErrors.death_certificate = 'Death certificate is required for deceased spouse.';
@@ -1574,6 +1756,8 @@ if (name === 'institution_name') {
     } else if (formData.spouse_status === 'divorced') {
       if (!formData.divorce_date) {
         newErrors.divorce_date = 'Divorce date is required for divorced spouse.';
+      } else if (isFutureDateValue(formData.divorce_date)) {
+        newErrors.divorce_date = 'Divorce Date cannot be a future date.';
       }
       if (!formData.sup_doc_for_remv && !existingDivorceDocumentId) {
         newErrors.sup_doc_for_remv = 'Divorce document is required for divorced spouse.';
@@ -1591,7 +1775,7 @@ if (name === 'institution_name') {
       newErrors.spouse_id = 'Please select spouse for child.';
     }
     if (availableSpouses.length === 0) {
-      toast.error('Please add and save a spouse first before adding child.');
+      showToastOnce('error', 'Please add and save a spouse first before adding child.', 'dep-spouse-required-for-child');
       return false;
     }
   }
@@ -1602,6 +1786,14 @@ if (name === 'institution_name') {
     if (dobError) newErrors.dob = dobError;
   } else if (isDobRequiredForCurrentForm(formData)) {
     newErrors.dob = 'Date of Birth is required.';
+  }
+
+  // Mobile validation if user entered any value
+  if (formData.mobile_number && formData.mobile_number.toString().trim() !== '') {
+    const mobileError = validateMobileNumber(formData.mobile_number.toString());
+    if (mobileError) {
+      newErrors.mobile_number = mobileError;
+    }
   }
 
   // Validate govt servant fields
@@ -1616,6 +1808,17 @@ if (name === 'institution_name') {
   if (hasErrors) {
     // Update errors state
     setErrors(newErrors);
+    const firstKey = Object.keys(newErrors).find((key) => newErrors[key]);
+    if (firstKey && typeof document !== 'undefined') {
+      window.setTimeout(() => {
+        const target =
+          document.querySelector(`[name="${firstKey}"]`) ||
+          document.querySelector(`[data-field="${firstKey}"]`) ||
+          document.getElementById(firstKey);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target?.focus?.();
+      }, 0);
+    }
     return false;
   }
   
@@ -1624,6 +1827,7 @@ if (name === 'institution_name') {
  
  const handleSubmit = async e => {
   e.preventDefault();
+  if (isSubmitting) return;
 
   if (isUploading) {
     showToastOnce('warn', 'Please wait for document upload to complete', 'dep-upload-in-progress');
@@ -1645,42 +1849,83 @@ if (name === 'institution_name') {
     showToastOnce('warn', 'Please save the SPARK details first, otherwise details may be overwritten and mismatched.', 'dep-spark-save-first');
     return;
   }
+
+  const currentRelationName = getMasterValue(formData.relation_id, 'relation_id');
+  const currentRecordId = dependentDetails?.ais_fam_id?.toString?.() || formData?.ais_fam_id?.toString?.() || '';
+  const isCurrentSpouseForm = currentRelationName === 'Spouse' && formData.spouse_status === 'current';
+  const isRestrictedSingleRelation = currentRelationName === 'Father' || currentRelationName === 'Mother';
+
+  const hasSavedDuplicateRestrictedRelation = dependentDetailsList.some((dep) => {
+    const depId = dep?.ais_fam_id?.toString?.() || '';
+    if (!depId || depId.startsWith('spark_') || depId === currentRecordId) {
+      return false;
+    }
+
+    const depRelationName = getMasterValue(dep.relation_id, 'relation_id');
+
+    if (isRestrictedSingleRelation) {
+      return depRelationName === currentRelationName;
+    }
+
+    if (isCurrentSpouseForm && depRelationName === 'Spouse') {
+      const depIsDivorced = dep.removing_reason === '1' || dep.removing_reason === 1 || Boolean(dep.divorce_date) || Boolean(dep.sup_doc_for_remv);
+      const depIsDeceased =
+        dep.is_alive === false ||
+        dep.is_alive === 'false' ||
+        dep.is_alive === 'False' ||
+        Boolean(dep.death_date) ||
+        Boolean(dep.death_certificate);
+
+      return !depIsDivorced && !depIsDeceased;
+    }
+
+    return false;
+  });
+
+  if (hasSavedDuplicateRestrictedRelation) {
+    if (currentRelationName === 'Father' || currentRelationName === 'Mother') {
+      showToastOnce('error', `A saved ${currentRelationName.toLowerCase()} already exists. Duplicate entries are not allowed.`, `dep-duplicate-${currentRelationName.toLowerCase()}`);
+    } else if (isCurrentSpouseForm) {
+      showToastOnce('error', 'A saved current spouse already exists. Duplicate current spouse entries are not allowed.', 'dep-duplicate-current-spouse');
+    }
+    return;
+  }
   
   // Check for restriction violations before submission
   if (dependentDetails?.ais_fam_id && !dependentDetails.ais_fam_id.toString().startsWith('spark_')) {
     // Check relation change restriction
     if (formData.relation_id !== originalRelationId) {
-      toast.error('Cannot change relation type for an existing dependent. Please remove this and add as new.');
+      showToastOnce('error', 'Cannot change relation type for an existing dependent. Please remove this and add as new.', 'dep-relation-change-restricted');
       return;
     }
     
     // Check spouse status change restriction
     if (originalSpouseStatus === 'deceased' && formData.spouse_status !== originalSpouseStatus) {
-      toast.error('Cannot change deceased spouse to other status.');
+      showToastOnce('error', 'Cannot change deceased spouse to other status.', 'dep-deceased-spouse-status-restricted');
       return;
     }
   }
   
-  console.log('Form validation errors:', errors);
-  console.log('Form data for deceased spouse:', {
-    relation_id: formData.relation_id,
-    spouse_status: formData.spouse_status,
-    is_alive: formData.is_alive,
-    death_date: formData.death_date,
-    death_certificate: formData.death_certificate,
-    existingDeathCertificateId
-  });
   if (!validateMandatory()) {
-    console.log('validateMandatory returned false');
-    toast.error('Please fill all required fields.');
+    showToastOnce('error', 'Please fill all required fields.', 'dep-fill-required-fields');
     return;
   }
 
   // Check if there are any validation errors in the current state
   const hasErrors = Object.values(errors).some(err => err && err !== '');
   if (hasErrors) {
-      console.log('Current errors found:', errors);
-    toast.error('Please fix the errors before saving.');
+    const firstKey = Object.keys(errors).find((key) => errors[key]);
+    if (firstKey && typeof document !== 'undefined') {
+      window.setTimeout(() => {
+        const target =
+          document.querySelector(`[name="${firstKey}"]`) ||
+          document.querySelector(`[data-field="${firstKey}"]`) ||
+          document.getElementById(firstKey);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target?.focus?.();
+      }, 0);
+    }
+    showToastOnce('error', 'Please fix the errors before saving.', 'dep-fix-errors-before-save');
     return;
   }
 
@@ -1887,42 +2132,61 @@ if (name === 'institution_name') {
 
   // ========== CHILD UPDATE HANDLING ==========
   if (formData.relation_id === '2' && formData.spouse_id) {
-    console.log('Processing child update with spouse_id:', formData.spouse_id);
-    console.log('Existing parent IDs:', {
-      father_id: dependentDetails?.father_id,
-      mother_id: dependentDetails?.mother_id
-    });
     
     const newSpouseId = parseInt(formData.spouse_id);
+    const isEditingChild = Boolean(dependentDetails?.ais_fam_id);
+    let assignedParentSlots = false;
+    const spousePersonIds = new Set(
+      availableSpouses.map((spouse) => spouse?.ais_fam_id?.toString()).filter(Boolean)
+    );
+    const existingFatherId = dependentDetails?.father_id?.toString();
+    const existingMotherId = dependentDetails?.mother_id?.toString();
+    const fatherLooksLikeSpouse = existingFatherId ? spousePersonIds.has(existingFatherId) : false;
+    const motherLooksLikeSpouse = existingMotherId ? spousePersonIds.has(existingMotherId) : false;
     
     // Find the selected spouse in availableSpouses to get their gender
     const selectedSpouse = availableSpouses.find(s => 
       s.ais_fam_id?.toString() === formData.spouse_id?.toString()
     );
+
+    if (isEditingChild && existingFatherId && existingMotherId) {
+      if (!fatherLooksLikeSpouse && motherLooksLikeSpouse) {
+        user_data.father_id = parseInt(existingFatherId);
+        user_data.mother_id = newSpouseId;
+        assignedParentSlots = true;
+      } else if (fatherLooksLikeSpouse && !motherLooksLikeSpouse) {
+        user_data.father_id = newSpouseId;
+        user_data.mother_id = parseInt(existingMotherId);
+        assignedParentSlots = true;
+      }
+    }
     
-    if (selectedSpouse) {
+    if (!assignedParentSlots && selectedSpouse) {
       const spouseGender = selectedSpouse.gender_id;
+
+      if (spouseGender === null || spouseGender === undefined || spouseGender === '') {
+        showToastOnce('error', 'Gender must be saved for both parents before assigning them to a child.', 'dep-parent-gender-required');
+        return;
+      }
       
       // Determine if we're updating father or mother based on spouse gender
       if (spouseGender === '1' || spouseGender === 1) {
         // Selected spouse is MALE, so we're updating the FATHER
         user_data.father_id = newSpouseId;
-        console.log('Updating father_id to:', newSpouseId, '(spouse is male)');
+        assignedParentSlots = true;
         
         // Keep the existing mother_id if we have it
         if (dependentDetails?.mother_id) {
           user_data.mother_id = parseInt(dependentDetails.mother_id);
-          console.log('Keeping existing mother_id:', dependentDetails.mother_id);
         }
       } else if (spouseGender === '2' || spouseGender === 2) {
         // Selected spouse is FEMALE, so we're updating the MOTHER
         user_data.mother_id = newSpouseId;
-        console.log('Updating mother_id to:', newSpouseId, '(spouse is female)');
+        assignedParentSlots = true;
         
         // Keep the existing father_id if we have it
         if (dependentDetails?.father_id) {
           user_data.father_id = parseInt(dependentDetails.father_id);
-          console.log('Keeping existing father_id:', dependentDetails.father_id);
         }
       } else {
         console.warn('Cannot determine gender for spouse:', selectedSpouse);
@@ -1931,73 +2195,77 @@ if (name === 'institution_name') {
         // If new spouse ID matches existing father_id, we're updating father
         if (dependentDetails?.father_id?.toString() === formData.spouse_id?.toString()) {
           user_data.father_id = newSpouseId;
+          assignedParentSlots = true;
           if (dependentDetails?.mother_id) {
             user_data.mother_id = parseInt(dependentDetails.mother_id);
           }
-          console.log('Inferred: Updating father_id (matches existing)');
         } 
         // If new spouse ID matches existing mother_id, we're updating mother
         else if (dependentDetails?.mother_id?.toString() === formData.spouse_id?.toString()) {
           user_data.mother_id = newSpouseId;
+          assignedParentSlots = true;
           if (dependentDetails?.father_id) {
             user_data.father_id = parseInt(dependentDetails.father_id);
           }
-          console.log('Inferred: Updating mother_id (matches existing)');
         }
         // If we have only one parent currently, new spouse must be the other parent
         else if (dependentDetails?.father_id && !dependentDetails?.mother_id) {
           // Only father exists, so new spouse must be mother
           user_data.mother_id = newSpouseId;
           user_data.father_id = parseInt(dependentDetails.father_id);
-          console.log('Inferred: Adding mother (only father exists)');
+          assignedParentSlots = true;
         }
         else if (dependentDetails?.mother_id && !dependentDetails?.father_id) {
           // Only mother exists, so new spouse must be father
           user_data.father_id = newSpouseId;
           user_data.mother_id = parseInt(dependentDetails.mother_id);
-          console.log('Inferred: Adding father (only mother exists)');
+          assignedParentSlots = true;
+        }
+        else if (isEditingChild) {
+          user_data.mother_id = newSpouseId;
+          if (dependentDetails?.father_id) {
+            user_data.father_id = parseInt(dependentDetails.father_id);
+          }
+          assignedParentSlots = true;
         }
         else {
-          console.error('Cannot determine which parent to update');
-          toast.error('Cannot determine parent assignment. Please contact support.');
-          return;
         }
       }
-    } else {
+    } else if (!assignedParentSlots) {
       console.warn('Selected spouse not found in availableSpouses');
       
       // Try to determine based on existing parent IDs
       if (dependentDetails?.father_id?.toString() === formData.spouse_id?.toString()) {
         // Spouse ID matches existing father_id
         user_data.father_id = newSpouseId;
+        assignedParentSlots = true;
         if (dependentDetails?.mother_id) {
           user_data.mother_id = parseInt(dependentDetails.mother_id);
         }
-        console.log('Updating father_id (matches existing)');
       }
       else if (dependentDetails?.mother_id?.toString() === formData.spouse_id?.toString()) {
         // Spouse ID matches existing mother_id
         user_data.mother_id = newSpouseId;
+        assignedParentSlots = true;
         if (dependentDetails?.father_id) {
           user_data.father_id = parseInt(dependentDetails.father_id);
         }
-        console.log('Updating mother_id (matches existing)');
+      }
+      else if (!isEditingChild) {
       }
       else {
-        console.error('Cannot determine which parent to update - spouse not found');
-        toast.error('Cannot determine parent assignment. Please contact support.');
-        return;
+        user_data.mother_id = newSpouseId;
+        if (dependentDetails?.father_id) {
+          user_data.father_id = parseInt(dependentDetails.father_id);
+        }
+        assignedParentSlots = true;
       }
     }
     
-    // Remove spouse_id from user_data as backend expects father_id/mother_id
-    delete user_data.spouse_id;
+    if (assignedParentSlots) {
+      delete user_data.spouse_id;
+    }
     
-    console.log('Final child parent assignment:', {
-      father_id: user_data.father_id,
-      mother_id: user_data.mother_id,
-      selected_spouse_gender: selectedSpouse?.gender_id
-    });
   }
 
   // Handle spouse status specific logic
@@ -2023,6 +2291,8 @@ if (name === 'institution_name') {
       if (divorceDocId) {
         user_data.sup_doc_for_remv = divorceDocId;
       }
+      delete user_data.death_date;
+      delete user_data.death_certificate;
     } else if (formData.spouse_status === 'deceased') {
       user_data.is_alive = false;
       user_data.removing_reason = 2;
@@ -2040,6 +2310,8 @@ if (name === 'institution_name') {
       if (deathCertId) {
         user_data.death_certificate = deathCertId;
       }
+      delete user_data.divorce_date;
+      delete user_data.sup_doc_for_remv;
     } else {
       // Current spouse
       user_data.is_alive = true;
@@ -2052,6 +2324,10 @@ if (name === 'institution_name') {
       if (marriageCertId) {
         user_data.marriage_certificate_proof = marriageCertId;
       }
+      delete user_data.death_date;
+      delete user_data.death_certificate;
+      delete user_data.divorce_date;
+      delete user_data.sup_doc_for_remv;
     }
   }
 
@@ -2064,6 +2340,26 @@ if (name === 'institution_name') {
     const deathCertId = formData.death_certificate || existingDeathCertificateId;
     if (deathCertId) {
       user_data.death_certificate = deathCertId;
+    }
+  }
+
+  // Defensive cleanup: alive non-spouse dependents must never carry stale death data.
+  if (formData.relation_id !== '1' && formData.is_alive !== false) {
+    delete user_data.death_date;
+    delete user_data.death_certificate;
+  }
+
+  // Defensive cleanup: only divorced spouse can carry divorce fields.
+  if (!(formData.relation_id === '1' && formData.spouse_status === 'divorced')) {
+    delete user_data.divorce_date;
+    delete user_data.sup_doc_for_remv;
+  }
+
+  // Defensive cleanup: only deceased spouse can carry death fields.
+  if (!(formData.relation_id === '1' && formData.spouse_status === 'deceased')) {
+    if (formData.relation_id === '1') {
+      delete user_data.death_date;
+      delete user_data.death_certificate;
     }
   }
 
@@ -2093,30 +2389,20 @@ if (name === 'institution_name') {
     }
   });
 
-  console.log('Sending to backend - cleaned:', {
-    spark_data,
-    user_data
-  });
 
-  onSave({ 
-    spark_data, 
-    user_data, 
-    ais_fam_id: formData.ais_fam_id 
+  setIsSubmitting(true);
+  Promise.resolve(
+    onSave({ 
+      spark_data, 
+      user_data, 
+      ais_fam_id: formData.ais_fam_id 
+    })
+  ).finally(() => {
+    setIsSubmitting(false);
   });
 };
 
 const checkCurrentErrors = () => {
-  console.log('=== CURRENT FORM STATE ===');
-  console.log('Relation:', formData.relation_id);
-  console.log('Spouse Status:', formData.spouse_status);
-  console.log('Is Alive:', formData.is_alive);
-  console.log('First Name:', formData.first_name);
-  console.log('Gender:', formData.gender_id);
-  console.log('Death Date:', formData.death_date);
-  console.log('Death Certificate:', formData.death_certificate, 'Existing ID:', existingDeathCertificateId);
-  console.log('All Errors:', errors);
-  console.log('Error Keys:', Object.keys(errors));
-  console.log('=== END FORM STATE ===');
 };
 
 // Call this function when form changes
@@ -2133,7 +2419,7 @@ useEffect(() => {
       sparkFields.has(key)
     ) {
       return (
-        <div className="absolute top-1 right-1 group z-50">
+        <div className="absolute right-0 top-0 group z-10">
           <span className="inline-flex items-center p-0.5 rounded-full bg-orange-100 text-orange-600 text-xs" aria-label="Synced from SPARK">
             <BoltIcon className="w-3 h-3" />
           </span>
@@ -2151,7 +2437,7 @@ useEffect(() => {
       officerFields.GAD_OFFICER?.includes(key)
     ) {
       return (
-        <div className="absolute top-1 right-1 group z-50">
+        <div className="absolute right-0 top-0 group z-10">
           <span className="inline-flex items-center p-0.5 rounded-full bg-indigo-100 text-indigo-600 text-xs" aria-label="Updated by AS-II">
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 8 8">
               <circle cx="4" cy="4" r="3" />
@@ -2171,7 +2457,7 @@ useEffect(() => {
       officerFields.AIS_OFFICER?.includes(key)
     ) {
       return (
-        <div className="absolute top-1 right-1 group z-50">
+        <div className="absolute right-0 top-0 group z-10">
           <span className="inline-flex items-center p-0.5 rounded-full bg-indigo-100 text-indigo-600 text-xs" aria-label="User Entered">
             <UserIcon className="w-3 h-3" />
           </span>
@@ -2220,14 +2506,14 @@ useEffect(() => {
 
   return (
     <Dialog open={open} onClose={() => setOpen(false)} className="relative z-50">
-      <DialogBackdrop className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+      <DialogBackdrop className="fixed inset-0 bg-gray-500/75 dark:bg-gray-950/80 transition-opacity" />
       <div className="fixed inset-0 z-50 overflow-y-auto">
         <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-          <DialogPanel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-700 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogPanel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 dark:ring-1 dark:ring-gray-700 sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="absolute right-4 top-4">
               <button
                 type="button"
-                className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-white"
                 onClick={() => setOpen(false)}
               >
                 <span className="sr-only">Close</span>
@@ -2235,11 +2521,11 @@ useEffect(() => {
               </button>
             </div>
 
-            <div className="bg-white px-6 pb-6 pt-8 sm:p-8 sm:pb-6">
-              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white px-6 pb-6 pt-8 dark:bg-gray-800 sm:p-8 sm:pb-6">
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 text-gray-900 dark:text-gray-100 md:grid-cols-2">
                 {/* Warning for spouse linked to child */}
                 {isSpouseLinkedToChild && (
-                  <div className="md:col-span-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="md:col-span-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-700 dark:bg-yellow-900/30">
                     <div className="flex">
                       <div className="flex-shrink-0">
                         <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
@@ -2247,8 +2533,8 @@ useEffect(() => {
                         </svg>
                       </div>
                       <div className="ml-3">
-                        <h3 className="text-sm font-medium text-yellow-800">Spouse Linked to Child</h3>
-                        <div className="mt-2 text-sm text-yellow-700">
+                        <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Spouse Linked to Child</h3>
+                        <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-100">
                           <p>This spouse is linked to {linkedChildren.length} child(ren). If you remove or change this spouse, please update the parent information for the linked child(ren) first.</p>
                           <ul className="mt-1 list-disc pl-5">
                             {linkedChildren.map(child => (
@@ -2283,7 +2569,7 @@ useEffect(() => {
                   />
                   {errors.relation_id && <p className="text-red-500 text-sm mt-1">{errors.relation_id}</p>}
                   {dependentDetails?.ais_fam_id && !dependentDetails.ais_fam_id.toString().startsWith('spark_') && (
-                    <p className="text-sm text-gray-500 mt-1 italic">
+                    <p className="mt-1 text-sm italic text-gray-500 dark:text-gray-400">
                       Cannot change relation type for saved dependent. Remove and add as new if needed.
                     </p>
                   )}
@@ -2298,7 +2584,7 @@ useEffect(() => {
                       <LabelWithAsterisk>Spouse Status</LabelWithAsterisk>
                     </p>
                     <div className="mt-1 flex gap-4">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input 
                           type="radio" 
                           name="spouse_status" 
@@ -2310,7 +2596,7 @@ useEffect(() => {
                         />
                         Current
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input 
                           type="radio" 
                           name="spouse_status" 
@@ -2322,7 +2608,7 @@ useEffect(() => {
                         />
                         Divorced
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input 
                           type="radio" 
                           name="spouse_status" 
@@ -2335,7 +2621,7 @@ useEffect(() => {
                       </label>
                     </div>
                     {originalSpouseStatus === 'deceased' && (
-                      <p className="text-sm text-gray-500 mt-1 italic">
+                      <p className="mt-1 text-sm italic text-gray-500 dark:text-gray-400">
                         Cannot change deceased spouse to other status.
                       </p>
                     )}
@@ -2351,7 +2637,7 @@ useEffect(() => {
                       <LabelWithAsterisk>Status</LabelWithAsterisk>
                     </p>
                     <div className="mt-1 flex gap-4">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input 
                           type="radio" 
                           name="is_alive" 
@@ -2362,7 +2648,7 @@ useEffect(() => {
                         />
                         Alive
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input 
                           type="radio" 
                           name="is_alive" 
@@ -2389,6 +2675,7 @@ useEffect(() => {
                         name="death_date"
                         value={formData.death_date || ''}
                         onChange={handleChange}
+                        max={getTodayDateString()}
                         required
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-white dark:bg-gray-600"
                       />
@@ -2399,7 +2686,7 @@ useEffect(() => {
                       <label className="block text-sm font-medium text-gray-700 dark:text-white">
                         <LabelWithAsterisk>Death Certificate</LabelWithAsterisk>
                       </label>
-                      <p className="text-xs text-gray-500 mt-1">Max file: 5MB</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Max file: 5MB</p>
                       <div className="mt-1 flex items-center gap-2">
                         <input
                           type="file"
@@ -2407,7 +2694,7 @@ useEffect(() => {
                           onChange={handleDeathCertificateChange}
                           accept=".pdf,.jpg,.jpeg,.png"
                           disabled={isUploading}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 disabled:opacity-50"
+                          className="block w-full text-sm text-gray-500 dark:text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-900/40 dark:file:text-indigo-200 dark:hover:file:bg-indigo-900/60 disabled:opacity-50"
                         />
                         {/* Show view button for existing document */}
                         {(formData.death_certificate || existingDeathCertificateId) && (
@@ -2426,7 +2713,7 @@ useEffect(() => {
                         <p className="text-red-500 text-sm mt-1">{uploadFailureMessages.death_certificate}</p>
                       )}
                       {deathCertificateFile && (
-                        <p className="text-sm text-gray-500 mt-1">Selected: {deathCertificateFile.name}</p>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Selected: {deathCertificateFile.name}</p>
                       )}
                       {(formData.death_certificate || existingDeathCertificateId) && !deathCertificateFile && (
                         <p className="text-sm text-green-500 mt-1">Existing document attached</p>
@@ -2450,6 +2737,7 @@ useEffect(() => {
                         name="divorce_date"
                         value={formData.divorce_date || ''}
                         onChange={handleChange}
+                        max={getTodayDateString()}
                         required
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-white dark:bg-gray-600"
                       />
@@ -2460,7 +2748,7 @@ useEffect(() => {
                       <label className="block text-sm font-medium text-gray-700 dark:text-white">
                         <LabelWithAsterisk>Divorce Document</LabelWithAsterisk>
                       </label>
-                      <p className="text-xs text-gray-500 mt-1">Max file: 5MB</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Max file: 5MB</p>
                       <div className="mt-1 flex items-center gap-2">
                         <input
                           type="file"
@@ -2468,7 +2756,7 @@ useEffect(() => {
                           onChange={handleDivorceDocumentChange}
                           accept=".pdf,.jpg,.jpeg,.png"
                           disabled={isUploading}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 disabled:opacity-50"
+                          className="block w-full text-sm text-gray-500 dark:text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-900/40 dark:file:text-indigo-200 dark:hover:file:bg-indigo-900/60 disabled:opacity-50"
                         />
                         {/* Show view button for existing document */}
                         {(formData.sup_doc_for_remv || existingDivorceDocumentId) && (
@@ -2487,7 +2775,7 @@ useEffect(() => {
                         <p className="text-red-500 text-sm mt-1">{uploadFailureMessages.sup_doc_for_remv}</p>
                       )}
                       {divorceDocumentFile && (
-                        <p className="text-sm text-gray-500 mt-1">Selected: {divorceDocumentFile.name}</p>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Selected: {divorceDocumentFile.name}</p>
                       )}
                       {(formData.sup_doc_for_remv || existingDivorceDocumentId) && !divorceDocumentFile && (
                         <p className="text-sm text-green-500 mt-1">Existing document attached</p>
@@ -2503,7 +2791,7 @@ useEffect(() => {
                     <label className="block text-sm font-medium text-gray-700 dark:text-white">
                       Marriage Certificate (Optional)
                     </label>
-                    <p className="text-xs text-gray-500 mt-1">Max file: 5MB</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Max file: 5MB</p>
                     <div className="mt-1 flex items-center gap-2">
                       <input
                         type="file"
@@ -2511,7 +2799,7 @@ useEffect(() => {
                         onChange={handleMarriageCertificateChange}
                         accept=".pdf,.jpg,.jpeg,.png"
                         disabled={isUploading}
-                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 disabled:opacity-50"
+                        className="block w-full text-sm text-gray-500 dark:text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-900/40 dark:file:text-indigo-200 dark:hover:file:bg-indigo-900/60 disabled:opacity-50"
                       />
                       {/* Show view button for existing document */}
                       {(formData.marriage_certificate_proof || existingMarriageCertificateId) && (
@@ -2526,7 +2814,7 @@ useEffect(() => {
                       )}
                     </div>
                     {marriageCertificateFile && (
-                      <p className="text-sm text-gray-500 mt-1">Selected: {marriageCertificateFile.name}</p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Selected: {marriageCertificateFile.name}</p>
                     )}
                     {uploadFailureMessages.marriage_certificate_proof && (
                       <p className="text-red-500 text-sm mt-1">{uploadFailureMessages.marriage_certificate_proof}</p>
@@ -2562,7 +2850,7 @@ useEffect(() => {
                     />
                     {errors.child_type && <p className="text-red-500 text-sm mt-1">{errors.child_type}</p>}
                     {formData.child_type && (
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Gender will be automatically set to {
                           formData.child_type === '1' || formData.child_type === '3' ? 'Male' : 
                           formData.child_type === '2' || formData.child_type === '4' ? 'Female' : ''
@@ -2621,11 +2909,11 @@ useEffect(() => {
                     {renderIndicator('spark', 'is_ais_officer')}
                     <p className="text-sm font-medium text-gray-700 dark:text-white">Is AIS Officer?</p>
                     <div className="mt-1 flex gap-4">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input type="radio" name="is_ais_officer" value="true" checked={formData.is_ais_officer === true} onChange={handleChange} className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                         Yes
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input type="radio" name="is_ais_officer" value="false" checked={formData.is_ais_officer === false} onChange={handleChange} className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                         No
                       </label>
@@ -2689,11 +2977,11 @@ useEffect(() => {
                     {renderIndicator('spark', 'is_govt_servant')}
                     <p className="text-sm font-medium text-gray-700 dark:text-white">Is Government Servant?</p>
                     <div className="mt-1 flex gap-4">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input type="radio" name="is_govt_servant" value="true" checked={formData.is_govt_servant === true} onChange={handleChange} className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                         Yes
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <input type="radio" name="is_govt_servant" value="false" checked={formData.is_govt_servant === false} onChange={handleChange} className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                         No
                       </label>
@@ -2800,6 +3088,11 @@ useEffect(() => {
                  (formData.relation_id !== '1' && formData.is_alive !== false) ||
                  (formData.relation_id !== '1' && formData.is_alive === false) ? (
                   <>
+                    {nameMismatchWarning && (
+                      <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+                        {nameMismatchWarning}
+                      </div>
+                    )}
                     <div className="relative">
                       {renderIndicator('spark', 'first_name')}
                       <label htmlFor="first_name" className="block text-sm font-medium text-gray-700 dark:text-white">
@@ -2854,7 +3147,7 @@ useEffect(() => {
                       />
                       {errors.gender_id && <p className="text-red-500 text-sm mt-1">{errors.gender_id}</p>}
                       {formData.relation_id === '2' && formData.child_type && (
-                        <p className="text-sm text-gray-500 mt-1">Gender is automatically set based on child type</p>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Gender is automatically set based on child type</p>
                       )}
                     </div>
 
@@ -2918,7 +3211,8 @@ useEffect(() => {
                             value={formData.mobile_number || ''}
                             disabled={isFieldDisabled('mobile_number')}
                             onChange={handleChange}
-                            
+                            inputMode="numeric"
+                            maxLength={10}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-white dark:bg-gray-600 disabled:bg-gray-200 dark:disabled:bg-gray-500"
                           />
                           {errors.mobile_number && <p className="text-red-500 text-sm mt-1">{errors.mobile_number}</p>}
@@ -2932,7 +3226,7 @@ useEffect(() => {
                 <div className="mt-5 md:col-span-2 flex justify-end gap-3">
                   <button
                     type="button"
-                    className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50"
+                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
                     onClick={() => setOpen(false)}
                   >
                     Cancel
@@ -2941,12 +3235,13 @@ useEffect(() => {
                     type="submit"
                     className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={
+                      isSubmitting ||
                       isUploading ||
                       Object.values(uploadFailures).some(Boolean) ||
                       Object.values(errors).some(err => err && err !== '')
                     }
                   >
-                    {isUploading ? 'Uploading...' : 'Save'}
+                    {isUploading ? 'Uploading...' : isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                   </button>
                 </div>
               </form>

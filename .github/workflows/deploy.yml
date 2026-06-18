@@ -1,0 +1,59 @@
+name: Deploy Next.js App
+
+on:
+  push:
+    branches:
+      - main
+      - qabranch  # Add QA branch trigger
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 22
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build Next.js application
+      run: npm run build
+
+    - name: Archive build directory
+      run: tar -czf build.tar.gz out public
+
+    - name: Deploy to correct EC2 server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        HOST_MAIN: ${{ secrets.EC2_HOST }}
+        USER_MAIN: ${{ secrets.EC2_USER }}
+        HOST_QA: ${{ secrets.QA_EC2_HOST }}
+        USER_QA: ${{ secrets.QA_EC2_USER }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+
+        if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+          HOST=$HOST_MAIN
+          USER=$USER_MAIN
+        elif [[ "${GITHUB_REF##*/}" == "qabranch" ]]; then
+          HOST=$HOST_QA
+          USER=$USER_QA
+        else
+          echo "Unsupported branch. Exiting..."
+          exit 1
+        fi
+
+        echo "Deploying to $USER@$HOST"
+        scp -o StrictHostKeyChecking=no -i private_key.pem build.tar.gz $USER@$HOST:/tmp/
+        ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << EOF
+          sudo rm -rf /var/www/nextjs
+          sudo mkdir -p /var/www/nextjs
+          sudo tar -xzf /tmp/build.tar.gz -C /var/www/nextjs
+        EOF

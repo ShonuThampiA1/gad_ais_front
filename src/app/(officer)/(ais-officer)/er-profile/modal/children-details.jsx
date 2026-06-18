@@ -36,6 +36,8 @@ const requiredFields = ["name", "gender_id", "dob"];
 
 export function ModalChildrenDetails({ open, setOpen, childrenDetails, onSave, masterData }) {
   const [formData, setFormData] = useState(initialFormData);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditing = Boolean(childrenDetails?.id);
   
 
   const calculateAge = (dob) => {
@@ -89,6 +91,7 @@ export function ModalChildrenDetails({ open, setOpen, childrenDetails, onSave, m
  
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
   
   
     const age = calculateAge(formData.dob);
@@ -99,7 +102,10 @@ export function ModalChildrenDetails({ open, setOpen, childrenDetails, onSave, m
     delete updatedData[field];  });
 
    
-        onSave(updatedData);
+        setIsSubmitting(true);
+        Promise.resolve(onSave(updatedData)).finally(() => {
+          setIsSubmitting(false);
+        });
         setOpen(false);
      
   };
@@ -204,9 +210,10 @@ export function ModalChildrenDetails({ open, setOpen, childrenDetails, onSave, m
                     </button>
                     <button
                       type="submit"
-                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      disabled={isSubmitting}
+                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                     </button>
                   </div>
                 </div>

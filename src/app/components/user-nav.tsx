@@ -24,6 +24,8 @@ const UserNav = () => {
       userTypeDetails = "Admin";
     } else if (roleId === "4") {
       userTypeDetails = "Verification Officer";
+    } else if (roleId === "7") {
+      userTypeDetails = "Super Admin";
     }
 
     const firstName = userDetails.first_name || "";

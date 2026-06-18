@@ -3,12 +3,23 @@ import { toast } from "react-toastify";
 
 // ✅ Base URL setup
 const baseURL =
+  process.env.NEXT_PUBLIC_API_URL ||
   process.env.REACT_APP_API_URL ||
   (process.env.NODE_ENV === "development"
      ? "http://localhost:8000"
-    : "https://api.devaas.cdipd.in");
+    : "https://api.devaas.cdipd.in/");
+const REQUEST_TIMEOUT = 30000;
+const refreshUrl = new URL("/auth/refresh", baseURL).toString();
 
 // ✅ Axios instance
+export const loginAxiosInstance = axios.create({
+  baseURL,
+  timeout: REQUEST_TIMEOUT,
+  headers: {
+    "Content-Type": "application/json", 
+  },
+});
+
 export const axiosInstance = axios.create({
   baseURL,
   headers: {
@@ -39,13 +50,12 @@ const refreshAccessToken = async () => {
 
   try {
     // 🔥 removed extra slash
-    const response = await axios.post(`${baseURL}auth/refresh`, {
+    const response = await axios.post(refreshUrl, {
       token: refreshToken,
     });
 
     if (response.status === 200 && response.data?.data) {
       const { access_token, refresh_token } = response.data.data;
-      console.log("refresh:",refresh_token)
 
       // store new tokens
       sessionStorage.setItem("token", access_token);
@@ -101,7 +111,6 @@ axiosInstance.interceptors.response.use(
         isLoggingOut = true;
         sessionStorage.clear();
         toast.warn("Session expired. Please log in again.");
-        console.log("logging out");
         window.location.href = "/login";
       }
     }

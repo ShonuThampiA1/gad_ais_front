@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from 'react-toastify';
 
 import {
@@ -36,8 +37,8 @@ export default function DistrictList() {
 
   const fetchDistricts = useCallback(async () => {
     try {
-      const response = await axiosInstance.get(`/masters/district`);
-      setDistricList(response.data.data.district);
+      const payload = await fetchBulkMasters(["district"], { admin: true, includeInactive: true });
+      setDistricList(payload.district || []);
     } catch (error) {
       console.error("Error fetching districts:", error);
     }

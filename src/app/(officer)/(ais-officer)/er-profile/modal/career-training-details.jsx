@@ -44,6 +44,7 @@ export function ModalCareerTrainingDetails({
   });
 
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
   const [documentsData, setDocumentsData] = useState([]);
   const documentsDataRef = useRef([]);
@@ -66,6 +67,7 @@ export function ModalCareerTrainingDetails({
   const [uploadingFiles, setUploadingFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({});
   const [isUploading, setIsUploading] = useState(false);
+  const isEditing = Boolean(training?.ais_tr_id);
 
   const countryCodeMap = { IND: "India" };
 
@@ -428,9 +430,9 @@ export function ModalCareerTrainingDetails({
             if (!allowedExtensions.includes(extension)) {
               hasError = true;
               errorMsg = "Only JPG, JPEG, PNG, PDF allowed.";
-            } else if (file.size > 1024 * 1024) {
+            } else if (file.size > 5 * 1024 * 1024) {
               hasError = true;
-              errorMsg = "File size must be under 1MB.";
+              errorMsg = "File size must be under 5MB.";
             } else {
               validFiles.push(file);
             }
@@ -493,6 +495,7 @@ export function ModalCareerTrainingDetails({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     
     if (isUploading) {
       toast.warning("Please wait for file uploads to complete");
@@ -535,8 +538,22 @@ export function ModalCareerTrainingDetails({
     }
 
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+    if (Object.keys(newErrors).length > 0) {
+      const firstKey = Object.keys(newErrors).find((key) => newErrors[key]);
+      if (firstKey && typeof document !== "undefined") {
+        window.setTimeout(() => {
+          const target =
+            document.querySelector(`[name="${firstKey}"]`) ||
+            document.querySelector(`[data-field="${firstKey}"]`) ||
+            document.getElementById(firstKey);
+          target?.scrollIntoView({ behavior: "smooth", block: "center" });
+          target?.focus?.();
+        }, 0);
+      }
+      return;
+    }
 
+    setIsSubmitting(true);
     const sparkData = {};
     const userData = {};
     
@@ -565,7 +582,9 @@ export function ModalCareerTrainingDetails({
       user_data: userData,
     };
     
-    save(payload);
+    Promise.resolve(save(payload)).finally(() => {
+      setIsSubmitting(false);
+    });
   };
 
   // Updated handleRemove function to use the ConfirmModal
@@ -942,7 +961,7 @@ export function ModalCareerTrainingDetails({
                         <label className="block text-sm font-medium text-gray-700 dark:text-white">
                           Upload Documents (optional)
                         </label>
-                        <span className="text-xs text-gray-500">Max 1MB each • JPG, PNG, PDF</span>
+                        <span className="text-xs text-gray-500">Max 5MB each • JPG, PNG, PDF</span>
                       </div>
                       
                       {/* Upload Area - ALWAYS enabled */}
@@ -981,7 +1000,7 @@ export function ModalCareerTrainingDetails({
                                   <p className="mb-1 text-sm text-gray-700 dark:text-gray-300">
                                     <span className="font-semibold">Click to upload</span>
                                   </p>
-                                  <p className="text-xs text-gray-500">JPG, PNG or PDF (MAX. 1MB each)</p>
+                                  <p className="text-xs text-gray-500">JPG, PNG or PDF (MAX. 5MB each)</p>
                                 </>
                               )}
                             </div>
@@ -1167,9 +1186,9 @@ export function ModalCareerTrainingDetails({
                   </button>
                   <button
                     type="submit"
-                    disabled={isUploading}
+                    disabled={isUploading || isSubmitting}
                     className={`rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                      isUploading 
+                      (isUploading || isSubmitting)
                         ? 'bg-indigo-400 cursor-not-allowed'
                         : 'bg-indigo-600 hover:bg-indigo-500 focus-visible:outline-indigo-600'
                     }`}
@@ -1179,8 +1198,13 @@ export function ModalCareerTrainingDetails({
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                         Uploading...
                       </span>
+                    ) : isSubmitting ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        {isEditing ? 'Updating...' : 'Saving...'}
+                      </span>
                     ) : (
-                      training && training.ais_tr_id ? "Save" : "Save"
+                      isEditing ? "Update" : "Save"
                     )}
                   </button>
                 </div>

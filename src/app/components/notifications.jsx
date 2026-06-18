@@ -64,12 +64,12 @@ export default function NotificationModal({
       <motion.div
         layout
         initial={false}
-        className="fixed inset-0 flex items-start justify-end p-4 pt-20 sm:pt-24"
+        className="fixed inset-0 flex items-start justify-center p-2 pt-16 sm:justify-end sm:p-4 sm:pt-24"
         style={{ pointerEvents: 'none' }}
       >
         <motion.div
           layout
-          className="w-full max-w-md pointer-events-auto"
+          className={`w-full pointer-events-auto ${expanded ? 'max-w-full sm:max-w-2xl' : 'max-w-full sm:max-w-md'}`}
           animate={{
             scale: expanded ? 1 : 0.98,
             y: expanded ? 0 : 4,
@@ -79,7 +79,7 @@ export default function NotificationModal({
           <DialogPanel
             as={motion.div}
             layout
-            className="h-full max-h-[calc(100vh-6rem)] overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+            className="flex max-h-[calc(100vh-5rem)] min-h-0 flex-col overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 sm:max-h-[calc(100vh-6rem)]"
           >
             {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-neutral-200/70 dark:border-neutral-800 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm">
@@ -107,7 +107,7 @@ export default function NotificationModal({
               </div>
 
               <div className="flex items-center gap-2">
-                {!expanded && unreadCount > 0 && onMarkAllAsRead && (
+                {unreadCount > 0 && onMarkAllAsRead && (
                   <button
                     onClick={onMarkAllAsRead}
                     className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
@@ -125,11 +125,7 @@ export default function NotificationModal({
             </div>
 
             {/* Notifications list */}
-            <div
-              className={`overflow-y-auto ${
-                expanded ? 'h-[calc(100%-73px)]' : 'max-h-[500px]'
-              }`}
-            >
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
               <AnimatePresence initial={false}>
                 {notifications.length === 0 ? (
                   <motion.div
@@ -164,6 +160,11 @@ export default function NotificationModal({
                         ${!notification.is_read ? 'bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900 dark:hover:bg-indigo-950' : ''}
                       `}
                     >
+                      {!notification.is_read && (
+                        <div className="pointer-events-none absolute right-3 top-2 hidden rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block dark:bg-neutral-700">
+                          Double click to mark as read
+                        </div>
+                      )}
                       {/* Unread indicator – vertical bar */}
                       {!notification.is_read && (
                         <div
@@ -237,13 +238,13 @@ export default function NotificationModal({
             </div>
 
             {/* Footer – expand toggle */}
-            {!expanded && notifications.length > 0 && (
+            {notifications.length > 0 && (
               <div className="sticky bottom-0 p-3 border-t border-neutral-200/70 dark:border-neutral-800 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm">
                 <button
-                  onClick={() => setExpanded(true)}
+                  onClick={() => setExpanded((prev) => !prev)}
                   className="w-full py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
                 >
-                  See all notifications
+                  {expanded ? 'See less' : 'See all notifications'}
                 </button>
               </div>
             )}

@@ -28,7 +28,7 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
       case "2": dashboardPath = "/services/entitlement-claims"; break;
       case "3": dashboardPath = "/master-controls/user-management"; break;
       case "4": dashboardPath = "/official/dashboard"; break;
-      case "7": dashboardPath = "/rbac"; break;
+      case "7": dashboardPath = "/rbac/superadmin-dashboard"; break;
       default: dashboardPath = "/login"; break;
     }
     setHomeLink(dashboardPath);
@@ -41,12 +41,12 @@ export function Breadcrumb({ rightContent }: BreadcrumbProps) {
     const lower = normalized.toLowerCase();
 
     const specialLabels: Record<string, string> = {
-      "er profile": "ER Profile",
+      "er profile": "ER PROFILE",
       "rbac": "RBAC",
       "ais": "AIS",
     };
 
-    return specialLabels[lower] || normalized;
+    return (specialLabels[lower] || normalized).toUpperCase();
   };
 
   // Generate breadcrumb pages from URL segments

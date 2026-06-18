@@ -36,7 +36,7 @@ const OfficialDashboard = () => {
   // Verification stats
   const [stats, setStats] = useState([
     {
-      name: 'Total Profiles',
+      name: 'Total Profiles Submitted',
       value: 0,
       change: '+2%',
       icon: EyeIcon,
@@ -80,32 +80,41 @@ const OfficialDashboard = () => {
   // Onboarding stats
   const [onboardingStats, setOnboardingStats] = useState([
     {
-      name: 'Users Onboarded',
+      name: 'Onboarded Officers List',
       value: 0,
-      change: '+5%',
       icon: UserIcon,
       filter: 'onboarded',
       bgColor: 'bg-gradient-to-r from-teal-500 to-teal-700',
       textColor: 'text-white',
     },
     {
-      name: 'First-Time Logins',
+      name: 'Login Activated Officers',
       value: 0,
-      change: '+8%',
+      // change: '+8%',
       icon: UserPlusIcon,
       filter: 'first-login',
       bgColor: 'bg-gradient-to-r from-purple-500 to-purple-700',
       textColor: 'text-white',
     },
     {
-      name: 'Started ER Profile',
+      name: 'Profile Updation In Progress',
       value: 0,
-      change: '+3%',
+      // change: '+3%',
       icon: DocumentTextIcon,
       filter: 'started-er',
       bgColor: 'bg-gradient-to-r from-pink-500 to-pink-700',
       textColor: 'text-white',
     },
+    {
+      name: 'Login Pending Officers',
+      value: 0,
+      // change: '+5%',
+      icon: ClockIcon,
+      filter: 'login-pendings',
+      bgColor: 'bg-gradient-to-r from-orange-400 to-orange-600',
+      textColor: 'text-white',
+    },
+    
   ]);
 
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
@@ -201,10 +210,13 @@ const startedERResponse = await axiosInstance.get(
 const startedERCount =
   startedERResponse?.data?.data?.officers?.length || 0;
 
+const pendingLoginCount = onboardedCount - firstLoginCount;
+
 setOnboardingStats((prev) => [
   { ...prev[0], value: onboardedCount },
   { ...prev[1], value: firstLoginCount },
   { ...prev[2], value: startedERCount },
+  { ...prev[3], value: pendingLoginCount }, // example pending login
 ]);
     } catch (err) {
       console.error('Dashboard API Error:', err);
@@ -225,9 +237,10 @@ setOnboardingStats((prev) => [
 
   // Mapping for onboarding card navigation
   const onboardingPaths = {
-    onboarded: '/official/',
+    'onboarded': '/official/',
     'first-login': '/official/dashboard/first-time-logins',
     'started-er': '/official/dashboard/started-er',
+    'login-pendings': '/official/dashboard/login-pendings',
   };
 
   const handleOnboardingCardClick = (filter) => {
@@ -271,7 +284,7 @@ setOnboardingStats((prev) => [
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 md:p-3 lg:p-3 mb-3">
+    <div className="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-900 sm:p-4 lg:p-5">
       {loading ? (
         <div className="text-center py-8 text-gray-600">Loading dashboard...</div>
       ) : error ? (
@@ -279,12 +292,12 @@ setOnboardingStats((prev) => [
       ) : (
         <>
           {/* Banner – unchanged */}
-          <header className="relative mb-8 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-300 dark:from-indigo-900 dark:to-indigo-700 shadow-xl overflow-hidden">
-            <div className="px-6 py-8 md:px-10 md:py-12">
-              <h1 className="text-4xl font-bold text-white tracking-tight">
+          <header className="relative mb-8 overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-300 shadow-xl dark:from-indigo-900 dark:to-indigo-700">
+            <div className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-12">
+              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl break-words">
                 Welcome, {user.first_name} {user.last_name || 'Officer'}
               </h1>
-              <p className="mt-2 text-base text-indigo-100">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-indigo-100 sm:text-base">
                 You have{' '}
                 <span className="font-bold text-yellow-300">{pendingApplication} applications</span>{' '}
                 awaiting your review.
@@ -293,9 +306,56 @@ setOnboardingStats((prev) => [
             <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 to-transparent" />
           </header>
 
+          
+
+          {/* ===== USER ONBOARDING STATS ===== */}
+          <div className="mb-10">
+            <h2 className="mb-5 flex items-center text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
+              <UserIcon className="h-5 w-5 text-indigo-500 mr-2" />
+              Officer Onboarding Activity
+            </h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {onboardingStats.map((stat) => (
+                <button
+                  key={stat.filter}
+                  onClick={() => handleOnboardingCardClick(stat.filter)}
+                  className="group block rounded-2xl text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                >
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200/50 bg-white/90 shadow-lg backdrop-blur-sm dark:border-gray-700/50 dark:bg-gray-800/90">
+                    {/* Left accent border with gradient */}
+                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${stat.bgColor}`} />
+                    <div className="relative z-10 min-h-[136px] p-5 pl-6 sm:min-h-[148px]">
+                      <div className="flex items-start gap-3">
+                        <div className={`shrink-0 rounded-lg p-3 shadow-md ${stat.bgColor}`}>
+                          <stat.icon className={`h-6 w-6 ${stat.textColor}`} aria-hidden="true" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <dt className="line-clamp-2 min-h-[2.75rem] text-sm font-semibold leading-5 text-gray-700 dark:text-gray-300">
+                            {stat.name}
+                          </dt>
+                          <dd className="mt-2 flex items-baseline">
+                            <div className="break-words text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+                              {stat.value}
+                            </div>
+                            {/* <div
+                              className={`ml-2 text-sm font-medium ${
+                                stat.change.startsWith('+') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                              }`}
+                            >
+                              {stat.change}
+                            </div> */}
+                          </dd>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
           {/* ===== APPLICATION VERIFICATION OVERVIEW ===== */}
           <div className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-5 flex items-center">
+            <h2 className="mb-5 flex items-center text-lg font-semibold text-gray-900 dark:text-white sm:text-xl">
               <CheckCircleIcon className="h-5 w-5 text-indigo-500 mr-2" />
               Application Verification Overview
             </h2>
@@ -304,22 +364,22 @@ setOnboardingStats((prev) => [
                 <button
                   key={stat.filter}
                   onClick={() => handleVerificationCardClick(stat.filter)}
-                  className="group block text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl rounded-2xl"
+                  className="group block rounded-2xl text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
                 >
-                  <div className="relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200/50 bg-white/90 shadow-lg backdrop-blur-sm dark:border-gray-700/50 dark:bg-gray-800/90">
                     {/* Left accent border with gradient */}
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${stat.bgColor}`} />
-                    <div className="p-6 pl-7 relative z-10">
-                      <div className="flex items-center">
-                        <div className={`p-3 rounded-lg ${stat.bgColor} shadow-md`}>
+                    <div className="relative z-10 min-h-[152px] p-5 pl-6 sm:min-h-[164px]">
+                      <div className="flex items-start gap-3">
+                        <div className={`shrink-0 rounded-lg p-3 shadow-md ${stat.bgColor}`}>
                           <stat.icon className={`h-6 w-6 ${stat.textColor}`} aria-hidden="true" />
                         </div>
-                        <div className="ml-4 flex-1">
-                          <dt className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
+                        <div className="min-w-0 flex-1">
+                          <dt className="line-clamp-2 min-h-[2.75rem] text-sm font-semibold leading-5 text-gray-700 dark:text-gray-300">
                             {stat.name}
                           </dt>
-                          <dd className="mt-1 flex items-baseline">
-                            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          <dd className="mt-2 flex items-baseline">
+                            <div className="break-words text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
                               {stat.value}
                             </div>
                             {/* <div
@@ -347,73 +407,27 @@ setOnboardingStats((prev) => [
             </div>
           </div>
 
-          {/* ===== USER ONBOARDING STATS ===== */}
-          <div className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-5 flex items-center">
-              <UserIcon className="h-5 w-5 text-indigo-500 mr-2" />
-              User Onboarding Activity
-            </h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {onboardingStats.map((stat) => (
-                <button
-                  key={stat.filter}
-                  onClick={() => handleOnboardingCardClick(stat.filter)}
-                  className="group block text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl rounded-2xl"
-                >
-                  <div className="relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
-                    {/* Left accent border with gradient */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${stat.bgColor}`} />
-                    <div className="p-6 pl-7 relative z-10">
-                      <div className="flex items-center">
-                        <div className={`p-3 rounded-lg ${stat.bgColor} shadow-md`}>
-                          <stat.icon className={`h-6 w-6 ${stat.textColor}`} aria-hidden="true" />
-                        </div>
-                        <div className="ml-4 flex-1">
-                          <dt className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
-                            {stat.name}
-                          </dt>
-                          <dd className="mt-1 flex items-baseline">
-                            <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                              {stat.value}
-                            </div>
-                            {/* <div
-                              className={`ml-2 text-sm font-medium ${
-                                stat.change.startsWith('+') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                              }`}
-                            >
-                              {stat.change}
-                            </div> */}
-                          </dd>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Statistical Analysis Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+          <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-2">
             {/* Performance Metrics */}
             <div className="bg-gradient-to-br from-white to-indigo-50/30 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <h2 className="mb-4 flex items-center text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
                 <ChartBarIcon className="h-5 w-5 text-indigo-500 mr-2" />
                 Performance Analytics
               </h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-white/70 dark:bg-gray-700/70 backdrop-blur-sm rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">{analytics.approvalRate}%</div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-lg bg-white/70 p-4 text-center shadow-sm backdrop-blur-sm dark:bg-gray-700/70">
+                  <div className="break-words text-2xl font-bold text-green-600 dark:text-green-400">{analytics.approvalRate}%</div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">Approval Rate</div>
                   <div className="text-xs text-green-500 dark:text-green-400 mt-1">✓ Good</div>
                 </div>
-                <div className="text-center p-4 bg-white/70 dark:bg-gray-700/70 backdrop-blur-sm rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">{analytics.returnRate}%</div>
+                <div className="rounded-lg bg-white/70 p-4 text-center shadow-sm backdrop-blur-sm dark:bg-gray-700/70">
+                  <div className="break-words text-2xl font-bold text-red-600 dark:text-red-400">{analytics.returnRate}%</div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">Return Rate</div>
                   <div className="text-xs text-red-500 dark:text-red-400 mt-1">Monitor</div>
                 </div>
-                <div className="text-center p-4 bg-white/70 dark:bg-gray-700/70 backdrop-blur-sm rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{analytics.efficiencyScore}</div>
+                <div className="rounded-lg bg-white/70 p-4 text-center shadow-sm backdrop-blur-sm dark:bg-gray-700/70">
+                  <div className="break-words text-2xl font-bold text-indigo-600 dark:text-indigo-400">{analytics.efficiencyScore}</div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">Efficiency Score</div>
                   <div className={`text-xs mt-1 ${getEfficiencyColor(analytics.efficiencyScore)}`}>
                     {analytics.efficiencyScore >= 80
@@ -423,8 +437,8 @@ setOnboardingStats((prev) => [
                       : 'Needs Improvement'}
                   </div>
                 </div>
-                <div className="text-center p-4 bg-white/70 dark:bg-gray-700/70 backdrop-blur-sm rounded-lg shadow-sm">
-                  <div className="text-lg font-bold text-purple-600 dark:text-purple-400">{analytics.avgProcessingTime}</div>
+                <div className="rounded-lg bg-white/70 p-4 text-center shadow-sm backdrop-blur-sm dark:bg-gray-700/70">
+                  <div className="break-words text-lg font-bold text-purple-600 dark:text-purple-400 sm:text-xl">{analytics.avgProcessingTime}</div>
                   <div className="text-sm text-gray-600 dark:text-gray-300">Avg. Processing</div>
                   <div className="text-xs text-purple-500 dark:text-purple-400 mt-1">Timely</div>
                 </div>
@@ -433,15 +447,15 @@ setOnboardingStats((prev) => [
 
             {/* Workload Distribution */}
             <div className="bg-gradient-to-br from-white to-indigo-50/30 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <h2 className="mb-4 flex items-center text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
                 <ArrowTrendingUpIcon className="h-5 w-5 text-indigo-500 mr-2" />
                 Workload Distribution
               </h2>
               <div className="space-y-4">
                 <div>
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-sm text-gray-600 dark:text-gray-300">
                     <span>Pending Review</span>
-                    <span>{analytics.pendingRate}%</span>
+                    <span className="shrink-0">{analytics.pendingRate}%</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
@@ -451,9 +465,9 @@ setOnboardingStats((prev) => [
                   </div>
                 </div>
                 <div>
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-sm text-gray-600 dark:text-gray-300">
                     <span>Approved</span>
-                    <span>{analytics.approvalRate}%</span>
+                    <span className="shrink-0">{analytics.approvalRate}%</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
@@ -463,9 +477,9 @@ setOnboardingStats((prev) => [
                   </div>
                 </div>
                 <div>
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-sm text-gray-600 dark:text-gray-300">
                     <span>Returned</span>
-                    <span>{analytics.returnRate}%</span>
+                    <span className="shrink-0">{analytics.returnRate}%</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
@@ -475,7 +489,7 @@ setOnboardingStats((prev) => [
                   </div>
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-600">
+              <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 pt-4 dark:border-gray-600 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">Performance Trend</span>
                 <div className="flex items-center">
                   {getTrendIcon(analytics.trend)}
@@ -489,36 +503,36 @@ setOnboardingStats((prev) => [
 
           {/* Quick Insights */}
           <div className="bg-gradient-to-br from-white to-indigo-50/30 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Insights</h2>
+            <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-white sm:text-lg">Quick Insights</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="p-4 bg-indigo-50/70 dark:bg-indigo-900/20 backdrop-blur-sm rounded-lg border border-indigo-100 dark:border-indigo-800">
-                <div className="flex items-center">
+                <div className="flex items-start">
                   <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
                   <span className="font-medium text-gray-900 dark:text-white">Approval Quality</span>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
                   {analytics.approvalRate >= 70
                     ? 'High approval rate indicates good decision consistency'
                     : 'Consider reviewing approval criteria for consistency'}
                 </p>
               </div>
               <div className="p-4 bg-yellow-50/70 dark:bg-yellow-900/20 backdrop-blur-sm rounded-lg border border-yellow-100 dark:border-yellow-800">
-                <div className="flex items-center">
+                <div className="flex items-start">
                   <ClockIcon className="h-5 w-5 text-yellow-500 mr-2" />
                   <span className="font-medium text-gray-900 dark:text-white">Pending Workload</span>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
                   {pendingApplication > 10
                     ? `${pendingApplication} applications need immediate attention`
                     : 'Workload is manageable and up to date'}
                 </p>
               </div>
               <div className="p-4 bg-red-50/70 dark:bg-red-900/20 backdrop-blur-sm rounded-lg border border-red-100 dark:border-red-800">
-                <div className="flex items-center">
+                <div className="flex items-start">
                   <ArrowPathIcon className="h-5 w-5 text-red-500 mr-2" />
                   <span className="font-medium text-gray-900 dark:text-white">Return Analysis</span>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
                   {analytics.returnRate > 20
                     ? 'High return rate - consider providing clearer guidelines'
                     : 'Return rate is within acceptable limits'}

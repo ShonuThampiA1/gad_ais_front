@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { useRouter } from "next/navigation";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { extractErrorMessage, getErrorMessage } from "@/utils/serviceTypeUtils";
 import {
   SearchBar,
   ExportButtons,
@@ -23,28 +26,31 @@ export default function FirstTimeLoginsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [errorMessage, setErrorMessage] = useState("");
+  const router = useRouter();
 
   const itemsPerPage = 50;
 
   // Fetch officers
   const fetchData = async () => {
     setLoading(true);
-
+    setErrorMessage("");
     try {
-      const response = await axiosInstance.get(
-        "/as-II/first-login-completed"
-      );
-
+      const response = await axiosInstance.get("/as-II/first-login-completed");
       setData(response.data.data.officers || []);
     } catch (error) {
-      console.error("Error fetching first-login-completed officers:", error);
+      console.error("Error fetching officers:", error);
+      const status = error.response?.status;
+    const backendMessage = extractErrorMessage(error);
 
-      // fallback mock data
-      setData(mockData);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const message = getErrorMessage(status, backendMessage);
+
+    setErrorMessage(message);
+    setData([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchData();
@@ -153,8 +159,15 @@ export default function FirstTimeLoginsPage() {
       <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-3 dark:bg-gray-800 dark:border-gray-900 flex justify-between items-center">
 
         <div>
-          <h3 className="text-base font-semibold text-indigo-700 dark:text-white uppercase">
-            First Login Completed Officers
+          <button
+            onClick={() => router.back()}
+            className="group flex items-center gap-2 bg-white border border-indigo-300 text-slate-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                    >
+                      <ArrowLeftIcon className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" strokeWidth={2.5} />
+                      Back
+                    </button>
+          <h3 className="text-base font-semibold text-indigo-700 dark:text-white pt-5 uppercase">
+            Login Activated Officers
           </h3>
 
           <div className="mt-5">
@@ -182,6 +195,11 @@ export default function FirstTimeLoginsPage() {
         </div>
       ) : (
         <div className="mx-auto w-full overflow-x-auto">
+        {errorMessage && (
+      <div className="text-red-600 text-center py-3 font-medium">
+       {errorMessage}
+      </div>
+         )}
 
           <table className="table-auto w-full text-left border-collapse">
 

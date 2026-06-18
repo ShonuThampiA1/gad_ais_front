@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogBackdrop, DialogPanel } from "@headlessui/react";
 import { BoltIcon, XMarkIcon, DocumentIcon } from "@heroicons/react/24/solid";
 import { motion, AnimatePresence } from "framer-motion";
-import { validateFile } from "../../../../../utils/fileValidator";
 import axiosInstance from "@/utils/apiClient";
 import { SearchableSelect } from '@/app/components/searchable-select';
 
@@ -32,13 +31,52 @@ const fields = [
     label: "UDID Document",
     key: "file",
     type: "file",
-    helperText: "Max Size: 2MB. Allowed types: PDF, DOC, DOCX",
+    helperText: "Max Size: 5MB. Allowed type: PDF",
   },
   { label: "Date of Expiry", key: "dis_valid_up_to", type: "date" },
 ];
 
 const alwaysRequiredFields = ["disability_type_id", "disability_perc", "dis_valid_up_to", "udid_number"];
 const disabledFields = [];
+const udidPattern = /^[A-Z]{2}\d+$/;
+const DISABILITY_DOCUMENT_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+
+const validateDisabilityPdfFile = (file) => {
+  if (!file) return { valid: false, error: "No file selected." };
+
+  const fileName = file.name || "";
+  const isPdfMimeType = file.type === "application/pdf";
+  const isPdfExtension = fileName.toLowerCase().endsWith(".pdf");
+
+  if (!isPdfMimeType && !isPdfExtension) {
+    return { valid: false, error: "Only PDF files are allowed." };
+  }
+
+  if (file.size > DISABILITY_DOCUMENT_MAX_SIZE_BYTES) {
+    return { valid: false, error: "Document size should not exceed 5 MB." };
+  }
+
+  return { valid: true };
+};
+
+const normalizeUdidNumberInput = (value) => {
+  let normalized = "";
+
+  for (const char of value.toUpperCase()) {
+    if (normalized.length < 2) {
+      if (/[A-Z]/.test(char)) {
+        normalized += char;
+      }
+      continue;
+    }
+
+    if (/\d/.test(char)) {
+      normalized += char;
+    }
+  }
+
+  return normalized.slice(0, 18);
+};
 
 export function ModalDisabilityDetails({
   open = false,
@@ -46,6 +84,7 @@ export function ModalDisabilityDetails({
   disabilityDetails,
   onSave,
   masterData,
+  masterDataLoading = false,
   sparkFields,
   officerFields,
 }) {
@@ -56,12 +95,14 @@ export function ModalDisabilityDetails({
 
   const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
 
   const [isDocumentModalOpen, setDocumentModalOpen] = useState(false);
   const [documentData, setDocumentData] = useState(null);
   const [loadingDocument, setLoadingDocument] = useState(false);
   const [documentError, setDocumentError] = useState(null);
+  const isEditing = Boolean(disabilityDetails?.ais_des_id);
 
   useEffect(() => {
     if (open) {
@@ -103,15 +144,27 @@ export function ModalDisabilityDetails({
 
   const handleChange = (e) => {
     const { name, value, type, files } = e.target;
+    let nextValue = value;
+
+    if (name === "udid_number") {
+      nextValue = normalizeUdidNumberInput(value);
+    }
 
     let error = "";
-    if (alwaysRequiredFields.includes(name) && !value.trim()) {
+    if (name === "udid_number" && nextValue.length > 18) {
+      nextValue = nextValue.slice(0, 18);
+      error = "UDID Document Number cannot exceed 18 characters.";
+    } else if (name === "udid_number" && nextValue && !udidPattern.test(nextValue)) {
+      error = "UDID Document Number must start with 2 letters followed by digits only.";
+    }
+
+    if (alwaysRequiredFields.includes(name) && !nextValue.trim()) {
       error = "This field is required.";
     }
 
     if (name === "disability_perc") {
-      const perc = parseFloat(value);
-      if (value) {
+      const perc = parseFloat(nextValue);
+      if (nextValue) {
         if (isNaN(perc) || perc <= 0) {
           error = "Please provide a valid percentage.";
         } else if (perc > 100) {
@@ -134,7 +187,7 @@ export function ModalDisabilityDetails({
     }
 
     if (name === "file" && files && files[0]) {
-      const fileValidation = validateFile(files[0], "document");
+      const fileValidation = validateDisabilityPdfFile(files[0]);
       if (!fileValidation.valid) {
         error = fileValidation.error;
       }
@@ -142,7 +195,7 @@ export function ModalDisabilityDetails({
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "file" ? (files && files[0]) : value,
+      [name]: type === "file" ? (files && files[0]) : nextValue,
     }));
 
     setUserUpdatedFields((prev) => new Set([...prev, name]));
@@ -154,6 +207,7 @@ export function ModalDisabilityDetails({
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     const newErrors = {};
 
@@ -190,8 +244,14 @@ export function ModalDisabilityDetails({
       }
     }
 
+    if (formData.udid_number && formData.udid_number.length > 18) {
+      newErrors["udid_number"] = "UDID Document Number cannot exceed 18 characters.";
+    } else if (formData.udid_number && !udidPattern.test(formData.udid_number)) {
+      newErrors["udid_number"] = "UDID Document Number must start with 2 letters followed by digits only.";
+    }
+
     if (formData.file) {
-      const fileValidation = validateFile(formData.file, "document");
+      const fileValidation = validateDisabilityPdfFile(formData.file);
       if (!fileValidation.valid) {
         newErrors["file"] = fileValidation.error;
       }
@@ -199,9 +259,21 @@ export function ModalDisabilityDetails({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      const firstKey = Object.keys(newErrors).find((key) => newErrors[key]);
+      if (firstKey && typeof document !== "undefined") {
+        window.setTimeout(() => {
+          const target =
+            document.querySelector(`[name="${firstKey}"]`) ||
+            document.querySelector(`[data-field="${firstKey}"]`) ||
+            document.getElementById(firstKey);
+          target?.scrollIntoView({ behavior: "smooth", block: "center" });
+          target?.focus?.();
+        }, 0);
+      }
       return;
     }
 
+    setIsSubmitting(true);
     const sparkData = {};
     const userData = {};
 
@@ -235,7 +307,9 @@ export function ModalDisabilityDetails({
       user_data: userData,
     };
 
-    onSave(payload);
+    Promise.resolve(onSave(payload)).finally(() => {
+      setIsSubmitting(false);
+    });
   };
 
   const openDocumentModal = async (documentId) => {
@@ -302,6 +376,15 @@ export function ModalDisabilityDetails({
       </div>
     );
   };
+
+  const renderSelectSkeleton = () => (
+    <div className="mt-1 animate-pulse">
+      <div className="h-10 w-full rounded-md border border-gray-200 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 dark:border-gray-700 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800" />
+      <div className="mt-2 h-3 w-40 rounded bg-gray-100 dark:bg-gray-800" />
+    </div>
+  );
+
+  const isDisabilityTypeLoading = open && (masterDataLoading || !masterData?.length);
 
   const getFieldClassName = (fieldKey) => {
     const actualKey = getActualFieldKey(fieldKey);
@@ -406,18 +489,22 @@ export function ModalDisabilityDetails({
                           {renderSparkIndicator(field.key)}
                           {renderGadOfficerIndicator(field.key)}
                           {field.type === "select" ? (
-                            <SearchableSelect
-                              name={field.key}
-                              value={formData[field.key] || ""}
-                              onChange={handleChange}
-                              disabled={isFieldDisabled(actualKey)}
-                              placeholder={`Select ${field.label}`}
-                              options={masterData || []}
-                              getOptionLabel={(option) => option.disability}
-                              getOptionValue={(option) => option.disability_id}
-                              className={getFieldClassName(field.key)}
-                              searchPlaceholder="Search..."
-                            />
+                            isDisabilityTypeLoading ? (
+                              renderSelectSkeleton()
+                            ) : (
+                              <SearchableSelect
+                                name={field.key}
+                                value={formData[field.key] || ""}
+                                onChange={handleChange}
+                                disabled={isFieldDisabled(actualKey)}
+                                placeholder={`Select ${field.label}`}
+                                options={masterData || []}
+                                getOptionLabel={(option) => option.disability}
+                                getOptionValue={(option) => option.disability_id}
+                                className={getFieldClassName(field.key)}
+                                searchPlaceholder="Search..."
+                              />
+                            )
                           ): field.type === "file" ? (
   <div className="relative">
     <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1.5">
@@ -443,7 +530,7 @@ export function ModalDisabilityDetails({
           id="disability-file-upload"
           name={field.key}
           type="file"
-          accept=".pdf,.doc,.docx"
+          accept=".pdf,application/pdf"
           onChange={handleChange}
           disabled={isFieldDisabled(actualKey)}
           className="hidden"
@@ -506,6 +593,7 @@ export function ModalDisabilityDetails({
                               value={formData[field.key] || ""}
                               onChange={handleChange}
                               disabled={isFieldDisabled(actualKey)}
+                              maxLength={field.key === "udid_number" ? 18 : undefined}
                               className={getFieldClassName(field.key)}
                             />
                           )}
@@ -529,9 +617,10 @@ export function ModalDisabilityDetails({
                   </button>
                   <button
                     type="submit"
-                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                    disabled={isSubmitting}
+                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                   >
-                    {disabilityDetails && disabilityDetails.ais_des_id ? "Update" : "Save"}
+                    {isSubmitting ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update" : "Save")}
                   </button>
                 </div>
               </div>
@@ -624,6 +713,7 @@ ModalDisabilityDetails.propTypes = {
   disabilityDetails: PropTypes.object,
   onSave: PropTypes.func.isRequired,
   masterData: PropTypes.array.isRequired,
+  masterDataLoading: PropTypes.bool,
   sparkFields: PropTypes.instanceOf(Set),
   officerFields: PropTypes.object,
 };

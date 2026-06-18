@@ -24,7 +24,7 @@ import { useEffect, useState, useMemo } from 'react';
 
 // Default nav items specifically for the RBAC module
 const rbacNavItems = [
-  { name: 'Dashboard', href: '/rbac', icon: ChartBarIcon, menuId: 23 },
+  { name: 'Dashboard', href: '/rbac/dashboard', icon: ChartBarIcon, menuId: 23 },
   { name: 'Menus Management', href: '/rbac/menus-management', icon: ListBulletIcon, menuId: 24 },
   { name: 'Pages Management', href: '/rbac/pages-management', icon: DocumentIcon, menuId: 25 },
   { name: 'Actions Management', href: '/rbac/actions-management', icon: WrenchScrewdriverIcon, menuId: 26 },
@@ -41,6 +41,8 @@ const dummySystemSettings = [
   { name: 'General Settings', href: '/rbac/system/general', icon: Cog6ToothIcon, menuId: 991 },
   { name: 'Server Configuration', href: '/rbac/system/server', icon: ServerIcon, menuId: 992 },
   { name: 'Localization', href: '/rbac/system/localization', icon: GlobeAltIcon, menuId: 993 },
+  { name: 'Onboarding Requests', href: '/rbac/system/onboarding-requests', icon: ClipboardDocumentCheckIcon, menuId: 997 },
+  { name: 'Credential Change Audit', href: '/rbac/system/contact-recovery-audit', icon: ShieldExclamationIcon, menuId: 998 },
 ];
 
 const dummyAuditLogs = [
@@ -99,6 +101,11 @@ export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void 
   useEffect(() => {
     if (!mounted) return;
 
+    if (pathname.startsWith('/rbac/superadmin-dashboard')) {
+      setOpenModule(null);
+      return;
+    }
+
     let foundOpen = false;
     for (const module of groupedModules) {
       if (module.id === 'rbac') {
@@ -107,10 +114,11 @@ export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void 
            pathname === item.href || pathname === `${item.href}/` || pathname.startsWith(`${item.href}/`)
          );
 
+         const isSuperAdminLanding = pathname.startsWith('/rbac/superadmin-dashboard');
          const isDashboardActive = pathname === '/rbac' ||
                          pathname === '/rbac/' ||
                          pathname.startsWith('/rbac/dashboard') ||
-                         (pathname.startsWith('/rbac') && !anyOtherActive);
+                         (!isSuperAdminLanding && pathname.startsWith('/rbac') && !anyOtherActive);
 
          if (isDashboardActive || anyOtherActive) {
              setOpenModule('rbac');
@@ -153,10 +161,11 @@ export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void 
                  const anyOtherActive = module.items.slice(1).some(i =>
                    pathname === i.href || pathname === `${i.href}/` || pathname.startsWith(`${i.href}/`)
                  );
+                 const isSuperAdminLanding = pathname.startsWith('/rbac/superadmin-dashboard');
                  return pathname === '/rbac' ||
                         pathname === '/rbac/' ||
                         pathname.startsWith('/rbac/dashboard') ||
-                        (pathname.startsWith('/rbac') && !anyOtherActive);
+                        (!isSuperAdminLanding && pathname.startsWith('/rbac') && !anyOtherActive);
              }
              return pathname === item.href ||
                     pathname === `${item.href}/` ||
@@ -192,10 +201,11 @@ export default function RBACSidenav({ onItemClick }: { onItemClick?: () => void 
                       const anyOtherActive = module.items.slice(1).some(i =>
                         pathname === i.href || pathname === `${i.href}/` || pathname.startsWith(`${i.href}/`)
                       );
+                      const isSuperAdminLanding = pathname.startsWith('/rbac/superadmin-dashboard');
                       isActive = pathname === '/rbac' ||
                                  pathname === '/rbac/' ||
                                  pathname.startsWith('/rbac/dashboard') ||
-                                 (pathname.startsWith('/rbac') && !anyOtherActive);
+                                 (!isSuperAdminLanding && pathname.startsWith('/rbac') && !anyOtherActive);
                     } else {
                       isActive = pathname === item.href ||
                                  pathname === `${item.href}/` ||

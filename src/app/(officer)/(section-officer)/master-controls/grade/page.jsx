@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function GradeList() {
   const fetchGrades = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/grade-all`);
-      console.log("Fetched gradeList:", response.data.data.grade);
-      setGradeList(response.data.data.grade || []);
+      const payload = await fetchBulkMasters(["grade"], { admin: true, includeInactive: true });
+      setGradeList(payload.grade || []);
     } catch (error) {
       console.error("Error fetching Grades:", error);
       toast.error("Failed to load grades.");
@@ -65,8 +65,6 @@ export default function GradeList() {
 
     try {
       const trimmedGrade = GradeData.grade.trim().toLowerCase();
-      console.log("Input grade:", trimmedGrade);
-      console.log("Current gradeList:", gradeList);
 
       // Check for existing grade
       const existing = gradeList.find(
@@ -75,7 +73,6 @@ export default function GradeList() {
 
       // Case: Grade exists and is deactivated
       if (existing && !existing.is_active && !GradeData.grade_id) {
-        console.log("Found deactivated grade:", existing);
         setGradeToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -95,14 +92,12 @@ export default function GradeList() {
           `/masters/grade/${grade_id}`,
           { ...GradeDataWithoutId, grade: GradeData.grade.trim() }
         );
-        console.log("Grade updated:", response);
         toast.success("Grade updated successfully");
       } else {
         response = await axiosInstance.post("/masters/grade", {
           ...GradeData,
           grade: GradeData.grade.trim(),
         });
-        console.log("Grade added:", response);
         toast.success("Grade added successfully");
       }
 
@@ -125,7 +120,6 @@ export default function GradeList() {
           (g) => g.grade.toLowerCase() === trimmedGrade
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated grade:", updatedExisting);
           setGradeToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -191,7 +185,6 @@ export default function GradeList() {
 
   const handleReactivateClick = (grade_id) => {
     const grade = gradeList.find((g) => g.grade_id === grade_id);
-    console.log("Reactivating grade:", grade);
     setGradeToReactivate(grade);
     setConfirmReactivateOpen(true);
   };

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function DisabilityList() {
   const fetchDisability = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/disability-all`);
-      console.log("Fetched disabilityList:", response.data.data.disability);
-      setDisabilityList(response.data.data.disability);
+      const payload = await fetchBulkMasters(["disability"], { admin: true, includeInactive: true });
+      setDisabilityList(payload.disability || []);
     } catch (error) {
       console.error("Error fetching Disability:", error);
       toast.error("Failed to load disabilities.");
@@ -65,8 +65,6 @@ export default function DisabilityList() {
 
     try {
       const trimmedDisability = DisabilityData.disability.trim().toLowerCase();
-      console.log("Input disability:", trimmedDisability);
-      console.log("Current disabilityList:", disabilityList);
 
       // Check for existing disability
       const existing = disabilityList.find(
@@ -75,7 +73,6 @@ export default function DisabilityList() {
 
       // Case: Disability exists and is deactivated
       if (existing && !existing.is_active && !DisabilityData.disability_id) {
-        console.log("Found deactivated disability:", existing);
         setDisabilityToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function DisabilityList() {
           (dis) => dis.disability.toLowerCase() === trimmedDisability
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated disability:", updatedExisting);
           setDisabilityToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -181,7 +177,6 @@ export default function DisabilityList() {
 
   const handleReactivateClick = (disability_id) => {
     const disability = disabilityList.find((d) => d.disability_id === disability_id);
-    console.log("Reactivating disability:", disability);
     setDisabilityToReactivate(disability);
     setConfirmReactivateOpen(true);
   };

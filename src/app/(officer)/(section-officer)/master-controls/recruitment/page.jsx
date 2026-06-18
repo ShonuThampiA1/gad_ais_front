@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function RecruitmentList() {
   const fetchRecruitments = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/recruitment-all`);
-      console.log("Fetched recruitmentList:", response.data.data.recruitment);
-      setRecruitmentList(response.data.data.recruitment || []);
+      const payload = await fetchBulkMasters(["recruitment"], { admin: true, includeInactive: true });
+      setRecruitmentList(payload.recruitment || []);
     } catch (error) {
       console.error("Error fetching Recruitments:", error);
       toast.error("Failed to load recruitments.");
@@ -66,8 +66,6 @@ export default function RecruitmentList() {
     try {
       const trimmedRecruitment = RecruitmentData.recruitment.trim().toLowerCase();
       const trimmedAbbr = RecruitmentData.recruitment_abbr?.trim().toLowerCase() || "";
-      console.log("Input recruitment:", trimmedRecruitment, "Abbreviation:", trimmedAbbr);
-      console.log("Current recruitmentList:", recruitmentList);
 
       // Check for existing recruitment
       const existing = recruitmentList.find(
@@ -76,7 +74,6 @@ export default function RecruitmentList() {
 
       // Case: Recruitment exists and is deactivated
       if (existing && !existing.is_active && !RecruitmentData.recruitment_id) {
-        console.log("Found deactivated recruitment:", existing);
         setRecruitmentToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -129,7 +126,6 @@ export default function RecruitmentList() {
           (rec) => rec.recruitment.toLowerCase() === trimmedRecruitment
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated recruitment:", updatedExisting);
           setRecruitmentToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -199,7 +195,6 @@ export default function RecruitmentList() {
 
   const handleReactivateClick = (recruitment_id) => {
     const recruitment = recruitmentList.find((r) => r.recruitment_id === recruitment_id);
-    console.log("Reactivating recruitment:", recruitment);
     setRecruitmentToReactivate(recruitment);
     setConfirmReactivateOpen(true);
   };

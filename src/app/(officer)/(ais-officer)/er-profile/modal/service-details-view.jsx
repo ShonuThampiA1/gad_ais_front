@@ -87,14 +87,14 @@ export function ModalServiceDetailsView({
   const renderIndicator = (fieldKey, fieldSource, type, label, bgColor, textColor, icon, position = 'right-2') => {
     if (fieldSource !== type) return null;
     return (
-      <div key={`${fieldKey}_${type}`} className={`absolute top-2 ${position} group`}>
+      <div key={`${fieldKey}_${type}`} className={`absolute top-2 ${position} group z-30`}>
         <span
           className={`inline-flex items-center p-0.5 rounded-full ${bgColor} ${textColor} text-xs`}
           aria-label={label}
         >
           {icon}
         </span>
-        <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10">
+        <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-40">
           <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap shadow-lg">
             {label}
           </div>
@@ -117,7 +117,7 @@ export function ModalServiceDetailsView({
     if (gad) indicators.push(gad);
 
     return indicators.length > 0 ? (
-      <div className="absolute top-2 right-2 flex flex-row-reverse space-x-reverse space-x-1 z-10">
+      <div className="absolute top-2 right-2 flex flex-row-reverse space-x-reverse space-x-1 z-20">
         {indicators}
       </div>
     ) : null;
@@ -158,7 +158,7 @@ export function ModalServiceDetailsView({
                         <h4 className="text-xs font-medium text-gray-600 dark:text-gray-300">Posting Information</h4>
                       </div>
                       {allFields.slice(0, 9).map((field) => (
-                        <div key={field.key} className="relative bg-gray-100 dark:bg-gray-800 rounded-md pl-2 pr-5 py-2 border border-gray-100 overflow-hidden">
+                        <div key={field.key} className="relative bg-gray-100 dark:bg-gray-800 rounded-md pl-2 pr-5 py-2 border border-gray-100 overflow-visible">
                           {renderIndicators(field, service)}
                           <div className="flex items-start gap-2">
                             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-900/50 flex items-center justify-center mt-0.5">
@@ -180,7 +180,7 @@ export function ModalServiceDetailsView({
                         <h4 className="text-xs font-medium text-gray-600 dark:text-gray-300">Additional Details</h4>
                       </div>
                       {allFields.slice(9).map((field) => (
-                        <div key={field.key} className="relative bg-gray-100 dark:bg-gray-800 rounded-md pl-2 pr-5 py-2 border border-gray-100 overflow-hidden">
+                        <div key={field.key} className="relative bg-gray-100 dark:bg-gray-800 rounded-md pl-2 pr-5 py-2 border border-gray-100 overflow-visible">
                           {renderIndicators(field, service)}
                           <div className="flex items-start gap-2">
                             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-900/50 flex items-center justify-center mt-0.5">

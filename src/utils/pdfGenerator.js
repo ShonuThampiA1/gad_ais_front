@@ -4,6 +4,34 @@ import { toast } from 'react-toastify';
 import downloadFile from './downloadFile';
 import { buildUserDetailsForDisplay } from './userDetailsBuilder';
 
+const DEFAULT_PROFILE_IMAGE_PATH = "/images/avatar.jpg";
+
+const getDisplayFieldValue = (value) => {
+  if (value && typeof value === 'object' && 'value' in value) {
+    return value.value;
+  }
+  return value;
+};
+
+const toAbsoluteAssetUrl = (path) => {
+  if (!path || typeof window === "undefined") return path;
+
+  if (/^https?:\/\//i.test(path) || path.startsWith("data:")) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${window.location.origin}${normalizedPath}`;
+};
+
+const getProfileImageForPdf = (profileImage) => {
+  if (!profileImage) {
+    return toAbsoluteAssetUrl(DEFAULT_PROFILE_IMAGE_PATH);
+  }
+
+  return toAbsoluteAssetUrl(profileImage);
+};
+
 /**
  * Unified PDF generator for preview, submit, and approve
  *
@@ -57,22 +85,21 @@ const pdfGenerator = async ({
       });
     }
   }
-  console.log("documentNumber:", documentNumber);
   const honorifics = /^(mr|mrs|ms|miss|dr|prof)\.?\s+/i;
   const safeFullName = userDetails.full_name
     .replace(honorifics, '')   // remove honorific if present at start
     .trim()
     .replace(/\s+/g, '_');
-  const fileName = `${userDetails.personal_details.PEN}_${safeFullName}_${requestType}.pdf`;
+  const penNumber = getDisplayFieldValue(userDetails?.personal_details?.PEN);
+  const fileName = `${penNumber}_${safeFullName}_${requestType}.pdf`;
   const docNum = documentNumber ? documentNumber : `TRN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   try {
     let response;
-    console.log('Full User Details:', JSON.stringify(userDetails));
     const renderedData = buildUserDetailsForDisplay(userDetails);
-    console.log("Rendered Data for PDF:", JSON.stringify(renderedData));
+    renderedData.profile_image = getProfileImageForPdf(renderedData.profile_image);
     let payload = {
-      pen_number: userDetails.personal_details.PEN,
+      pen_number: penNumber,
       full_name: safeFullName,
       user_data_json: renderedData
     };
@@ -115,7 +142,6 @@ const pdfGenerator = async ({
     // --- 4. Trigger download ---
     // const url = window.URL.createObjectURL(new Blob([response.data]));
     // const fileName = (userDetails.full_name || "document").replace(/ /g, "_") + ".pdf";
-    console.log("file name:", fileName);
     const file = new File([response.data], fileName, { type: 'application/pdf' });
     if (requestType === 'preview') {
       downloadFile(file);

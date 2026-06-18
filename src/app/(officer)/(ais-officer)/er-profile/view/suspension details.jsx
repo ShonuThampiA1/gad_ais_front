@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   DocumentTextIcon,
   CalendarIcon,
@@ -21,12 +21,13 @@ import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import moment from 'moment';
 
 export function SuspensionDetails({ profileData }) {
+  const saveInFlightRef = useRef(false);
   const { updateSectionProgress } = useProfileCompletion();
   const [isModalOpen, setModalOpen] = useState(false);
   const [suspensionList, setSuspensionList] = useState([]);
   const [selectedSuspension, setSelectedSuspension] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [officerFields, setOfficerFields] = useState({
     GAD_OFFICER: [],
     AIS_OFFICER: [],
@@ -42,29 +43,22 @@ export function SuspensionDetails({ profileData }) {
 
   const calculateDuration = (from, to) => {
     if (!from || !to) return "N/A";
-    const fromDate = moment(from);
-    const toDate = moment(to);
+    const fromDate = moment(from).startOf("day");
+    const toDate = moment(to).startOf("day");
     if (!fromDate.isValid() || !toDate.isValid()) return "N/A";
 
-    const duration = moment.duration(toDate.diff(fromDate));
-    
-    const years = duration.years();
-    const months = duration.months();
-    const days = duration.days();
+    const totalDays = toDate.diff(fromDate, "days") + 1;
+    if (totalDays <= 0) return "N/A";
 
-    return [
-      years > 0 ? `${years} year${years > 1 ? "s" : ""}` : "",
-      months > 0 ? `${months} month${months > 1 ? "s" : ""}` : "",
-      days > 0 ? `${days} day${days > 1 ? "s" : ""}` : "",
-    ]
-      .filter(Boolean)
-      .join(", ");
+    return `${totalDays} day${totalDays > 1 ? "s" : ""}`;
   };
-    const getSuspensionStatus = (toPeriod) => {
+  const getSuspensionStatus = (toPeriod) => {
     if (!toPeriod) return "Active";
-    const today = moment();
-    const toDate = moment(toPeriod);
-    return today.isSameOrBefore(toDate) ? "Active" : "Past";
+    const today = moment().startOf("day");
+    const toDate = moment(toPeriod).startOf("day");
+    if (!toDate.isValid()) return "N/A";
+    if (today.isSame(toDate, "day")) return "Valid";
+    return today.isBefore(toDate, "day") ? "Active" : "Past";
   };
 
   const mapSuspensionData = useCallback((sparkData, dbSuspensions = []) => {
@@ -76,18 +70,21 @@ export function SuspensionDetails({ profileData }) {
         const suspension = {
           ais_sub_id: `spark_${index}`,
           suspension_details: sus.reason || "",
+          sus_order_number: sus.order_number || "",
           from_period: sus.from_date || "",
           to_period: sus.to_date || "",
           _source: "SPARK",
           isSaved: false,
           fieldSources: {
             suspension_details: "SPARK",
+            sus_order_number: "SPARK",
             from_period: "SPARK",
             to_period: "SPARK",
           },
         };
 
         if (sus.reason) sparkKeys.add(`suspension_details_${index}`);
+        if (sus.order_number) sparkKeys.add(`sus_order_number_${index}`);
         if (sus.from_date) sparkKeys.add(`from_period_${index}`);
         if (sus.to_date) sparkKeys.add(`to_period_${index}`);
 
@@ -100,6 +97,7 @@ export function SuspensionDetails({ profileData }) {
       const suspension = {
         ais_sub_id: String(dbSus.ais_sub_id),
         suspension_details: "",
+        sus_order_number: "",
         from_period: "",
         to_period: "",
         _source: "MIXED",
@@ -107,7 +105,7 @@ export function SuspensionDetails({ profileData }) {
         fieldSources,
       };
 
-      const fieldKeys = ["suspension_details", "from_period", "to_period"];
+      const fieldKeys = ["suspension_details", "sus_order_number", "from_period", "to_period"];
       let hasUserData = false;
 
       fieldKeys.forEach((key) => {
@@ -143,10 +141,17 @@ export function SuspensionDetails({ profileData }) {
             ""
         ).toLowerCase();
         const sparkFrom = String(sparkSus.from_period || "").toLowerCase();
+        const sparkOrderNo = String(sparkSus.sus_order_number || "").toLowerCase();
         const dbFrom = String(
           dbSus.fields?.GAD_OFFICER?.from_period ||
             dbSus.fields?.AIS_OFFICER?.from_period ||
             dbSus.fields?.UNKNOWN?.from_period ||
+            ""
+        ).toLowerCase();
+        const dbOrderNo = String(
+          dbSus.fields?.GAD_OFFICER?.sus_order_number ||
+            dbSus.fields?.AIS_OFFICER?.sus_order_number ||
+            dbSus.fields?.UNKNOWN?.sus_order_number ||
             ""
         ).toLowerCase();
         const sparkTo = String(sparkSus.to_period || "").toLowerCase();
@@ -159,6 +164,7 @@ export function SuspensionDetails({ profileData }) {
 
         const isMatch =
           sparkDetails === dbDetails &&
+          sparkOrderNo === dbOrderNo &&
           sparkFrom === dbFrom &&
           sparkTo === dbTo;
         if (isMatch) {
@@ -170,6 +176,13 @@ export function SuspensionDetails({ profileData }) {
               dbSus.fields?.GAD_OFFICER?.suspension_details ||
               dbSus.fields?.AIS_OFFICER?.suspension_details
                 ? dbSus.fields?.GAD_OFFICER?.suspension_details
+                  ? "GAD_OFFICER"
+                  : "USER"
+                : "SPARK",
+            sus_order_number:
+              dbSus.fields?.GAD_OFFICER?.sus_order_number ||
+              dbSus.fields?.AIS_OFFICER?.sus_order_number
+                ? dbSus.fields?.GAD_OFFICER?.sus_order_number
                   ? "GAD_OFFICER"
                   : "USER"
                 : "SPARK",
@@ -301,6 +314,14 @@ export function SuspensionDetails({ profileData }) {
                 computeValue: () => suspension.suspension_details || "N/A",
               },
               {
+                label: "Order Number",
+                key: `sus_order_number_${index}`,
+                originalKey: "sus_order_number",
+                icon: DocumentTextIcon,
+                source: suspension.fieldSources.sus_order_number,
+                computeValue: () => suspension.sus_order_number || "N/A",
+              },
+              {
                 label: "From Period",
                 key: `from_period_${index}`,
                 originalKey: "from_period",
@@ -334,8 +355,12 @@ export function SuspensionDetails({ profileData }) {
 
   const handleSave = useCallback(
     async (updatedData) => {
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setTimeout(() => {
+        saveInFlightRef.current = false;
+      }, 2500);
       try {
-        console.log("Incoming updatedData:", JSON.stringify(updatedData, null, 2));
 
         const isSparkEntry =
           selectedSuspension &&
@@ -355,12 +380,12 @@ export function SuspensionDetails({ profileData }) {
           spark_data: updatedData.spark_data || null,
           user_data: updatedData.user_data || {
             suspension_details: null,
+            sus_order_number: null,
             from_period: null,
             to_period: null,
           },
         };
 
-        console.log("Request body:", JSON.stringify(requestBody, null, 2));
 
         if (!requestBody.user_data || typeof requestBody.user_data !== "object") {
           throw new Error("Invalid user_data structure");
@@ -380,15 +405,17 @@ export function SuspensionDetails({ profileData }) {
         }
 
         if (response.data.success) {
-          console.log("response==", response);
           const savedSuspension = response.data.data.suspension_info;
-          console.log("savedSuspension==", savedSuspension);
 
           const fieldSources = {
             suspension_details:
               requestBody.user_data.suspension_details
                 ? "USER"
                 : selectedSuspension?.fieldSources?.suspension_details || "SPARK",
+            sus_order_number:
+              requestBody.user_data.sus_order_number
+                ? "USER"
+                : selectedSuspension?.fieldSources?.sus_order_number || "SPARK",
             from_period:
               requestBody.user_data.from_period
                 ? "USER"
@@ -403,10 +430,12 @@ export function SuspensionDetails({ profileData }) {
             const updatedSuspension = {
               ais_sub_id: String(savedSuspension.ais_sub_id),
               suspension_details: savedSuspension.suspension_details || "",
+              sus_order_number: savedSuspension.sus_order_number || "",
               from_period: savedSuspension.from_period || "",
               to_period: savedSuspension.to_period || "",
               _source:
                 requestBody.user_data.suspension_details ||
+                requestBody.user_data.sus_order_number ||
                 requestBody.user_data.from_period ||
                 requestBody.user_data.to_period
                   ? "USER"
@@ -437,7 +466,7 @@ export function SuspensionDetails({ profileData }) {
             const newSparkFields = new Set(prev);
             if (isSparkEntry) {
               const index = parseInt(selectedSuspension.ais_sub_id.split("_")[1]);
-              ["suspension_details", "from_period", "to_period"].forEach((key) => {
+              ["suspension_details", "sus_order_number", "from_period", "to_period"].forEach((key) => {
                 newSparkFields.delete(`${key}_${index}`);
               });
             }
@@ -478,13 +507,13 @@ export function SuspensionDetails({ profileData }) {
       const cleanSuspension = {
         ais_sub_id: String(suspension.ais_sub_id),
         suspension_details: suspension.suspension_details || "",
+        sus_order_number: suspension.sus_order_number || "",
         from_period: suspension.from_period || "",
         to_period: suspension.to_period || "",
         _source: suspension._source || "USER",
         isSaved: suspension.isSaved,
         fieldSources: suspension.fieldSources,
       };
-      console.log("Selected Disciplinary :", JSON.stringify(cleanSuspension, null, 2));
       setSelectedSuspension(cleanSuspension);
       setModalOpen(true);
     },
@@ -497,12 +526,14 @@ export function SuspensionDetails({ profileData }) {
       setSelectedSuspension({
         ais_sub_id: null,
         suspension_details: "",
+        sus_order_number: "",
         from_period: "",
         to_period: "",
         _source: "USER",
         isSaved: false,
         fieldSources: {
           suspension_details: "USER",
+          sus_order_number: "USER",
           from_period: "USER",
           to_period: "USER",
         },
@@ -669,9 +700,11 @@ useEffect(() => {
               className="relative bg-gray-50 dark:bg-gray-800 rounded-md p-3 border border-indigo-300 dark:border-indigo-600 shadow-sm"
             >
               {renderSavedIndicator(card.isSaved)}
-              <span
+                <span
                 className={`absolute top-[-10px] left-3 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-sm border ${
-                  card.status === "Active" ? "bg-green-600 border-green-600" : "bg-indigo-600 border-indigo-600"
+                  card.status === "Past"
+                    ? "bg-indigo-600 border-indigo-600"
+                    : "bg-green-600 border-green-600"
                 }`}
               >
                 {card.status}

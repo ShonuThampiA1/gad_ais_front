@@ -19,13 +19,19 @@ import { useRouter } from "next/navigation";
 import { useProfileCompletion } from "@/contexts/Profile-completion-context";
 import { getServiceTypeName } from "@/utils/serviceTypeUtils";
 import { fileTypes } from "@/utils/fileValidator";
+import { canEditErProfilePhoto, getErProfileStatusPresentation, isApprovedErProfileState, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
 // React Image Crop component
 import ReactCrop from 'react-image-crop';
 import { createPortal } from "react-dom";
 import 'react-image-crop/dist/ReactCrop.css';
 
-export const CompactProfileSection = ({ highlightSparkButton = false, highlightProfileButton = false }) => {
+export const CompactProfileSection = ({
+  profileData = null,
+  onRefreshProfileData = null,
+  highlightSparkButton = false,
+  highlightProfileButton = false,
+}) => {
   const fileInputRef = useRef(null);
   const imgRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -38,8 +44,9 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
   const [isProfileImageLoading, setIsProfileImageLoading] = useState(true);
   const [isProgressCalculating, setIsProgressCalculating] = useState(false);
   
-  const { overallProgress, updateSectionProgress,markSectionLoaded, markInitialLoadComplete } = useProfileCompletion();
-  const profileProgress = overallProgress ? overallProgress() : 0;
+  const { overallProgress, updateSectionProgress,markSectionLoaded, isProgressReady } = useProfileCompletion();
+  const profileProgress = overallProgress ? overallProgress() : null;
+  const showProgressSkeleton = !isProgressReady || typeof profileProgress !== 'number';
   
   const [profileImage, setProfileImage] = useState("/api/placeholder/120/120");
   const [isUploading, setIsUploading] = useState(false);
@@ -59,15 +66,17 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
   const [userDetails, setUserDetails] = useState(null);
   const [officerData, setOfficerData] = useState(null);
   const [sparkData, setSparkData] = useState(null);
-  const [profileStatus, setProfileStatus] = useState('1');
+  const [workflowContext, setWorkflowContext] = useState(null);
   const baseURL = process.env.NEXT_PUBLIC_API_URL;
-  const isProfileComplete = profileProgress >= 0;
+  const isProfileComplete = typeof profileProgress === 'number' && isProgressReady;
+  const isProfilePhotoEditable = canEditErProfilePhoto(workflowContext);
+  const isApprovedProfile = isApprovedErProfileState(workflowContext);
+  const statusPresentation = getErProfileStatusPresentation(workflowContext);
 
   // Fetch user details and profile image on component mount
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoading(true);
-      setIsDataLoading(true);
       
       try {
         const storedUserDetails = sessionStorage.getItem("user_details");
@@ -78,15 +87,11 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
             console.error("Error parsing user details:", error);
           }
         }
-        const storedProfileStatus = sessionStorage.getItem('profile_status') || '1';
-        setProfileStatus(storedProfileStatus);
-        
-        await fetchOfficerData();
+        setWorkflowContext(readStoredErProfileWorkflowContext());
       } catch (error) {
         console.error("Error loading initial data:", error);
       } finally {
         setIsLoading(false);
-        setIsDataLoading(false);
       }
     };
 
@@ -95,7 +100,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
 
   // Monitor progress calculation
   useEffect(() => {
-    if (typeof profileProgress === 'number') {
+    if (typeof profileProgress === 'number' && isProgressReady) {
       setIsProgressCalculating(true);
       const timer = setTimeout(() => {
         setIsProgressCalculating(false);
@@ -103,7 +108,9 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
       
       return () => clearTimeout(timer);
     }
-  }, [profileProgress]);
+
+    setIsProgressCalculating(true);
+  }, [profileProgress, isProgressReady]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -118,38 +125,29 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
     };
   }, [showCropModal]);
 
-  // Fetch officer data from API
-  const fetchOfficerData = async () => {
-  setIsDataLoading(true);
-  setIsProfileImageLoading(true);
-  
-  try {
-    const response = await axiosInstance.get("/officer/officer");
-    const data = response.data.data;
-    
-    // Set officer data and spark data
-    setOfficerData(data.officer_data);
-    setSparkData(data.spark_data);
-    
-    // Fetch profile image
-    await fetchProfileImage(data.officer_data);
-    
-    // Mark initial load as complete after all data is fetched
-    markInitialLoadComplete();
-    
-  } catch (error) {
-    console.error("Error fetching officer data:", error);
-    // Use default avatar if API fails
-    setProfileImage("/images/avatar.jpg");
-    // Still mark as loaded
-    updateSectionProgress('profile_photo', 0, 1);
-    markSectionLoaded('profile_photo');
-    markInitialLoadComplete();
-  } finally {
-    setIsDataLoading(false);
-    setIsProfileImageLoading(false);
-  }
-};
+  useEffect(() => {
+    if (!profileData) {
+      return;
+    }
+
+    const syncProfileData = async () => {
+      setIsDataLoading(true);
+      try {
+        setOfficerData(profileData.officer_data || null);
+        setSparkData(profileData.spark_data || null);
+        await fetchProfileImage(profileData.officer_data || null);
+      } catch (error) {
+        console.error("Error syncing officer data:", error);
+        setProfileImage("/images/avatar.jpg");
+        updateSectionProgress('profile_photo', 0, 1);
+        markSectionLoaded('profile_photo');
+      } finally {
+        setIsDataLoading(false);
+      }
+    };
+
+    syncProfileData();
+  }, [profileData]);
   // Fetch profile image from officer data
   const fetchProfileImage = async (officerDataParam = null) => {
   setIsProfileImageLoading(true);
@@ -192,12 +190,10 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
       
       // Profile photo exists - mark as completed
       updateSectionProgress('profile_photo', 1, 1); // 1 completed out of 1 field
-      console.log('✅ Profile photo found and marked as complete (1/1)');
     } else {
       setProfileImage("/images/avatar.jpg");
       // No profile photo - mark as incomplete
       updateSectionProgress('profile_photo', 0, 1); // 0 completed out of 1 field
-      console.log('⚠️ No profile photo found, marked as incomplete (0/1)');
     }
     
     // Mark section as loaded regardless
@@ -218,7 +214,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
   // Helper function to extract field from multiple sources
   const getFieldValue = (fieldName, defaultValue = "") => {
     if (userDetails && userDetails[fieldName]) {
-      return userDetails[fieldName];gc1``
+      return userDetails[fieldName];
     }
 
     if (officerData) {
@@ -335,6 +331,14 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
   };
 
   const handleImageUpload = (event) => {
+    if (!isProfilePhotoEditable) {
+      toast.info("Cannot update profile picture after the profile is submitted or approved.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     const file = event.target.files[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
@@ -361,6 +365,10 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
   };
 
   const handleEditProfile = () => {
+    if (!isProfilePhotoEditable) {
+      toast.info("Cannot update profile picture after the profile is submitted or approved.");
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -451,7 +459,9 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
     
     // Update profile completion and refresh image
     setIsDataLoading(true);
-    await fetchOfficerData(); // This will call fetchProfileImage which updates the progress
+    if (onRefreshProfileData) {
+      await onRefreshProfileData();
+    }
     
     toast.success("Profile picture updated successfully!");
     
@@ -552,7 +562,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
               <div className="flex items-start space-x-4">
                 {/* Profile Image with Edit Overlay */}
                 <div 
-                  className="relative group cursor-pointer flex-shrink-0"
+                  className={`relative group flex-shrink-0 ${isProfilePhotoEditable ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                   onMouseEnter={() => setIsHovered(true)}
                   onMouseLeave={() => setIsHovered(false)}
                   onClick={handleEditProfile}
@@ -577,7 +587,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                   
                   {/* Upload Overlay */}
                   <AnimatePresence>
-                    {isHovered && !isProfileImageLoading && (
+                    {isHovered && !isProfileImageLoading && isProfilePhotoEditable && (
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -596,7 +606,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                     </div>
                   )}
 
-                  {profileStatus === '3' && (
+                  {isApprovedProfile && (
                     <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-md dark:bg-green-600">
                       <CheckBadgeIcon className="w-4 h-4 text-white" />
                     </div>
@@ -608,6 +618,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                   ref={fileInputRef}
                   onChange={handleImageUpload}
                   accept="image/*"
+                  disabled={!isProfilePhotoEditable}
                   className="hidden"
                 />
 
@@ -668,7 +679,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                   <div className="flex items-center justify-end space-x-2 mb-1">
                     <span className="text-sm text-indigo-200 hidden sm:inline">Progress</span>
                     <span className="text-lg font-bold bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text text-transparent">
-                      {isProgressCalculating ? (
+                      {showProgressSkeleton || isProgressCalculating ? (
                         <span className="inline-block animate-spin rounded-full h-4 w-4 border border-white/30 border-t-white"></span>
                       ) : (
                         `${profileProgress}%`
@@ -676,7 +687,7 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                     </span>
                   </div>
                   <div className="w-32 sm:w-48 bg-white/20 rounded-full h-2 dark:bg-white/10 relative overflow-hidden">
-                    {isProgressCalculating ? (
+                    {showProgressSkeleton || isProgressCalculating ? (
                       <div className="absolute inset-0 bg-gradient-to-r from-green-400/30 to-cyan-400/30 h-2 rounded-full animate-pulse"></div>
                     ) : (
                       <motion.div 
@@ -803,9 +814,9 @@ export const CompactProfileSection = ({ highlightSparkButton = false, highlightP
                         <span className="text-sm font-medium text-indigo-200">Profile Status</span>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${profileStatus === '3' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                        <div className={`w-3 h-3 rounded-full ${statusPresentation.dotClass}`}></div>
                         <p className="text-lg font-semibold">
-                          {profileStatus === '3' ? 'Verified' : 'Pending'}
+                          {statusPresentation.label}
                         </p>
                       </div>
                     </div>

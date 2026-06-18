@@ -19,11 +19,9 @@ export default function DashboardRootLayout({ children }: { children: ReactNode 
     if (typeof window === 'undefined' || hasSetupRef.current) return;
     hasSetupRef.current = true;
 
-    console.log('Setting up back button detection...');
 
     // Method 1: Direct popstate handler - most reliable
     const handlePopState = (event: PopStateEvent) => {
-      console.log('🔄 Back/Forward button pressed - reloading page');
       event.preventDefault();
       event.stopPropagation();
       
@@ -35,7 +33,6 @@ export default function DashboardRootLayout({ children }: { children: ReactNode 
     // Method 2: Page show event (handles bfcache)
     const handlePageShow = (event: PageTransitionEvent) => {
       if (event.persisted) {
-        console.log('🔄 Page loaded from cache - reloading');
         window.location.reload();
       }
     };
@@ -47,7 +44,6 @@ export default function DashboardRootLayout({ children }: { children: ReactNode 
         if (perfEntries.length > 0) {
           const navEntry = perfEntries[0] as PerformanceNavigationTiming;
           if (navEntry.type === 'back_forward') {
-            console.log('🔄 Back/Forward navigation detected via Performance API');
             window.location.reload();
           }
         }
@@ -85,7 +81,6 @@ export default function DashboardRootLayout({ children }: { children: ReactNode 
 
     addNoStoreHeader();
 
-    console.log('✅ Back button detection setup complete');
 
     // Cleanup
     return () => {

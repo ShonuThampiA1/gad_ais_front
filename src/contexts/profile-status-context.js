@@ -1,25 +1,41 @@
 // contexts/ProfileStatusContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
+import {
+  deriveErProfileWorkflowState,
+  getErProfileStatusPresentation,
+  readStoredErProfileWorkflowContext,
+  storeErProfileWorkflowContext,
+} from '@/utils/erProfileWorkflow';
 
 const ProfileStatusContext = createContext();
 
 export const ProfileStatusProvider = ({ children }) => {
-  const [profileStatus, setProfileStatus] = useState('1');
+  const [workflowContext, setWorkflowContext] = useState(null);
+  const [profileStatus, setProfileStatus] = useState('incomplete');
 
-  // Initialize from sessionStorage on mount
   useEffect(() => {
-    const storedStatus = sessionStorage.getItem('profile_status') || '1';
-    setProfileStatus(storedStatus);
+    const storedContext = readStoredErProfileWorkflowContext();
+    setWorkflowContext(storedContext);
+    setProfileStatus(deriveErProfileWorkflowState(storedContext));
   }, []);
 
-  // Update both state and sessionStorage
-  const updateProfileStatus = (newStatus) => {
-    setProfileStatus(newStatus);
-    sessionStorage.setItem('profile_status', newStatus);
+  const updateProfileStatus = (contextOrStatus) => {
+    if (typeof contextOrStatus === 'string') {
+      setProfileStatus(contextOrStatus);
+      return;
+    }
+
+    setWorkflowContext(contextOrStatus || null);
+    storeErProfileWorkflowContext(contextOrStatus || null);
+    setProfileStatus(deriveErProfileWorkflowState(contextOrStatus));
   };
 
+  const statusPresentation = getErProfileStatusPresentation(workflowContext);
+
   return (
-    <ProfileStatusContext.Provider value={{ profileStatus, updateProfileStatus }}>
+    <ProfileStatusContext.Provider
+      value={{ profileStatus, workflowContext, statusPresentation, updateProfileStatus }}
+    >
       {children}
     </ProfileStatusContext.Provider>
   );

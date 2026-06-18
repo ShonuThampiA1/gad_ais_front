@@ -28,18 +28,14 @@ const saveDocument = async (
         if (requestType === 'approve') {
             formData.append("selected_user_id", aisPerId)
         }
-        console.log("formData:", [...formData.entries()]);
         const saveResponse = await axiosInstance.post("file-uploader/signed-pdf-save", formData, {
             headers: { "Content-Type": "multipart/form-data" }
         });
-        console.log("Save response:", saveResponse);
         if (!saveResponse.data?.success) {
-            console.log("step 5")
             throw new Error(saveResponse.data?.detail || "Internal Server Error on Uploading Signed File");
         }
         return { success: true, fileName: pdfFile.name };
     } catch (error) {
-        console.log("step 6")
         throw new Error(error || "Unexpected Error while Uploading Signed File")
     }
 }

@@ -15,10 +15,13 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters, mapBulkMasters } from "@/utils/masters";
 import ConfirmModal from "../../../../components/confirmModal";
 import SignerPortModal from "../../../../components/SignerPortModal";
 import pdfGenerator from "../../../../../utils/pdfGenerator";
 import { toast } from "react-toastify";
+
+const DEFAULT_AVATAR = "/images/avatar.jpg";
 
 // Utility to safely get nested value
 const get = (obj, path, defaultValue = "N/A") => {
@@ -89,6 +92,20 @@ const deduplicateArray = (array, sectionType) => {
   });
 };
 
+const getStatusFlowLabel = (status) => {
+  const actionKey = String(status?.action_key || "").trim().toLowerCase();
+
+  if (actionKey === "return_for_correction" || actionKey === "returned_for_correction" || actionKey === "returned for correction") {
+    return "AS II Review -->Officer (RETURN FOR CORRECTION)";
+  }
+
+  if (actionKey === "resubmit" || actionKey === "resubmitted" || actionKey === "re_submit") {
+    return "Officer (RESUBMITTED ) -->AS II Review";
+  }
+
+  return `${status?.from_activity_name || "N/A"} -> ${status?.to_activity_name || "N/A"}`;
+};
+
 const ProfilePreviewPage = () => {
   const [progress, setProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +126,8 @@ const ProfilePreviewPage = () => {
     designations: [],
     departments: [],
     districts: [],
-    states: []
+    states: [],
+    qualifications: [],
   });
 
   const router = useRouter();
@@ -620,7 +638,7 @@ const transformOfficerData = useCallback((aisData, sparkData, masterQualificatio
     position: officer.service_type_name || "IAS Officer",
     profile_image: officer.profile_image
       ? `${process.env.NEXT_PUBLIC_API_URL}/officer/get-image/${officer.profile_image}?t=${new Date().getTime()}`
-      : null,
+      : DEFAULT_AVATAR,
     personal_details: mergedPersonal,
     address_details: addressDetails,
     dependent_details: dependentDetails,
@@ -637,33 +655,29 @@ const transformOfficerData = useCallback((aisData, sparkData, masterQualificatio
     // Update the fetchMasterData function to include agencies
 const fetchMasterData = async () => {
   try {
-    const [
-      designationRes,
-      departmentRes,
-      districtRes,
-      stateRes,
-      agencyRes,
-      gradeRes,     // Add this
-      postingTypeRes // Add this
-    ] = await Promise.all([
-      axiosInstance.get('/masters/designation-all'),
-      axiosInstance.get('/masters/administrative_department-all'),
-      axiosInstance.get('/masters/district-all'),
-      axiosInstance.get('/masters/state-all'),
-      axiosInstance.get('/masters/agency-all'),
-      axiosInstance.get('/masters/grade-all'),     // Add this
-      axiosInstance.get('/masters/posting_type-all') // Add this
+    const payload = await fetchBulkMasters([
+      "designation",
+      "administrative_department",
+      "district",
+      "state",
+      "agency",
+      "grade",
+      "posting_type",
+      "qualification",
     ]);
 
-    setMasterData({
-      designations: designationRes.data.data.designation || [],
-      departments: departmentRes.data.data.departments || [],
-      districts: districtRes.data.data.district || [],
-      states: stateRes.data.data.state || [],
-      implementingAgencies: agencyRes.data.data || [],
-      grades: gradeRes.data.data.grade || [],          // Add this
-      postingTypes: postingTypeRes.data.data.posting_type || [] // Add this
-    });
+    setMasterData(
+      mapBulkMasters(payload, {
+        designations: "designation",
+        departments: "administrative_department",
+        districts: "district",
+        states: "state",
+        implementingAgencies: "agency",
+        grades: "grade",
+        postingTypes: "posting_type",
+        qualifications: "qualification",
+      }),
+    );
   } catch (err) {
     console.error("Error fetching master data:", err);
   }
@@ -694,17 +708,6 @@ const fetchMasterData = async () => {
       try {
         setLoading(true);
 
-        // Fetch master data for qualifications
-        let masterQualifications = [];
-        try {
-          const qualificationResponse = await axiosInstance.get("/masters/qualification-all");
-          if (qualificationResponse.data.success) {
-            masterQualifications = qualificationResponse.data.data.qualification || [];
-          }
-        } catch (err) {
-          console.error("Error fetching master data for qualifications:", err);
-        }
-
         // Fetch AIS officer preview
         const aisRes = await axiosInstance.get("/officer/officer-preview");
         let aisOfficerData = null;
@@ -724,7 +727,11 @@ const fetchMasterData = async () => {
         // Only proceed with transformation if we have master data
         if (masterData.designations.length > 0 && masterData.departments.length > 0) {
           // Merge and transform with master qualifications
-          const merged = transformOfficerData(aisOfficerData || {}, sparkDetails || {}, masterQualifications);
+          const merged = transformOfficerData(
+            aisOfficerData || {},
+            sparkDetails || {},
+            masterData.qualifications || [],
+          );
           setUserDetails(merged);
         } else {
           // Retry after a delay if master data isn't loaded yet
@@ -852,6 +859,18 @@ const fetchMasterData = async () => {
     }
   };
 
+  const getCompletionMessage = (actionKey) => {
+    switch (actionKey?.toLowerCase()) {
+      case "approve":
+        return "Profile Approved";
+      case "submit":
+      case "resubmit":
+        return "Profile Submitted - Awaiting Verification";
+      default:
+        return "Profile Submitted - Awaiting Verification";
+    }
+  };
+
   const handleActionClick = (action) => {
     if (!isConsentChecked) {
       setConsentError("You must provide consent to proceed with this action.");
@@ -873,7 +892,6 @@ const fetchMasterData = async () => {
 
   const handleSubmitAction = async (portNumber) => {
     // Implement your submit/resubmit logic here
-    console.log("Submitting with port:", portNumber);
     setSignerPortModalOpen(false);
   };
 
@@ -985,19 +1003,17 @@ const fetchMasterData = async () => {
                 {/* Profile Image */}
                 <div className="relative flex-shrink-0">
                   <div className="w-20 h-20 rounded-xl bg-white/10 backdrop-blur-sm p-0.5 shadow-lg border border-white/20">
-                    {userDetails.profile_image ? (
                     <div className="w-full h-full rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-700">
-                        <img
-                          src={userDetails.profile_image}
-                          alt="Profile"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                    <div className="w-full h-full rounded-lg bg-slate-100 flex items-center justify-center dark:bg-gray-700">
-                        <span className="text-slate-400 text-xs">No Image</span>
-                      </div>
-                    )}
+                      <img
+                        src={userDetails.profile_image || DEFAULT_AVATAR}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = DEFAULT_AVATAR;
+                        }}
+                      />
+                    </div>
                   </div>
                   {currentDisplayStatus === "Verified" && (
                     <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 shadow-lg border-2 border-white">
@@ -1243,7 +1259,7 @@ const fetchMasterData = async () => {
             {!isSubmitAllowed && !isResubmitAllowed && (
               <div className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-5 py-3 rounded-lg bg-slate-100 text-slate-500 border-2 border-slate-300">
                 <CheckCircleIcon className="w-5 h-5 text-emerald-500" />
-                Profile Submitted - Awaiting Verification
+                {getCompletionMessage(latestStatus?.action_key)}
               </div>
             )}
           </div>
@@ -1631,12 +1647,8 @@ const ModernTimeline = ({ title, data, formatDate }) => {
                   </div>
                   <div className="space-y-1.5">
                     <p className="flex items-start gap-2">
-                      <span className="font-semibold text-slate-700 min-w-fit dark:text-gray-200">From:</span>
-                      <span className="break-words">{status.from_activity_name || "N/A"}</span>
-                    </p>
-                    <p className="flex items-start gap-2">
-                      <span className="font-semibold text-slate-700 min-w-fit dark:text-gray-200">To:</span>
-                      <span className="break-words">{status.to_activity_name || "N/A"}</span>
+                      <span className="font-semibold text-slate-700 min-w-fit dark:text-gray-200">Flow:</span>
+                      <span className="break-words">{getStatusFlowLabel(status)}</span>
                     </p>
                   </div>
                 </div>

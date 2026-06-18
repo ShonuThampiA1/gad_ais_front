@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,9 @@ export default function LanguageList() {
   const fetchLanguage = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/language-all`);
-      console.log("Fetched languageList:", response.data.data.languages); // Debug log
-      setLanguageList(response.data.data.languages);
+      const payload = await fetchBulkMasters(["language"], { admin: true, includeInactive: true });
+// Debug log
+      setLanguageList(payload.language || []);
     } catch (error) {
       console.error("Error fetching Language:", error);
       toast.error("Failed to load languages.");
@@ -65,8 +66,8 @@ export default function LanguageList() {
 
     try {
       const trimmedLanguage = LanguageData.language.trim().toLowerCase();
-      console.log("Input language:", trimmedLanguage); // Debug log
-      console.log("Current languageList:", languageList); // Debug log
+// Debug log
+// Debug log
 
       // Check for existing language
       const existing = languageList.find(
@@ -75,7 +76,6 @@ export default function LanguageList() {
 
       // Case: Language exists and is deactivated
       if (existing && !existing.is_active && !LanguageData.language_id) {
-        console.log("Found deactivated language:", existing);
         setLanguageToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +123,6 @@ export default function LanguageList() {
           (lang) => lang.language.toLowerCase() === trimmedLanguage
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated language:", updatedExisting);
           setLanguageToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -181,7 +180,7 @@ export default function LanguageList() {
 
   const handleReactivateClick = (language_id) => {
     const language = languageList.find((l) => l.language_id === language_id);
-    console.log("Reactivating language:", language); // Debug log
+// Debug log
     setLanguageToReactivate(language);
     setConfirmReactivateOpen(true);
   };

@@ -3,27 +3,34 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from 'next/navigation';
 import ForgotPassword from "@/app/(auth)/forgot-password/ForgotPassword";
-import axiosInstance from "@/utils/apiClient";
+import loginAxiosInstance from "@/utils/apiClient";
 import Image from 'next/image';
 import ChangePasswordModal from "../change-password/change-password-modal";
 import dayjs from "dayjs";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { EyeIcon, EyeSlashIcon, HomeIcon } from '@heroicons/react/24/solid';
+import { ArrowRightIcon, EyeIcon, EyeSlashIcon, HomeIcon, IdentificationIcon, UserPlusIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { ThemeToggle } from '@/app/components/theme-toggle';
 import toast, { Toaster } from 'react-hot-toast';
+import { GoogleReCaptchaProvider, useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 import { getServiceTypeName, extractErrorMessage, getErrorMessage, getGadTypeName  } from "@/utils/serviceTypeUtils";
+import OnboardingRequestModal from "./onboarding-request-modal";
+import { deriveErProfileModalType, deriveErProfileWorkflowState, storeErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SEC = 60;
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
-const LogIn = () => {
+const LoginForm = ({ executeRecaptcha = null }) => {
   const router = useRouter();
 
   // UI state
   const [authMode, setAuthMode] = useState('password'); // 'password' | 'otp'
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
   const [step, setStep] = useState('request'); // for ForgotPassword only
+  const [isContactSupportModalOpen, setIsContactSupportModalOpen] = useState(false);
+  const [contactSupportStep, setContactSupportStep] = useState('contact-lookup');
 
   // Common fields
   const [email, setEmail] = useState('');
@@ -33,6 +40,7 @@ const LogIn = () => {
   // Password login fields
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
 
   // OTP login fields
   const [otpDigits, setOtpDigits] = useState(Array(OTP_LENGTH).fill(''));
@@ -76,12 +84,46 @@ const LogIn = () => {
   };
 
   const handleForgotPasswordToggle = () => {
-    setIsForgotPassword(!isForgotPassword);
+    const nextOpen = !isForgotPassword;
+    setIsForgotPassword(nextOpen);
     setStep('request');
     setError(null); // Clear any lingering errors
+    setIsHelpMenuOpen(false);
   };
 
   const handleStepChange = (nextStep) => setStep(nextStep);
+  const handleContactSupportStepChange = (nextStep) => setContactSupportStep(nextStep);
+
+  const openContactSupportModal = () => {
+    setIsHelpMenuOpen(false);
+    setContactSupportStep('contact-lookup');
+    setIsContactSupportModalOpen(true);
+  };
+
+  const closeContactSupportModal = () => {
+    setIsContactSupportModalOpen(false);
+    setContactSupportStep('contact-lookup');
+  };
+
+  const getContactSupportTitle = () => {
+    if (contactSupportStep === 'contact-verify') return 'Verify Registered Contact';
+    if (contactSupportStep === 'contact-otp') return 'Verify New Contact';
+    if (contactSupportStep === 'contact-done') return 'Profile Update Support';
+    return 'Change Email/Mobile';
+  };
+
+  const getRecaptchaToken = async (action) => {
+    if (!RECAPTCHA_SITE_KEY) {
+      console.warn('NEXT_PUBLIC_RECAPTCHA_SITE_KEY is not configured.');
+      return null;
+    }
+
+    if (!executeRecaptcha) {
+      throw new Error('reCAPTCHA is still loading. Please try again.');
+    }
+
+    return executeRecaptcha(action);
+  };
 
   // Shared post-login (tokens, RBAC, redirects)
   const finalizeLogin = async (payload) => {
@@ -127,8 +169,8 @@ const LogIn = () => {
 
       // RBAC (best-effort)
       const [menuRes, permRes] = await Promise.allSettled([
-        axiosInstance.get("/rbac/menu-structure"),
-        axiosInstance.get("/rbac/page-permissions"),
+        loginAxiosInstance.get("/rbac/menu-structure"),
+        loginAxiosInstance.get("/rbac/page-permissions"),
       ]);
       const menuStructure = (menuRes.status === 'fulfilled' ? menuRes.value : {}).data?.data?.menu_structure || {};
       const permissions = (permRes.status === 'fulfilled' ? permRes.value : {}).data?.data?.permissions || [];
@@ -137,11 +179,11 @@ const LogIn = () => {
 
       if (menuRes.status === 'rejected') {
         console.warn("RBAC menu fetch failed:", menuRes.reason);
-        toast.error("Warning: Menu structure could not be loaded. Some features may be unavailable.");
+        //toast.error("Warning: Menu structure could not be loaded. Some features may be unavailable.");
       }
       if (permRes.status === 'rejected') {
         console.warn("RBAC permissions fetch failed:", permRes.reason);
-        toast.error("Warning: Permissions could not be loaded. Contact support if issues persist.");
+        //toast.error("Warning: Permissions could not be loaded. Contact support if issues persist.");
       }
 
       // First login & expiry
@@ -160,7 +202,7 @@ const LogIn = () => {
 
       // Profile status fetch (role 2)
       if (role_id === 2) {
-        const statusResponse = await axiosInstance.post("/officer/profile-submit-status", {
+        const statusResponse = await loginAxiosInstance.post("/officer/profile-submit-status", {
           ais_per_id: String(ais_per_id),
         }).catch((e) => {
           console.error('Error fetching profile status:', e);
@@ -168,32 +210,26 @@ const LogIn = () => {
         });
 
         const { profile_status: timeline } = statusResponse.data.data;
-        let profileStatus = '1';
-        let modalType = 'incomplete';
-
-        if (!timeline || timeline.length === 0) {
-          profileStatus = '1';
-          modalType = 'incomplete';
-        } else {
-          const latestStatus = timeline.find((s) => s.is_current) || timeline[timeline.length - 1];
-          switch (latestStatus.action_key) {
-            case 'approve':
-              profileStatus = '3'; modalType = null; break;
-            case 'submit':
-              profileStatus = '2'; modalType = 'submitted'; break;
-            case 'resubmit':
-              profileStatus = '2'; modalType = 'resubmitted'; break;
-            case 'return_for_correction':
-              profileStatus = '1'; modalType = 'correction'; break;
-            default:
-              profileStatus = '1'; modalType = 'incomplete';
-          }
+        let workflowContext = null;
+        try {
+          const workflowResponse = await loginAxiosInstance.get(`/officer/er-profile/workflow-context/${ais_per_id}`);
+          workflowContext = workflowResponse?.data?.data || null;
+          storeErProfileWorkflowContext(workflowContext);
+        } catch (workflowError) {
+          console.error('Error fetching workflow context during login:', workflowError);
+          storeErProfileWorkflowContext(null);
         }
-        sessionStorage.setItem('profile_status', profileStatus);
+
+        const workflowState = deriveErProfileWorkflowState(workflowContext, timeline);
+        const modalType = deriveErProfileModalType(workflowContext, timeline);
+        sessionStorage.setItem('profile_status', workflowState);
+        sessionStorage.setItem('profile_workflow_state', workflowState);
         sessionStorage.setItem('profile_modal_type', modalType ?? '');
       } else {
         sessionStorage.setItem('profile_status', user.profile_status || '3');
+        sessionStorage.setItem('profile_workflow_state', 'approved');
         sessionStorage.setItem('profile_modal_type', '');
+        storeErProfileWorkflowContext(null);
       }
 
       // Redirect
@@ -226,7 +262,14 @@ const LogIn = () => {
     try {
       setLoading(true);
       toast.loading('Logging in...', { id: 'login-toast' });
-      const response = await axiosInstance.post('/auth/login', { email, password });
+      const recaptchaToken = await getRecaptchaToken('password_login');
+      const response = await loginAxiosInstance.post('/auth/login', {
+        email,
+        password,
+        recaptcha_token: recaptchaToken,
+        recaptcha_action:'password_login'
+      });
+     
       toast.dismiss('login-toast');
       await finalizeLogin(response.data.data);
     } catch (err) {
@@ -258,7 +301,13 @@ const LogIn = () => {
       action: action, // "send" or "resend"
     };
 
-    const response = await axiosInstance.post('/auth/otp-login/request', payload);
+    const recaptchaToken = await getRecaptchaToken(action === 'resend' ? 'otp_resend' : 'otp_request');
+    if (recaptchaToken) {
+      payload.recaptcha_token = recaptchaToken;
+      payload.recaptcha_action=action === 'resend' ? 'otp_resend' : 'otp_request'
+    }
+
+    const response = await loginAxiosInstance.post('/auth/otp-login/request', payload);
     toast.dismiss('otp-request-toast');
 
     if (response.data.success) {
@@ -291,10 +340,13 @@ const LogIn = () => {
   try {
     setLoading(true);
     toast.loading('Verifying OTP...', { id: 'otp-verify-toast' });
+    const recaptchaToken = await getRecaptchaToken('otp_verify');
 
-    const response = await axiosInstance.post('/auth/otp-login/verify', {
+    const response = await loginAxiosInstance.post('/auth/otp-login/verify', {
       email: email.toLowerCase(),
       otp: otpValue,
+      recaptcha_token: recaptchaToken,
+      recaptcha_action:'otp_verify'
     });
 
     toast.dismiss('otp-verify-toast');
@@ -445,7 +497,7 @@ const LogIn = () => {
             />
             <div>
               <h3 className="text-sm text-white/80 font-semibold">Government of Kerala</h3>
-              <span className="text-xs text-white/70 font-light">Beta Version (Testing Environment - For Testing Purpose Only)</span>
+              <span className="text-xs text-white/70 font-light">General Administration (AIS) Department</span>
             </div>
           </div>
 
@@ -469,6 +521,7 @@ const LogIn = () => {
             src="/images/login.jpg"
             className="absolute inset-0 h-full w-full object-cover"
             fill
+            priority
           />
           <div className="absolute inset-0 flex items-center justify-center text-white text-center z-10">
             <div className="flex flex-col items-center justify-center">
@@ -479,7 +532,7 @@ const LogIn = () => {
                 style={{ maxWidth: '128px', height: 'auto' }}
               />
               <div>
-                <h3 className="text-1xl font-semibold">General Administration Department</h3>
+                <h3 className="text-1xl font-semibold">General Administration (AIS) Department</h3>
                 <h3 className="text-1xl">Government of Kerala</h3>
                  <div className="relative inline-block mb-4">
                         <motion.h1
@@ -564,6 +617,7 @@ const LogIn = () => {
                 className="h-16 w-auto dark:hidden"
                 width={47}
                 height={40}
+                style={{ width: 'auto' }}
               />
 
               {/* Dark mode logo */}
@@ -573,6 +627,7 @@ const LogIn = () => {
                 className="h-16 w-auto hidden dark:block"
                 width={47}
                 height={40}
+                style={{ width: 'auto' }}
               />
             </Link>
 
@@ -587,7 +642,14 @@ const LogIn = () => {
 
               <div className="mt-6">
                 {isForgotPassword ? (
-                  <ForgotPassword step={step} onStepChange={handleStepChange} onBackToLogin={handleForgotPasswordToggle} />
+                  <ForgotPassword
+                    mode="password"
+                    step={step}
+                    onStepChange={handleStepChange}
+                    executeRecaptcha={executeRecaptcha}
+                    onBackToLogin={handleForgotPasswordToggle}
+                    
+                  />
                 ) : authMode === 'password' ? (
                   <form className="space-y-6" onSubmit={handlePasswordLogin}>
                     <div>
@@ -637,17 +699,21 @@ const LogIn = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <div />
-                      <div className="text-sm/6">
-                        <button
-                          type="button"
-                          onClick={handleForgotPasswordToggle}
-                          className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-between gap-4 text-sm/6">
+                      <button
+                        type="button"
+                        onClick={() => setIsHelpMenuOpen(true)}
+                        className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                       >
+                        Sign Up Support
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleForgotPasswordToggle}
+                        className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                      >
+                        Forgot password?
+                      </button>
                     </div>
 
                     <div>
@@ -679,7 +745,7 @@ const LogIn = () => {
                           className="block w-full rounded-md border-0 py-1.5 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm/6 dark:bg-gray-800 dark:text-white dark:ring-gray-600 dark:placeholder:text-gray-400 dark:focus:ring-indigo-500"
                           disabled={otpRequested && resendCooldown > 0}
                         />
-                       <button
+                            <button
                           type="button"
                           onClick={() => requestOtp(otpRequested ? 'resend' : 'send')}
                           className="whitespace-nowrap rounded-md bg-primary-500 px-3 py-1.5 text-sm/6 font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 dark:bg-indigo-600 dark:hover:bg-indigo-500"
@@ -695,6 +761,9 @@ const LogIn = () => {
                               : 'Send OTP'}
                         </button>
                       </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        After initial login using password reset, this OTP login can be used.
+                      </p>
                       {otpRequested && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           An OTP has been sent to your email. It's valid for a limited time.
@@ -755,17 +824,21 @@ const LogIn = () => {
                       </>
                     )}
 
-                    <div className="flex items-center justify-between">
-                      <div />
-                      <div className="text-sm/6">
-                        <button
-                          type="button"
-                          onClick={handleForgotPasswordToggle}
-                          className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-between gap-4 text-sm/6">
+                      <button
+                        type="button"
+                        onClick={() => setIsHelpMenuOpen(true)}
+                        className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                      >
+                        Sign Up Support
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleForgotPasswordToggle}
+                        className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+                      >
+                        Forgot password?
+                      </button>
                     </div>
                   </div>
                 )}
@@ -784,6 +857,138 @@ const LogIn = () => {
         />
       )}
 
+      <OnboardingRequestModal
+        open={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+        executeRecaptcha={executeRecaptcha}
+      />
+
+      {isContactSupportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[26px] border border-primary-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="bg-gradient-to-r from-[#1f3c88] via-[#2747a5] to-[#315dc9] px-5 py-4 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold">{getContactSupportTitle()}</h3>
+                  <p className="mt-1 text-sm text-primary-100">Profile Update Support</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeContactSupportModal}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                  aria-label="Close profile update support"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[75vh] overflow-y-auto bg-white p-5 dark:bg-slate-900">
+              <ForgotPassword
+                mode="contact"
+                step={contactSupportStep}
+                onStepChange={handleContactSupportStepChange}
+                onBackToLogin={closeContactSupportModal}
+                backLabel="Back"
+                showBackButton
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isHelpMenuOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[26px] border border-primary-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="bg-gradient-to-r from-[#1f3c88] via-[#2747a5] to-[#315dc9] px-5 py-4 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Sign Up Support</h3>
+                  <p className="mt-1 text-sm text-primary-100">
+                    Choose your option.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsHelpMenuOpen(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+                  aria-label="Close sign up support"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 dark:bg-slate-950/40">
+              <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHelpMenuOpen(false);
+                    setIsOnboardingModalOpen(true);
+                  }}
+                  className="group relative overflow-hidden rounded-[22px] border-2 border-indigo-100 bg-white text-left shadow-[0_10px_28px_-20px_rgba(30,41,59,0.28)] transition duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-[0_18px_38px_-20px_rgba(79,70,229,0.32)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-900/40 dark:bg-slate-900"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-sky-400" />
+                  <div className="absolute inset-x-3 top-3 h-14 rounded-2xl bg-gradient-to-r from-indigo-50 to-sky-50 opacity-90 dark:from-indigo-950/40 dark:to-sky-950/30" />
+                  <div className="relative flex h-full min-h-[220px] flex-col p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-white text-indigo-700 shadow-sm dark:border-indigo-900/50 dark:bg-slate-900 dark:text-indigo-300">
+                        <UserPlusIcon className="h-4.5 w-4.5" />
+                      </div>
+                      <span className="text-[17px] font-semibold text-indigo-900 dark:text-indigo-100">
+                        New to KARMASRI?
+                      </span>
+                    </div>
+                    <div className="mt-5 space-y-3">
+                      <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        Submit a new onboarding request to register and access your account.
+                      </p>
+                    </div>
+                    <div className="mt-6 border-t border-indigo-100 pt-3 dark:border-indigo-900/30">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-800 transition duration-200 group-hover:bg-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-200 dark:group-hover:bg-indigo-900/60">
+                        Register Now
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </span>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openContactSupportModal}
+                  className="group relative overflow-hidden rounded-[22px] border-2 border-indigo-100 bg-white text-left shadow-[0_10px_28px_-20px_rgba(30,41,59,0.28)] transition duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-[0_18px_38px_-20px_rgba(79,70,229,0.32)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-900/40 dark:bg-slate-900"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-sky-400" />
+                  <div className="absolute inset-x-3 top-3 h-14 rounded-2xl bg-gradient-to-r from-indigo-50 to-sky-50 opacity-90 dark:from-indigo-950/40 dark:to-sky-950/30" />
+                  <div className="relative flex h-full min-h-[220px] flex-col p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-white text-indigo-700 shadow-sm dark:border-indigo-900/50 dark:bg-slate-900 dark:text-indigo-300">
+                        <IdentificationIcon className="h-4.5 w-4.5" />
+                      </div>
+                      <span className="text-[17px] font-semibold text-indigo-900 dark:text-indigo-100">
+                        Change Email / Mobile
+                      </span>
+                    </div>
+                    <div className="mt-5 space-y-3">
+                      <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        Onboarded but haven&apos;t logged in yet? Update your registered contact details here.
+                      </p>
+                    </div>
+                    <div className="mt-6 border-t border-indigo-100 pt-3 dark:border-indigo-900/30">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-800 transition duration-200 group-hover:bg-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-200 dark:group-hover:bg-indigo-900/60">
+                        Update Profile
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toaster
         position="top-right"
         toastOptions={{
@@ -797,6 +1002,23 @@ const LogIn = () => {
      
     </>
   );
+};
+
+const LogIn = () => {
+  if (!RECAPTCHA_SITE_KEY) {
+    return <LoginForm />;
+  }
+
+  return (
+    <GoogleReCaptchaProvider reCaptchaKey={RECAPTCHA_SITE_KEY}>
+      <LoginFormWithRecaptcha />
+    </GoogleReCaptchaProvider>
+  );
+};
+
+const LoginFormWithRecaptcha = () => {
+  const { executeRecaptcha } = useGoogleReCaptcha();
+  return <LoginForm executeRecaptcha={executeRecaptcha} />;
 };
 
 export default LogIn;

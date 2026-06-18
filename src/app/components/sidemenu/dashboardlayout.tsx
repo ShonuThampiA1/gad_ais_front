@@ -16,9 +16,11 @@ import { ThemeProvider } from 'next-themes';
 import DashboardNavigation from '../dashboard-navigation';
 import UserNav from '../user-nav';
 import ChangePasswordModal from '@/app/(auth)/change-password/change-password-modal';
+import ChangeCredentialModal from '@/app/(auth)/change-credential/change-credential-modal';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -28,6 +30,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const [role, setRole] = useState<number | null>(null);
   const [isChangePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [isChangeCredentialModalOpen, setChangeCredentialModalOpen] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [isPasswordExpired, setIsPasswordExpired] = useState(false);
 
@@ -47,7 +50,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, []);
 
   const handleMenuAction = (action: string) => {
-    if (action === 'changePassword') {
+    if (action === 'changeCredential') {
+      setChangeCredentialModalOpen(true);
+    } else if (action === 'changePassword') {
       setChangePasswordModalOpen(true);
     } else if (action === 'signOut') {
       signOut();
@@ -68,10 +73,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const userNavigation = [
     { name: 'Your Profile', href: '/profile', role: [2] },
-    { name: 'Settings', href: '#' },
+    { name: 'Settings', action: 'changeCredential' },
     { name: 'Change Password', action: 'changePassword' },
     { name: 'Sign out', action: 'signOut' },
   ];
+
+  const handleCredentialChangeSuccess = (message: string) => {
+    setChangeCredentialModalOpen(false);
+    sessionStorage.clear();
+    toast.success(message || 'Credential change completed successfully. Please sign in again.');
+    router.push('/login');
+  };
 
   const filteredNavigation = role !== null
     ? userNavigation.filter((item) => (item.role ? item.role.includes(role) : true))
@@ -105,12 +117,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {({ open }) => (
             <>
               <div className="mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex h-16 items-center justify-between">
-                  <div className="flex items-center">
-                    <h1 className="text-lg font-medium">AIS e-Service Portal</h1>
-                    <span className="ml-2 text-sm">GENERAL ADMINISTRATION DEPARTMENT</span>
+                <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <h1 className="text-base font-medium sm:text-lg">AIS e-Service Portal</h1>
+                    <span className="block text-xs sm:text-sm">General Administration (AIS) Department</span>
                   </div>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
                     <AccessibilityToolbar />
                     <div className="sm:hidden">
                       <Disclosure.Button className="inline-flex items-center justify-center p-2 rounded-md text-white hover:bg-indigo-700 focus:outline-none">
@@ -122,7 +134,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         )}
                       </Disclosure.Button>
                     </div>
-                    <span className="text-sm">Last Login: {officerDetails.lastLogin}</span>
+                    <span className="hidden text-sm md:inline">Last Login: {officerDetails.lastLogin}</span>
                     <ThemeToggle />
                   </div>
                 </div>
@@ -141,27 +153,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <>
               {open?"":""}
               <div className="mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex h-24 items-center justify-between">
+                <div className="flex min-h-24 flex-col items-start justify-between gap-4 py-4 lg:flex-row lg:items-center">
                   {/* Left Side: Navigation */}
-                  <div className="flex items-center">
-                    <div className="hidden sm:flex space-x-4">
-                      <DashboardNavigation />
+                  <div className="flex w-full items-center lg:w-auto">
+                    <div className="hidden w-full sm:flex">
+                      <DashboardNavigation variant="desktop" />
                     </div>
                   </div>
 
                   {/* Right Side: Officer Details and User Actions */}
-                  <div className="flex items-center space-x-4">
-                    <div className="flex flex-col items-center sm:flex-row sm:space-x-4">
+                  <div className="flex w-full flex-col gap-4 lg:w-auto lg:flex-row lg:items-center lg:justify-end">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:space-x-4">
                       <div className="flex items-center space-x-2">
-                        <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-200 sm:h-16 sm:w-16">
                           <span className="text-2xl">👤</span>
                         </div>
                         <div>
                           <p className="text-sm font-medium">Complete: {officerDetails.profileCompletion}</p>
-                          <button className="mt-1 px-4 py-2 bg-indigo-600 text-white rounded">Profile Preview</button>
+                          <button className="mt-1 rounded bg-indigo-600 px-3 py-2 text-sm text-white">Profile Preview</button>
                         </div>
                       </div>
-                      <div className="mt-2 sm:mt-0">
+                      <div className="mt-2 text-sm sm:mt-0">
                         <h3 className="text-sm font-semibold">Officer Details</h3>
                         <div className="flex flex-col space-y-1 text-sm">
                           <p>Full Name: {officerDetails.fullName}</p>
@@ -171,44 +183,46 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         </div>
                       </div>
                     </div>
-                    <UserNav />
-                    <button className="p-1 text-gray-500 hover:text-gray-400">
-                      <BellIcon className="h-6 w-6" aria-hidden="true" />
-                    </button>
-                    <Menu as="div" className="relative">
-                      <MenuButton className="flex items-center text-sm focus:outline-none">
-                        <Image
-                          alt=""
-                          src="/images/user.png"
-                          className="h-8 w-8 rounded-full"
-                          width={32}
-                          height={32}
-                        />
-                      </MenuButton>
-                      <MenuItems className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black/5">
-                        {filteredNavigation.map((item) =>
-                          item.action ? (
-                            <MenuItem key={item.name}>
-                              <button
-                                onClick={() => handleMenuAction(item.action)}
-                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              >
-                                {item.name}
-                              </button>
-                            </MenuItem>
-                          ) : (
-                            <MenuItem key={item.name}>
-                              <Link
-                                href={item.href ?? '#'}
-                                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                              >
-                                {item.name}
-                              </Link>
-                            </MenuItem>
-                          )
-                        )}
-                      </MenuItems>
-                    </Menu>
+                    <div className="flex items-center gap-3 self-end lg:self-auto">
+                      <UserNav />
+                      <button className="p-1 text-gray-500 hover:text-gray-400">
+                        <BellIcon className="h-6 w-6" aria-hidden="true" />
+                      </button>
+                      <Menu as="div" className="relative">
+                        <MenuButton className="flex items-center text-sm focus:outline-none">
+                          <Image
+                            alt=""
+                            src="/images/user.png"
+                            className="h-8 w-8 rounded-full"
+                            width={32}
+                            height={32}
+                          />
+                        </MenuButton>
+                        <MenuItems className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black/5">
+                          {filteredNavigation.map((item) =>
+                            item.action ? (
+                              <MenuItem key={item.name}>
+                                <button
+                                  onClick={() => handleMenuAction(item.action)}
+                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                >
+                                  {item.name}
+                                </button>
+                              </MenuItem>
+                            ) : (
+                              <MenuItem key={item.name}>
+                                <Link
+                                  href={item.href ?? '#'}
+                                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                >
+                                  {item.name}
+                                </Link>
+                              </MenuItem>
+                            )
+                          )}
+                        </MenuItems>
+                      </Menu>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -216,7 +230,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Mobile Navigation Panel */}
               <Disclosure.Panel className="sm:hidden bg-white">
                 <div className="space-y-2 px-4 py-2">
-                  <DashboardNavigation />
+                  <DashboardNavigation variant="mobile" />
                 </div>
               </Disclosure.Panel>
             </>
@@ -234,6 +248,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             closeModal={() => setChangePasswordModalOpen(false)}
             isFirstLogin={isFirstLogin}
             isPasswordExpired={isPasswordExpired}
+          />
+        )}
+
+        {isChangeCredentialModalOpen && (
+          <ChangeCredentialModal
+            closeModal={() => setChangeCredentialModalOpen(false)}
+            onSuccessLogout={handleCredentialChangeSuccess}
           />
         )}
       </div>

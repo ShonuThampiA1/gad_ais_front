@@ -36,13 +36,13 @@ const ServicesCard: React.FC<ServicesCardProps> = ({
   return (
     <div className="rounded-xl border overflow-hidden mb-3 bg-primary-500 dark:bg-neutral-700 relative dark:border-neutral-700">
       {/* Image */}
-      <div>
+      <div className="relative h-52 w-full">
         <Image
-          className="w-full h-52 object-cover rounded-t-lg"
+          className="rounded-t-lg object-cover"
           src={imageSrc}
           alt={`${title} image`}
-          width={372}
-          height={208}
+          fill
+          sizes="(max-width: 768px) 100vw, 372px"
           loading="lazy"
         />
       </div>

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PlusIcon, PencilSquareIcon } from '@heroicons/react/20/solid'
 import { ModalSpouseDetails } from '../modal/spouse-details'
 import { toast } from 'react-toastify';
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
 
 
 
@@ -13,6 +14,7 @@ export function SpouseDetails() {
   const [spouseDetails, setSpouseDetails] = useState([]);
   const [selectedSpouse, setSelectedSpouse] = useState(null);
   const [error, setError] = useState(null);
+  const saveInFlightRef = useRef(false);
   
   const [masterData, setMasterData] = useState({
     gender: [],
@@ -56,10 +58,12 @@ export function SpouseDetails() {
 
   const fetchMasterData = async () => {
     try {
-      const genderResponse = await axiosInstance.get('/masters/gender');
-      setMasterData({
-        gender: genderResponse.data.data.gender || [],
-      });
+      const payload = await fetchBulkMasters(['gender']);
+      setMasterData(
+        mapBulkMasters(payload, {
+          gender: 'gender',
+        }),
+      );
     } catch (err) {
       setError('Failed to fetch master data');
       console.error(err);
@@ -73,7 +77,12 @@ export function SpouseDetails() {
 
 
   const handleSave = async (updatedSpouse) => {
-  try {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setTimeout(() => {
+      saveInFlightRef.current = false;
+    }, 2500);
+    try {
     const response = await axiosInstance.post('/officer/spouse', updatedSpouse);
    
     if (response.data.success) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   BriefcaseIcon,
   PhoneIcon,
@@ -19,16 +19,19 @@ import { ModalCentralDeputation } from '../modal/central-deputation-details';
 import { toast } from 'react-toastify';
 import axiosInstance from '@/utils/apiClient';
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
 import ConfirmModal from '@/app/components/confirmModal';
 import moment from 'moment';
+import { canEditErProfile, readStoredErProfileWorkflowContext } from '@/utils/erProfileWorkflow';
 
-export function CentralDeputationDetails({ profileData }) {
+export function CentralDeputationDetails({ profileData, sharedMasterData, sharedMastersReady = false }) {
+  const saveInFlightRef = useRef(false);
   const { updateSectionProgress } = useProfileCompletion();
   const [isModalOpen, setModalOpen] = useState(false);
   const [deputationDetails, setDeputationDetails] = useState([]);
   const [selectedDeputation, setSelectedDeputation] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [masterData, setMasterData] = useState({
     state: [],
     tenures: [],
@@ -48,13 +51,42 @@ export function CentralDeputationDetails({ profileData }) {
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deputationToDelete, setDeputationToDelete] = useState(null);
+  const updateProfileCentralDeputations = useCallback((nextDeputations) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            central_deputation: nextDeputations,
+          },
+        },
+      };
+
+      sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+      return updatedProfileData;
+    });
+  }, [profileData]);
+  const hasMasterData = useMemo(() => {
+    const requiredMasterKeys = [
+      'state',
+      'tenures',
+      'ministry',
+      'administrative_department',
+      'agency',
+      'deputation_type',
+    ];
+
+    return requiredMasterKeys.every((key) => Array.isArray(masterData[key]) && masterData[key].length > 0);
+  }, [masterData]);
   
   // Get profile status from sessionStorage
-  const profileStatus = sessionStorage.getItem('profile_status');
-  console.log('profile_status:==========================================', sessionStorage.getItem('profile_status'));
-  console.log('profile_status type:', typeof profileStatus, 'value:', profileStatus);
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3'; // Disable for submitted or approved
-  console.log('isButtonDisabled:', isButtonDisabled, 'profileStatus:', profileStatus);
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
  
 
   // Button Handlers
@@ -162,24 +194,33 @@ export function CentralDeputationDetails({ profileData }) {
   // Fetch master data
   useEffect(() => {
     const fetchMasterData = async () => {
+      if (!sharedMastersReady) {
+        return;
+      }
+
+      if (sharedMasterData) {
+        setMasterData(sharedMasterData);
+        return;
+      }
+
       try {
-        const masters = await Promise.all([
-          axiosInstance.get('/masters/state-all'),
-          axiosInstance.get('/masters/tenure-all'),
-          axiosInstance.get('/masters/ministry-all'),
-          axiosInstance.get('/masters/administrative_department-all'),
-          axiosInstance.get('/masters/agency-all'),
-          axiosInstance.get('/masters/deputation_type-all'),
+        const payload = await fetchBulkMasters([
+          'state',
+          'tenure',
+          'ministry',
+          'administrative_department',
+          'agency',
+          'deputation_type',
         ]);
 
-        const masterDataResponse = {
-          state: masters[0].data.data.state || [],
-          tenures: masters[1].data.data.tenure || [],
-          ministry: masters[2].data.data.ministry || [],
-          administrative_department: masters[3].data.data.departments || [],
-          agency: masters[4].data.data || [],
-          deputation_type: masters[5].data.data.deputation_type || [],
-        };
+        const masterDataResponse = mapBulkMasters(payload, {
+          state: 'state',
+          tenures: 'tenure',
+          ministry: 'ministry',
+          administrative_department: 'administrative_department',
+          agency: 'agency',
+          deputation_type: 'deputation_type',
+        });
         setMasterData(masterDataResponse);
       } catch (err) {
         console.error('Error fetching master data:', err);
@@ -192,7 +233,7 @@ export function CentralDeputationDetails({ profileData }) {
     };
 
     fetchMasterData();
-  }, []);
+  }, [sharedMasterData, sharedMastersReady]);
 
   const getMasterValue = useCallback(
     (id, key) => {
@@ -481,7 +522,6 @@ export function CentralDeputationDetails({ profileData }) {
 
       setDeputationDetails((prev) => {
         if (JSON.stringify(prev) !== JSON.stringify(mappedDetails)) {
-          // sessionStorage.setItem('central_deputation_details', JSON.stringify(mappedDetails));
           return mappedDetails;
         }
         return prev;
@@ -501,10 +541,6 @@ export function CentralDeputationDetails({ profileData }) {
   }, [masterData, localProfileData, mapDeputationData]);
 
   useEffect(() => {
-    const storedDeputations = sessionStorage.getItem('central_deputation_details');
-    if (storedDeputations) {
-      setDeputationDetails(JSON.parse(storedDeputations));
-    }
     processDeputationData();
   }, [masterData, localProfileData, mapDeputationData, processDeputationData]);
 
@@ -527,7 +563,6 @@ export function CentralDeputationDetails({ profileData }) {
     }
 
     // TODO: Add actual delete functionality later
-    console.log("Delete deputation with ID:", deputationId);
 
     
       // Check if it's a SPARK entry (not saved to DB yet)
@@ -548,6 +583,11 @@ export function CentralDeputationDetails({ profileData }) {
         if (response.data.success) {
           // Remove from local state
           setDeputationDetails(prev => prev.filter(d => String(d.cen_dep_id) !== String(deputationId)));
+          const currentDeputations =
+            localProfileData?.officer_data?.get_all_officer_info_by_user_id?.central_deputation || [];
+          updateProfileCentralDeputations(
+            currentDeputations.filter((dep) => String(dep?.cen_dep_id) !== String(deputationId))
+          );
           toast.success("Deputation deleted successfully", {
            className: "bg-primary-500 text-white",
            progressClassName: "bg-primary-200",
@@ -567,13 +607,17 @@ export function CentralDeputationDetails({ profileData }) {
       setDeputationToDelete(null);
     }
     
-  }, [isButtonDisabled, deputationDetails, deputationToDelete]);
+  }, [isButtonDisabled, deputationDetails, deputationToDelete, localProfileData, updateProfileCentralDeputations]);
 
 
 const handleSave = useCallback(
   async (updatedData) => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setTimeout(() => {
+      saveInFlightRef.current = false;
+    }, 2500);
     try {
-      console.log('Incoming updatedData:', JSON.stringify(updatedData, null, 2));
 
       // Convert empty strings to null for all user_data fields
       const sanitizeUserData = (data) => {
@@ -608,7 +652,6 @@ const handleSave = useCallback(
         },
       };
 
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
 
         if (!requestBody.user_data || typeof requestBody.user_data !== 'object') {
           throw new Error('Invalid user_data structure');
@@ -647,6 +690,11 @@ const handleSave = useCallback(
 
         if (response.data.success) {
           const savedDeputation = response.data.data.central_deputation;
+          const currentCentralDeputations =
+            localProfileData?.officer_data?.get_all_officer_info_by_user_id?.central_deputation || [];
+          const existingDeputationRecord = currentCentralDeputations.find(
+            (dep) => String(dep?.cen_dep_id) === String(savedDeputation.cen_dep_id || selectedDeputation?.cen_dep_id)
+          );
 
           const prevFieldSources = isUpdate ? selectedDeputation?.fieldSources || {} : {};
           const fieldSources = {
@@ -707,6 +755,34 @@ const handleSave = useCallback(
             isSaved: true,
             fieldSources,
           };
+          const userFieldPayload = Object.fromEntries(
+            Object.entries(requestBody.user_data || {}).filter(([, value]) => value !== null && value !== undefined)
+          );
+          const updatedSavedDeputation = {
+            ...(existingDeputationRecord || {}),
+            ...savedDeputation,
+            cen_dep_id: savedDeputation.cen_dep_id,
+            fields: {
+              ...(existingDeputationRecord?.fields || {}),
+              ...(requestBody.spark_data
+                ? {
+                    DB_SPARK_API: {
+                      ...(existingDeputationRecord?.fields?.DB_SPARK_API || {}),
+                      ...requestBody.spark_data,
+                    },
+                  }
+                : {}),
+              ...(Object.keys(userFieldPayload).length
+                ? {
+                    [userSource]: {
+                      ...(existingDeputationRecord?.fields?.[userSource] || {}),
+                      ...userFieldPayload,
+                    },
+                  }
+                : {}),
+              UNKNOWN: existingDeputationRecord?.fields?.UNKNOWN || {},
+            },
+          };
 
           setDeputationDetails((prevData = []) => {
             let updatedDetails;
@@ -725,36 +801,32 @@ const handleSave = useCallback(
               updatedDetails = [...prevData, updatedDeputation];
             }
 
-            // Update sessionStorage
-            sessionStorage.setItem('central_deputation_details', JSON.stringify(updatedDetails));
-
-            // Update localProfileData
-            const updatedProfileData = {
-              ...localProfileData,
-              officer_data: {
-                ...localProfileData.officer_data,
-                get_all_officer_info_by_user_id: {
-                  ...localProfileData.officer_data?.get_all_officer_info_by_user_id,
-                  central_deputation: updatedDetails.map((dep) => ({
-                    cen_dep_id: dep.cen_dep_id,
-                    fields: {
-                      GAD_OFFICER: Object.keys(dep.fieldSources)
-                        .filter((key) => dep.fieldSources[key] === 'GAD_OFFICER')
-                        .reduce((acc, key) => ({ ...acc, [key]: dep[key] }), {}),
-                      AIS_OFFICER: Object.keys(dep.fieldSources)
-                        .filter((key) => dep.fieldSources[key] === 'AIS_OFFICER')
-                        .reduce((acc, key) => ({ ...acc, [key]: dep[key] }), {}),
-                      UNKNOWN: {},
-                    },
-                  })),
-                },
-              },
-            };
-            setLocalProfileData(updatedProfileData);
-            sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
-
             return updatedDetails;
           });
+          let nextCentralDeputations;
+          if (isSparkEntry) {
+            const sparkEntryKey = String(selectedDeputation.cen_dep_id);
+            const replaced = currentCentralDeputations.some(
+              (dep) => String(dep?.cen_dep_id) === String(savedDeputation.cen_dep_id)
+            );
+            nextCentralDeputations = currentCentralDeputations
+              .filter((dep) => String(dep?.cen_dep_id) !== sparkEntryKey)
+              .map((dep) =>
+                String(dep?.cen_dep_id) === String(savedDeputation.cen_dep_id) ? updatedSavedDeputation : dep
+              );
+            if (!replaced) {
+              nextCentralDeputations.push(updatedSavedDeputation);
+            }
+          } else if (isUpdate) {
+            nextCentralDeputations = currentCentralDeputations.map((dep) =>
+              String(dep?.cen_dep_id) === String(selectedDeputation.cen_dep_id)
+                ? updatedSavedDeputation
+                : dep
+            );
+          } else {
+            nextCentralDeputations = [...currentCentralDeputations, updatedSavedDeputation];
+          }
+          updateProfileCentralDeputations(nextCentralDeputations);
 
           setSparkFields((prev) => {
             const newSparkFields = new Set(prev);
@@ -825,13 +897,12 @@ const handleSave = useCallback(
       });
     }
   },
-  [selectedDeputation, getMasterValue, localProfileData]
+  [selectedDeputation, getMasterValue, localProfileData, profileData, updateProfileCentralDeputations]
 );
 
   useEffect(() => {
     if (!loading && deputationDetails) {
 
-      console.log('Deputation Details for Progress Calculation:', deputationDetails);
       const total = deputationDetails.length;
       const completed = deputationDetails.filter((d) => d.isSaved).length;
       updateSectionProgress('central_deputation', total === 0 ? 0 : completed, total === 0 ? 0 : total);
@@ -1005,6 +1076,44 @@ const handleSave = useCallback(
     );
   };
 
+  const renderFieldValueSkeleton = () => (
+    <div className="mt-1 space-y-2 animate-pulse">
+      <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+      <div className="h-4 w-28 rounded bg-gray-200 dark:bg-gray-700" />
+    </div>
+  );
+
+  const renderCardSkeleton = (index) => (
+    <div
+      key={`deputation-skeleton-${index}`}
+      className="relative bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-600 rounded-md p-3 shadow-sm max-w-full animate-pulse"
+    >
+      <div className="absolute top-[-10px] left-3 h-6 w-20 rounded-full bg-gray-200 dark:bg-gray-700" />
+      <div className="flex items-center justify-end mb-3 mt-2 gap-2">
+        <div className="h-4 w-4 rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="h-4 w-4 rounded bg-gray-200 dark:bg-gray-700" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {[0, 1].map((column) => (
+          <div key={column} className="space-y-3">
+            {Array.from({ length: 5 }).map((_, fieldIndex) => (
+              <div
+                key={`${column}-${fieldIndex}`}
+                className="flex items-start gap-2 bg-white dark:bg-gray-700 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
+              >
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-600 mt-1" />
+                <div className="flex-1 min-w-0">
+                  <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-600 mb-2" />
+                  <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-600" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const sections = useMemo(
     () =>
       [
@@ -1084,8 +1193,8 @@ return (
        {renderAddButton()}
       </div>
       {loading ? (
-        <div className="flex justify-center items-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-600"></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-6">
+          {Array.from({ length: 2 }).map((_, index) => renderCardSkeleton(index))}
         </div>
       ) : sections[0].cards.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-6">
@@ -1132,9 +1241,13 @@ return (
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[0.75rem] text-gray-500 dark:text-gray-400 truncate">{field.label}</p>
-                          <p className="text-[0.875rem] font-bold text-gray-900 dark:text-white break-words">
-                            {card.fields.find((f) => f.originalKey === field.key)?.computeValue()}
-                          </p>
+                          {(!hasMasterData && field.isMaster) ? (
+                            renderFieldValueSkeleton()
+                          ) : (
+                            <p className="text-[0.875rem] font-bold text-gray-900 dark:text-white break-words">
+                              {card.fields.find((f) => f.originalKey === field.key)?.computeValue()}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1153,9 +1266,13 @@ return (
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[0.75rem] text-gray-500 dark:text-gray-400 truncate">{field.label}</p>
-                          <p className="text-[0.875rem] font-bold text-gray-900 dark:text-white break-words">
-                            {card.fields.find((f) => f.originalKey === field.key)?.computeValue()}
-                          </p>
+                          {(!hasMasterData && field.isMaster) ? (
+                            renderFieldValueSkeleton()
+                          ) : (
+                            <p className="text-[0.875rem] font-bold text-gray-900 dark:text-white break-words">
+                              {card.fields.find((f) => f.originalKey === field.key)?.computeValue()}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}

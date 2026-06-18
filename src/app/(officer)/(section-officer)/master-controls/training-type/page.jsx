@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function TrainingTypeList() {
   const fetchTrainingTypes = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/training_type-all`);
-      console.log("Fetched trainingTypeList:", response.data.data.training_type);
-      setTrainingTypeList(response.data.data.training_type || []);
+      const payload = await fetchBulkMasters(["training_type"], { admin: true, includeInactive: true });
+      setTrainingTypeList(payload.training_type || []);
     } catch (error) {
       console.error("Error fetching Training Types:", error);
       toast.error("Failed to load training types.");
@@ -65,8 +65,6 @@ export default function TrainingTypeList() {
 
     try {
       const trimmedTrainingType = TrainingTypeData.training_type.trim().toLowerCase();
-      console.log("Input training type:", trimmedTrainingType);
-      console.log("Current trainingTypeList:", trainingTypeList);
 
       // Check for existing training type
       const existing = trainingTypeList.find(
@@ -75,7 +73,6 @@ export default function TrainingTypeList() {
 
       // Case: Training type exists and is deactivated
       if (existing && !existing.is_active && !TrainingTypeData.training_type_id) {
-        console.log("Found deactivated training type:", existing);
         setTrainingTypeToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -95,14 +92,12 @@ export default function TrainingTypeList() {
           `/masters/training_type/${training_type_id}`,
           { ...TrainingTypeDataWithoutId, training_type: TrainingTypeData.training_type.trim() }
         );
-        console.log("Training Type updated:", response);
         toast.success("Training Type updated successfully");
       } else {
         response = await axiosInstance.post("/masters/training_type", {
           ...TrainingTypeData,
           training_type: TrainingTypeData.training_type.trim(),
         });
-        console.log("Training Type added:", response);
         toast.success("Training Type added successfully");
       }
 
@@ -125,7 +120,6 @@ export default function TrainingTypeList() {
           (t) => t.training_type.toLowerCase() === trimmedTrainingType
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated training type:", updatedExisting);
           setTrainingTypeToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -193,7 +187,6 @@ export default function TrainingTypeList() {
 
   const handleReactivateClick = (training_type_id) => {
     const training_type = trainingTypeList.find((t) => t.training_type_id === training_type_id);
-    console.log("Reactivating training type:", training_type);
     setTrainingTypeToReactivate(training_type);
     setConfirmReactivateOpen(true);
   };

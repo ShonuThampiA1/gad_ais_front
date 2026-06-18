@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Breadcrumb } from '@/app/components/breadcrumb';
 import { ProfileSection } from '@/app/components/AISDashboardComponents/ProfileSection';
 import { CompactProfileSection } from '@/app/components/AISDashboardComponents/CompactProfileSection';
@@ -11,6 +11,117 @@ import ConfirmModal from "@/app/components/confirmModal";
 import axiosInstance from '@/utils/apiClient';
 import { toast } from 'react-toastify';
 import { XMarkIcon, QuestionMarkCircleIcon, AcademicCapIcon, ClockIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { buildMappedServiceDetails } from './service-details-utils';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
+
+const getServiceDuplicateKey = (service) => {
+  const additionalChargeValue = service?.is_additional_charge ?? service?.additional_charge;
+  const isAdditionalCharge =
+    additionalChargeValue === true ||
+    additionalChargeValue === 'true' ||
+    additionalChargeValue === 'True' ||
+    additionalChargeValue === 'YES' ||
+    additionalChargeValue === 'Yes' ||
+    additionalChargeValue === 'yes';
+
+  if (isAdditionalCharge) return '';
+
+  const start = service?.start_date ? String(service.start_date).split('T')[0] : '';
+  const end = service?.end_date ? String(service.end_date).split('T')[0] : 'ongoing';
+  if (!start) return '';
+
+  return `${start}__${end}`;
+};
+
+const hasDuplicateServiceEntries = (services = []) => {
+  const counts = new Map();
+
+  services.forEach((service) => {
+    const key = getServiceDuplicateKey(service);
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  return Array.from(counts.values()).some((count) => count > 1);
+};
+
+const ER_PROFILE_MASTER_KEYS = [
+  'administrative_department',
+  'agency',
+  'blood_group',
+  'cadre',
+  'category',
+  'country',
+  'deputation_type',
+  'designation',
+  'disability',
+  'district',
+  'gender',
+  'grade',
+  'institution',
+  'language',
+  'level',
+  'ministry',
+  'occupation_category',
+  'posting_type',
+  'qualification',
+  'recruitment',
+  'relation',
+  'retirement',
+  'state',
+  'tenure',
+  'training_type',
+];
+
+const buildERProfileMasters = (payload) => ({
+  personal: mapBulkMasters(payload, {
+    recruitment: 'recruitment',
+    cadre: 'cadre',
+    gender: 'gender',
+    state: 'state',
+    tenure: 'tenure',
+    district: 'district',
+    motherTongue: 'language',
+    languageKnown: 'language',
+    retirement: 'retirement',
+    designation: 'designation',
+    category: 'category',
+    bloodGroup: 'blood_group',
+  }),
+  dependent: mapBulkMasters(payload, {
+    gender: 'gender',
+    relationship: 'relation',
+    occupationCategory: 'occupation_category',
+    institution: 'institution',
+  }),
+  service: mapBulkMasters(payload, {
+    departments: 'administrative_department',
+    designations: 'designation',
+    districts: 'district',
+    states: 'state',
+    levels: 'level',
+    ministries: 'ministry',
+    grades: 'grade',
+    postingTypes: 'posting_type',
+    implementingAgencies: 'agency',
+  }),
+  centralDeputation: mapBulkMasters(payload, {
+    state: 'state',
+    tenures: 'tenure',
+    ministry: 'ministry',
+    administrative_department: 'administrative_department',
+    agency: 'agency',
+    deputation_type: 'deputation_type',
+  }),
+  training: mapBulkMasters(payload, {
+    training_types: 'training_type',
+    countries: 'country',
+  }),
+  education: {
+    qualification: payload?.qualification || [],
+  },
+  disability: payload?.disability || [],
+});
 
 // Create a mapping between section titles and indices
 const SECTION_MAPPING = {
@@ -27,6 +138,7 @@ const SECTION_MAPPING = {
 // Define all required sections for progress tracking
 const ALL_REQUIRED_SECTIONS = [
   'personal',
+  'dependent',
   'profile_photo',
   'education',
   'service',
@@ -108,15 +220,17 @@ const formatSparkFetchedTime = (rawTimestamp) => {
 };
 
 function ProfileContent() {
-  const [openIndices, setOpenIndices] = useState(new Set([]));
+  const [openIndices, setOpenIndices] = useState(new Set([0]));
   const [profileData, setProfileData] = useState(null);
+  const [sharedMasterData, setSharedMasterData] = useState(null);
+  const [sharedMastersReady, setSharedMastersReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [infoMessage, setInfoMessage] = useState(null);
   const [showInitLoader, setShowInitLoader] = useState(false);
   const [activeSection, setActiveSection] = useState('Officer Details');
   const [isInitializing, setIsInitializing] = useState(false);
-  const [isAllCollapsed, setIsAllCollapsed] = useState(true);
+  const [isAllCollapsed, setIsAllCollapsed] = useState(false);
   const [layoutTransition, setLayoutTransition] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [showHelpPanel, setShowHelpPanel] = useState(false);
@@ -144,12 +258,195 @@ function ProfileContent() {
   const coachDragStateRef = useRef({ pointerOffsetX: 0, pointerOffsetY: 0 });
   const sectionRefs = useRef([]);
   const contentContainerRef = useRef(null);
-  const { sectionProgress, markInitialLoadComplete, initialLoadComplete } = useProfileCompletion();
+  const sharedMastersPromiseRef = useRef(null);
+  const hasLoadedProfileRef = useRef(false);
+  const {
+    sectionProgress,
+    markInitialLoadComplete,
+    initialLoadComplete,
+    hydrateSectionProgress,
+    removeSectionProgress,
+  } = useProfileCompletion();
+
+  const duplicateSections = useMemo(() => {
+    const flaggedSections = new Set();
+    const dbServices = profileData?.officer_data?.get_all_officer_info_by_user_id?.service_history || [];
+    const sparkServices = profileData?.spark_data?.data?.service_details || [];
+    const serviceMasters = sharedMasterData?.service;
+
+    if (!serviceMasters) {
+      if (hasDuplicateServiceEntries(dbServices)) {
+        flaggedSections.add('Service Details');
+      }
+      return flaggedSections;
+    }
+
+    const { details: mappedServices } = buildMappedServiceDetails({
+      serviceDetails: sparkServices,
+      dbServices,
+      designations: serviceMasters.designations || [],
+      departments: serviceMasters.departments || [],
+      districts: serviceMasters.districts || [],
+      states: serviceMasters.states || [],
+    });
+
+    if (hasDuplicateServiceEntries(mappedServices)) {
+      flaggedSections.add('Service Details');
+    }
+
+    return flaggedSections;
+  }, [profileData, sharedMasterData]);
+
+  const loadERProfileMasters = useCallback(async () => {
+    if (sharedMasterData) {
+      return sharedMasterData;
+    }
+
+    if (sharedMastersPromiseRef.current) {
+      return sharedMastersPromiseRef.current;
+    }
+
+    const mastersPromise = fetchBulkMasters(ER_PROFILE_MASTER_KEYS)
+      .then((payload) => {
+        const mappedMasters = buildERProfileMasters(payload);
+        setSharedMasterData(mappedMasters);
+        return mappedMasters;
+      })
+      .finally(() => {
+        setSharedMastersReady(true);
+        sharedMastersPromiseRef.current = null;
+      });
+
+    sharedMastersPromiseRef.current = mastersPromise;
+    return mastersPromise;
+  }, [sharedMasterData]);
+
+  const getAccurateServiceProgress = useCallback(async (responseData, mastersOverride = null) => {
+    const officerRoot = responseData?.officer_data?.get_all_officer_info_by_user_id || {};
+    const dbServices = Array.isArray(officerRoot?.service_history) ? officerRoot.service_history : [];
+    const sparkServices = Array.isArray(responseData?.spark_data?.data?.service_details)
+      ? responseData.spark_data.data.service_details
+      : [];
+
+    if (dbServices.length === 0 && sparkServices.length === 0) {
+      return { completed: 0, total: 0 };
+    }
+    let designations = mastersOverride?.service?.designations || [];
+    let departments = mastersOverride?.service?.departments || [];
+    let districts = mastersOverride?.service?.districts || [];
+    let states = mastersOverride?.service?.states || [];
+
+    try {
+      if (!designations.length || !departments.length || !districts.length || !states.length) {
+        const sharedMasters = await loadERProfileMasters();
+        designations = sharedMasters?.service?.designations || [];
+        departments = sharedMasters?.service?.departments || [];
+        districts = sharedMasters?.service?.districts || [];
+        states = sharedMasters?.service?.states || [];
+      }
+    } catch (error) {
+      console.warn('Failed to load service masters for accurate progress count.', error);
+    }
+
+    const { details } = buildMappedServiceDetails({
+      serviceDetails: sparkServices,
+      dbServices,
+      designations,
+      departments,
+      districts,
+      states,
+    });
+
+    return {
+      completed: details.filter((item) => item?.isSaved).length,
+      total: details.length,
+    };
+  }, [loadERProfileMasters]);
+
+  const deriveInitialSectionProgress = useCallback((responseData) => {
+    const officerRoot = responseData?.officer_data?.get_all_officer_info_by_user_id || {};
+    const officerInfo = officerRoot?.officer_info?.[0] || {};
+    const sparkData = responseData?.spark_data?.data || {};
+    const fields = officerInfo?.fields || {};
+
+    const getOfficerFieldValue = (fieldName) => {
+      const directValue = officerInfo?.[fieldName];
+      if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+        return directValue;
+      }
+
+      const sourceOrder = ['GAD_OFFICER', 'AIS_OFFICER', 'DB_SPARK_API', 'UNKNOWN'];
+      for (const sourceKey of sourceOrder) {
+        const value = fields?.[sourceKey]?.[fieldName];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          return value;
+        }
+      }
+
+      return '';
+    };
+
+    const getSavedCounts = (dbItems = [], sparkItems = []) => {
+      const dbCount = Array.isArray(dbItems) ? dbItems.length : 0;
+      const sparkCount = Array.isArray(sparkItems) ? sparkItems.length : 0;
+
+      return {
+        completed: dbCount,
+        total: Math.max(dbCount, sparkCount),
+      };
+    };
+
+    const mandatoryPersonalFields = [
+      'honorifics', 'first_name', 'last_name', 'ais_number', 'email', 'allotment_year', 'date_of_joining',
+      'pen_number', 'source_of_recruitment_id', 'cadre_id', 'dob', 'gender_id',
+      'blood_group_id', 'mother_tongue_id', 'service_type_id', 'mobile_no',
+      'address_line1_com', 'district_id_com', 'state_id_com', 'pin_code_com',
+      'address_line1_per', 'district_id_per', 'state_id_per', 'pin_code_per',
+    ];
+
+    const completedPersonal = mandatoryPersonalFields.filter((fieldName) => {
+      const value = getOfficerFieldValue(fieldName);
+      return value !== undefined && value !== null && String(value).trim() !== '' && value !== 'N/A';
+    }).length;
+
+    const profileImageValue =
+      getOfficerFieldValue('profile_image') ||
+      officerInfo?.profile_image ||
+      '';
+
+    return {
+      personal: {
+        completed: completedPersonal,
+        total: mandatoryPersonalFields.length,
+      },
+      dependent: {
+        completed: 0,
+        total: 0,
+      },
+      profile_photo: {
+        completed: profileImageValue ? 1 : 0,
+        total: 1,
+      },
+      education: getSavedCounts(officerRoot?.edu_qualification || [], sparkData?.education_details || []),
+      service: getSavedCounts(officerRoot?.service_history || [], sparkData?.service_details || []),
+      central_deputation: getSavedCounts(officerRoot?.central_deputation || [], sparkData?.deputation_details || []),
+      training: getSavedCounts(officerRoot?.training_info || [], sparkData?.trainingList || []),
+      awards: getSavedCounts(officerRoot?.rewards || [], sparkData?.awards || []),
+      disability: getSavedCounts(officerRoot?.officer_disability || [], sparkData?.disability || []),
+      disciplinary: getSavedCounts(officerRoot?.suspension_info || [], sparkData?.suspension_details || []),
+    };
+  }, []);
 
   // Initialize refs for each section
   useEffect(() => {
     sectionRefs.current = sectionRefs.current.slice(0, 8);
   }, []);
+
+  useEffect(() => {
+    if (!initialLoadComplete) {
+      removeSectionProgress('service');
+    }
+  }, [initialLoadComplete, removeSectionProgress]);
 
   // Handle modal state from CompactProfileSection
   useEffect(() => {
@@ -247,7 +544,6 @@ function ProfileContent() {
   // Initialize all sections temporarily for progress calculation
   useEffect(() => {
     if (profileData && !initialLoadComplete && !isInitializing) {
-      console.log('Starting initialization - opening all sections');
       setIsInitializing(true);
       setShowInitLoader(true);
       
@@ -260,12 +556,10 @@ function ProfileContent() {
   // Monitor when all sections have loaded
   useEffect(() => {
     if (isInitializing) {
-      console.log('Checking if all sections loaded...', sectionProgress);
       
       const allSectionsLoaded = checkAllSectionsLoaded();
       
       if (allSectionsLoaded) {
-        console.log('All sections loaded! Proceeding to finalize...');
         
         // Give a small delay for UI to settle and ensure all data is rendered
         const timer = setTimeout(() => {
@@ -278,20 +572,15 @@ function ProfileContent() {
             setShowInitLoader(false);
             markInitialLoadComplete();
             setIsInitializing(false);
-            console.log('Initialization complete!');
-          }, 500);
-        }, 1000);
+          }, 120);
+        }, 120);
         
         return () => clearTimeout(timer);
       } else {
         const checkTimer = setTimeout(() => {
           if (isInitializing) {
-            console.log('Sections still loading, checking again...');
             const loaded = checkAllSectionsLoaded();
             if (!loaded) {
-              console.log('Some sections still not loaded:', 
-                ALL_REQUIRED_SECTIONS.filter(s => !sectionProgress[s] || 
-                  typeof sectionProgress[s].completed !== 'number'));
             }
           }
         }, 2000);
@@ -305,24 +594,42 @@ function ProfileContent() {
   useEffect(() => {
     if (isInitializing) {
       const fallbackTimer = setTimeout(() => {
-        console.log('Fallback: Initialization taking too long, forcing completion');
         setOpenIndices(new Set([0]));
         setActiveSection('Officer Details');
         setShowInitLoader(false);
         markInitialLoadComplete();
         setIsInitializing(false);
-      }, 10000);
+      }, 4000);
       
       return () => clearTimeout(fallbackTimer);
     }
   }, [isInitializing, markInitialLoadComplete]);
 
+  useEffect(() => {
+    if (!loading && !isInitializing && openIndices.size === 0) {
+      setOpenIndices(new Set([0]));
+      setActiveSection('Officer Details');
+    }
+  }, [loading, isInitializing, openIndices]);
+
   const fetchProfileData = useCallback(async ({ forceRefresh = false, useCachedData = true } = {}) => {
     try {
+      const sharedMasters = await loadERProfileMasters().catch((error) => {
+        console.warn('Failed to load shared ER-profile masters.', error);
+        return null;
+      });
+
       if (useCachedData) {
         const cachedData = sessionStorage.getItem('profileData');
         if (cachedData) {
-          setProfileData(JSON.parse(cachedData));
+          const parsedCachedData = JSON.parse(cachedData);
+          const initialProgress = deriveInitialSectionProgress(parsedCachedData);
+          initialProgress.service = await getAccurateServiceProgress(parsedCachedData, sharedMasters);
+          hydrateSectionProgress(initialProgress, {
+            markComplete: false,
+            markLoaded: false,
+          });
+          setProfileData(parsedCachedData);
           setInfoMessage('Using cached profile data');
         }
       }
@@ -331,7 +638,12 @@ function ProfileContent() {
         params: forceRefresh ? { force_refresh: true } : undefined,
       });
       const responseData = response.data.data;
-      console.log('Fetched profile data:*************************', responseData);
+      const initialProgress = deriveInitialSectionProgress(responseData);
+      initialProgress.service = await getAccurateServiceProgress(responseData, sharedMasters);
+      hydrateSectionProgress(initialProgress, {
+        markComplete: false,
+        markLoaded: false,
+      });
       setProfileData(responseData);
       sessionStorage.setItem('profileData', JSON.stringify(responseData));
 
@@ -363,8 +675,6 @@ function ProfileContent() {
       sessionStorage.setItem('date_of_joining', finalDOJ);
       sessionStorage.setItem('retirement_date', finalRetirement);
 
-      console.log('Final Date of Joining--------------------------------------------:', finalDOJ);
-      console.log('Final Retirement Date:', finalRetirement);
 
       if (response.data.success) {
         setInfoMessage(response.data.message);
@@ -406,6 +716,26 @@ function ProfileContent() {
         setLoading(false);
       }
     }
+  }, [deriveInitialSectionProgress, getAccurateServiceProgress, hydrateSectionProgress, loadERProfileMasters]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const syncProfileDataFromCache = () => {
+      const cachedData = sessionStorage.getItem('profileData');
+      if (!cachedData) return;
+
+      try {
+        setProfileData(JSON.parse(cachedData));
+      } catch {
+        // Ignore malformed cache and preserve current state.
+      }
+    };
+
+    window.addEventListener('er-profile-data-updated', syncProfileDataFromCache);
+    return () => {
+      window.removeEventListener('er-profile-data-updated', syncProfileDataFromCache);
+    };
   }, []);
 
   const refreshSparkNow = useCallback(async () => {
@@ -443,7 +773,16 @@ function ProfileContent() {
   }, []);
 
   useEffect(() => {
+    if (hasLoadedProfileRef.current) {
+      return;
+    }
+
+    hasLoadedProfileRef.current = true;
     fetchProfileData();
+  }, [fetchProfileData]);
+
+  const refreshProfileCardData = useCallback(async () => {
+    await fetchProfileData({ forceRefresh: false, useCachedData: false });
   }, [fetchProfileData]);
 
   const getCurrentGuidedIndex = () => {
@@ -467,7 +806,22 @@ function ProfileContent() {
     { title: 'Disability Details', key: 'disability' },
   ];
 
+  const dependentProgress = sectionProgress.dependent || { completed: 0, total: 0 };
+  const hasUnsavedDependentDetails = dependentProgress.total > 0 && dependentProgress.completed < dependentProgress.total;
+
+  const getOfficerDetailsProgress = () => {
+    const personalProgress = sectionProgress.personal || { completed: 0, total: 0 };
+    return {
+      ...personalProgress,
+      blockedByDependents: hasUnsavedDependentDetails,
+    };
+  };
+
   const getProgressBySectionTitle = (sectionTitle) => {
+    if (sectionTitle === 'Officer Details') {
+      return getOfficerDetailsProgress();
+    }
+
     const sectionMeta = orderedSections.find((section) => section.title === sectionTitle);
     if (!sectionMeta) return { completed: 0, total: 0 };
     return sectionProgress[sectionMeta.key] || { completed: 0, total: 0 };
@@ -480,15 +834,18 @@ function ProfileContent() {
 
   const getNextPendingSection = (skippedSections = skippedZeroInfoSections) => {
     return orderedSections.find(({ title, key }) => {
-      const progress = sectionProgress[key] || { completed: 0, total: 0 };
+      const progress = title === 'Officer Details'
+        ? getOfficerDetailsProgress()
+        : (sectionProgress[key] || { completed: 0, total: 0 });
       const isIncomplete = progress.total > 0 && progress.completed < progress.total;
       const isZeroInfo = progress.completed === 0 && progress.total === 0;
+      const isBlocked = title === 'Officer Details' && progress.blockedByDependents;
 
       if (isZeroInfo && skippedSections.has(title)) {
         return false;
       }
 
-      return isIncomplete || isZeroInfo;
+      return isBlocked || isIncomplete || isZeroInfo;
     });
   };
 
@@ -496,11 +853,15 @@ function ProfileContent() {
   const formattedSparkFetchedTime = formatSparkFetchedTime(profileData?.spark_inserted_at);
   const activeSectionIsZeroInfo = isZeroInfoSection(activeSection);
   const activeSectionProgress = getProgressBySectionTitle(activeSection);
-  const isActiveSectionCompleted = activeSectionProgress.total > 0 && activeSectionProgress.completed === activeSectionProgress.total;
+  const isActiveSectionCompleted = activeSectionProgress.total > 0 &&
+    activeSectionProgress.completed === activeSectionProgress.total &&
+    !activeSectionProgress.blockedByDependents;
   const isActivePendingSection = pendingSection?.title === activeSection;
   const shouldShowPendingUnsavedTip = isActivePendingSection && !activeSectionIsZeroInfo && !isActiveSectionCompleted;
-  const officerDetailsProgress = sectionProgress.personal || { completed: 0, total: 0 };
-  const isOfficerDetailsCompleted = officerDetailsProgress.total > 0 && officerDetailsProgress.completed === officerDetailsProgress.total;
+  const officerDetailsProgress = getOfficerDetailsProgress();
+  const isOfficerDetailsCompleted = officerDetailsProgress.total > 0 &&
+    officerDetailsProgress.completed === officerDetailsProgress.total &&
+    !officerDetailsProgress.blockedByDependents;
   const shouldHighlightSparkButton = guidedModeEnabled && !isOfficerDetailsCompleted;
   const shouldHighlightProfileButton = guidedModeEnabled && !pendingSection;
   const shouldPulseHelpButton = !showHelpPanel || manualButtonHighlight.help;
@@ -772,7 +1133,7 @@ function ProfileContent() {
       <div className="p-4 text-center">
         <div className="flex flex-col items-center justify-center min-h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-          <div>Loading profile data...</div>
+          <div>Fetching Data from spark...</div>
         </div>
       </div>
     );
@@ -808,14 +1169,14 @@ function ProfileContent() {
             <button
               type="button"
               onClick={handleOpenHelp}
-              className={`inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30 ${
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30 ${
                 shouldPulseHelpButton ? 'help-attention-button' : ''
               }`}
             >
               <QuestionMarkCircleIcon className="h-4 w-4" />
               Help: How to complete profile?
               {showHelpBadge && (
-                <span className="ml-1 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] text-white">
+                <span className="ml-1 inline-flex h-5 items-center rounded-full bg-indigo-600 px-1.5 text-[10px] leading-none text-white">
                   New
                 </span>
               )}
@@ -824,7 +1185,7 @@ function ProfileContent() {
             <button
               type="button"
               onClick={toggleGuidedMode}
-              className={`inline-flex items-center gap-2 rounded-lg border ml-1 px-3 py-1.5 text-sm font-medium shadow-sm transition-colors ${
+              className={`ml-1 inline-flex min-h-10 items-center gap-2 overflow-hidden rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition-colors ${
                 shouldPulseGuidedButton ? 'guided-attention-button' : ''
               } ${
                 guidedModeEnabled
@@ -832,6 +1193,12 @@ function ProfileContent() {
                   : 'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
               }`}
             >
+              {shouldPulseGuidedButton && (
+                <span
+                  aria-hidden="true"
+                  className="guided-attention-shine pointer-events-none absolute inset-y-0 -left-10 w-8 -skew-x-12 bg-white/60 blur-[1px]"
+                />
+              )}
               <AcademicCapIcon className="h-4 w-4" />
               {guidedModeEnabled ? 'Guided Mode: On' : 'Start Guided Mode'}
             </button>
@@ -941,6 +1308,8 @@ function ProfileContent() {
             <div className={`w-full transform transition-all duration-300 relative z-10 ${layoutTransition ? 'scale-[0.98] opacity-90' : ''}`}>
               {profileData && (
                 <CompactProfileSection
+                  profileData={profileData}
+                  onRefreshProfileData={refreshProfileCardData}
                   highlightSparkButton={effectiveHighlightSparkButton}
                   highlightProfileButton={effectiveHighlightProfileButton}
                 />
@@ -955,6 +1324,7 @@ function ProfileContent() {
                   <Accordion 
                     onSectionSelect={handleSectionSelect}
                     activeSection={activeSection}
+                    duplicateSections={duplicateSections}
                   />
                 )}
               </div>
@@ -966,6 +1336,8 @@ function ProfileContent() {
                     openIndices={openIndices}
                     toggleAccordion={toggleAccordion}
                     profileData={profileData}
+                    sharedMasterData={sharedMasterData}
+                    sharedMastersReady={sharedMastersReady}
                     sectionRefs={sectionRefs}
                     activeSection={activeSection}
                     guidedModeEnabled={guidedModeEnabled}
@@ -987,12 +1359,15 @@ function ProfileContent() {
                 <>
                   <ProfileSection
                     compactMode={false}
+                    profileData={profileData}
+                    onRefreshProfileData={refreshProfileCardData}
                     highlightSparkButton={effectiveHighlightSparkButton}
                     highlightProfileButton={effectiveHighlightProfileButton}
                   />
                   <Accordion 
                     onSectionSelect={handleSectionSelect}
                     activeSection={activeSection}
+                    duplicateSections={duplicateSections}
                   />
                 </>
               )}
@@ -1005,6 +1380,8 @@ function ProfileContent() {
                   openIndices={openIndices}
                   toggleAccordion={toggleAccordion}
                   profileData={profileData}
+                  sharedMasterData={sharedMasterData}
+                  sharedMastersReady={sharedMastersReady}
                   sectionRefs={sectionRefs}
                   activeSection={activeSection}
                   guidedModeEnabled={guidedModeEnabled}
@@ -1033,72 +1410,112 @@ function ProfileContent() {
             aria-modal="true"
             aria-label="Profile completion help"
           >
-            <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-4 sm:px-5 dark:border-gray-700 dark:bg-gray-900">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Profile completion help</h3>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Quick reference for Spark profile, section edit flow, card saves, and OTP submission.</p>
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 dark:border-slate-700 dark:bg-slate-900/95">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+                    <QuestionMarkCircleIcon className="h-3.5 w-3.5" />
+                    Completion Guide
+                  </div>
+                  <h3 className="mt-3 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Profile completion help</h3>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    Clear steps for Spark review, section editing, card saves, and final OTP submission.
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowHelpPanel(false)}
-                  className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   Close
                 </button>
               </div>
             </div>
 
-            <div className="space-y-4 p-4 sm:p-5">
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
-                <h4 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">Completion flow</h4>
-                <ol className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-5 p-4 sm:p-6">
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 sm:p-5 text-sm text-rose-900 dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-200">
+                <p className="text-sm font-semibold">SPARK Data Correction Notice</p>
+                <p className="mt-1 leading-6">
+                  If you notice any errors, validation issues, or duplicate records in the SPARK data displayed in KARMASRI, kindly update the respective details in the SPARK portal first. Once the correction is completed, use the Refresh option in the KARMASRI dashboard to reflect the updated changes in the portal.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-indigo-50 to-white p-4 dark:border-slate-700 dark:from-indigo-950/20 dark:to-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-700 dark:text-indigo-300">Start here</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Review Spark first</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">Use Spark Profile to understand synced data and identify missing mandatory fields.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-slate-700 dark:from-emerald-950/20 dark:to-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Editing rule</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Save every card</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">Progress updates only after each form or card is saved successfully.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-amber-50 to-white p-4 dark:border-slate-700 dark:from-amber-950/20 dark:to-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">Final step</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Submit from preview</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">Open Profile Preview only after completion, then submit using OTP and e-sign.</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">Completion flow</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">Follow these four steps in order.</p>
+                  </div>
+                </div>
+                <ol className="mt-4 grid gap-3 sm:grid-cols-2">
                   {FLOW_STEPS.map((step, index) => (
-                    <li key={step.title} className="rounded-lg bg-white p-3 text-sm text-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                      <p className="flex items-center gap-2 font-semibold text-indigo-700 dark:text-indigo-300">
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-indigo-300 text-xs dark:border-indigo-700">{index + 1}</span>
-                        {step.title}
-                      </p>
-                      <p className="mt-1 leading-5">{step.description}</p>
+                    <li
+                      key={step.title}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{step.title}</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">{step.description}</p>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ol>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
-                <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">At a glance</h4>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Jump to a topic and quickly understand what each button does.</p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">Quick actions</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">Jump fast to the most common questions and actions.</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => scrollToHelpSection('spark')}
-                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-left text-sm font-medium text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    className="rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-left transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/35"
                   >
-                    What is Spark Profile?
+                    <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">What is Spark Profile?</p>
+                    <p className="mt-1 text-sm leading-6 text-indigo-800/80 dark:text-indigo-200/80">Understand synced data before editing.</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => scrollToHelpSection('profile')}
-                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-left text-sm font-medium text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
                   >
-                    What is Profile?
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">What is Profile?</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">Review your saved ER data before submission.</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => scrollToHelpSection('guided')}
-                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-left text-sm font-medium text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-left transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/35"
                   >
-                    What is Guided Mode?
-                  </button>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => focusTopAction('spark')}
-                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-left text-sm text-indigo-900 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
-                  >
-                    <p className="font-semibold">Where is Spark Profile?</p>
-                    <p className="mt-1 leading-5">Top-left profile card: click Spark Profile.</p>
+                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">What is Guided Mode?</p>
+                    <p className="mt-1 text-sm leading-6 text-emerald-800/80 dark:text-emerald-200/80">Follow the next pending action when unsure.</p>
                   </button>
                   <button
                     type="button"
@@ -1108,73 +1525,88 @@ function ProfileContent() {
                       }
                       setShowHelpPanel(false);
                     }}
-                    className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-left text-sm text-indigo-900 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-left transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950/20 dark:hover:bg-amber-950/35"
                     disabled={!pendingSection}
                   >
-                    <p className="font-semibold">Next step</p>
-                    <p className="mt-1 leading-5">{pendingSection ? `Open ${pendingSection.title}` : 'All trackable sections completed'}</p>
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Next step</p>
+                    <p className="mt-1 text-sm leading-6 text-amber-800/80 dark:text-amber-200/80">
+                      {pendingSection ? `Open ${pendingSection.title}` : 'All trackable sections completed'}
+                    </p>
                   </button>
                 </div>
               </div>
 
-              <div
-                ref={sparkHelpSectionRef}
-                className={`rounded-xl border p-4 text-sm ${helpSectionFocus === 'spark' ? 'help-section-focus border-indigo-300 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/30' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'} text-gray-700 dark:text-gray-200`}
-              >
-                <p className="font-semibold text-gray-900 dark:text-gray-100">What is Spark Profile?</p>
-                <p className="mt-1 leading-6">
-                  Spark Profile shows only SPARK-synced data. Use it to check missing mandatory fields, take print if required, and prepare details before editing.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => focusTopAction('spark')}
-                  className="mt-3 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+              <div className="grid gap-4">
+                <div
+                  ref={sparkHelpSectionRef}
+                  className={`rounded-2xl border p-4 sm:p-5 ${helpSectionFocus === 'spark' ? 'help-section-focus border-indigo-300 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/30' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'} text-slate-700 dark:text-slate-200`}
                 >
-                  Locate Spark Profile button
-                </button>
-              </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-900 dark:text-slate-100">Spark Profile</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        Spark Profile shows only SPARK-synced data. Use it to check missing mandatory fields, take print if required, and prepare details before editing.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => focusTopAction('spark')}
+                      className="shrink-0 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    >
+                      Locate Spark Profile
+                    </button>
+                  </div>
+                </div>
 
-              <div
-                ref={profileHelpSectionRef}
-                className={`rounded-xl border p-4 text-sm ${helpSectionFocus === 'profile' ? 'help-section-focus border-indigo-300 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/30' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'} text-gray-700 dark:text-gray-200`}
-              >
-                <p className="font-semibold text-gray-900 dark:text-gray-100">What is Profile?</p>
-                <p className="mt-1 leading-6">
-                  Profile shows your saved ER data in one view. Verify details there before final submission.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => focusTopAction('profile')}
-                  className="mt-3 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                <div
+                  ref={profileHelpSectionRef}
+                  className={`rounded-2xl border p-4 sm:p-5 ${helpSectionFocus === 'profile' ? 'help-section-focus border-indigo-300 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/30' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'} text-slate-700 dark:text-slate-200`}
                 >
-                  Locate Profile button
-                </button>
-              </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-900 dark:text-slate-100">Profile</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        Profile shows your saved ER data in one consolidated view. Verify details there before final submission.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => focusTopAction('profile')}
+                      className="shrink-0 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-indigo-950/30"
+                    >
+                      Locate Profile
+                    </button>
+                  </div>
+                </div>
 
-              <div
-                ref={guidedHelpSectionRef}
-                className={`rounded-xl border p-4 text-sm ${helpSectionFocus === 'guided' ? 'help-section-focus border-emerald-300 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'} text-gray-700 dark:text-gray-200`}
-              >
-                <p className="font-semibold text-gray-900 dark:text-gray-100">What is Guided Mode?</p>
-                <p className="mt-1 leading-6">
-                  Guided Mode assists when you are unsure. It highlights next pending actions and the next section to complete.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => focusTopAction('guided')}
-                  className="mt-3 rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                <div
+                  ref={guidedHelpSectionRef}
+                  className={`rounded-2xl border p-4 sm:p-5 ${helpSectionFocus === 'guided' ? 'help-section-focus border-emerald-300 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'} text-slate-700 dark:text-slate-200`}
                 >
-                  Locate Start Guided Mode button
-                </button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-900 dark:text-slate-100">Guided Mode</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        Guided Mode assists when you are unsure. It highlights the next pending actions and the next section to complete.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => focusTopAction('guided')}
+                      className="shrink-0 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                    >
+                      Locate Guided Mode
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
-                <p className="font-semibold">Submission note</p>
-                <p className="mt-1 leading-5">
-                  OTP submit is available after full completion. In card-based sections, each card must be saved separately.
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                <p className="text-sm font-semibold">Submission note</p>
+                <p className="mt-1 leading-6">
+                  OTP submission is available only after full completion. In card-based sections, each card must be saved separately before progress is counted.
                 </p>
               </div>
-
 
             </div>
           </div>
@@ -1241,7 +1673,11 @@ function ProfileContent() {
                   </p>
                 )}
                 {activeSection === 'Officer Details' && (
-                  <p className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs leading-5 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+                  <p className="guided-hint-card relative overflow-hidden rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs leading-5 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+                    <span
+                      aria-hidden="true"
+                      className="guided-hint-shine pointer-events-none absolute inset-y-0 -left-12 w-10 -skew-x-12 bg-white/45 blur-[1px]"
+                    />
                     {shouldHighlightSparkButton
                       ? <>After Spark Profile Preview, go to <span className="font-semibold">Officer Details</span> and complete <span className="font-semibold">Personal Information</span> first (Edit button inside that card), then continue with the <span className="font-semibold">Dependent Details</span> tree.</>
                       : <>Officer Details order: complete <span className="font-semibold">Personal Information</span> first (Edit button inside that card), then continue with the <span className="font-semibold">Dependent Details</span> tree.</>}
@@ -1354,9 +1790,54 @@ function ProfileContent() {
         }
         .guided-attention-button {
           animation: guidedBorderPulse 2.4s ease-in-out infinite;
+          position: relative;
+          box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.18), 0 6px 18px rgba(16, 185, 129, 0.18);
+        }
+        .guided-attention-shine {
+          animation: guidedShineSweep 2.8s ease-in-out infinite;
+        }
+        .guided-hint-card {
+          box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08), 0 6px 16px rgba(99, 102, 241, 0.08);
+        }
+        .guided-hint-shine {
+          animation: guidedHintSweep 3.2s ease-in-out infinite;
         }
         .help-section-focus {
           animation: guidedBorderPulse 2.1s ease-in-out 2;
+        }
+        @keyframes guidedShineSweep {
+          0% {
+            transform: translateX(-28px) skewX(-12deg);
+            opacity: 0;
+          }
+          18% {
+            opacity: 0.85;
+          }
+          45% {
+            transform: translateX(220px) skewX(-12deg);
+            opacity: 0;
+          }
+          100% {
+            transform: translateX(220px) skewX(-12deg);
+            opacity: 0;
+          }
+        }
+        @keyframes guidedHintSweep {
+          0% {
+            transform: translateX(-36px) skewX(-12deg);
+            opacity: 0;
+          }
+          15% {
+            opacity: 0.65;
+          }
+          42% {
+            transform: translateX(420px) skewX(-12deg);
+            opacity: 0;
+          }
+          100% {
+            transform: translateX(420px) skewX(-12deg);
+            opacity: 0;
+          }
         }
       `}</style>
 
@@ -1371,4 +1852,3 @@ export default function UpdateProfile() {
     </ProfileCompletionProvider>
   );
 }
-

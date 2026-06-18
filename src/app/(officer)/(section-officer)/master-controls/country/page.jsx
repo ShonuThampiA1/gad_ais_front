@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from 'react-toastify';
 import { TrashIcon, PencilSquareIcon,PlusIcon } from '@heroicons/react/16/solid'
 import { ModalCountryDetails } from '../modal//country-details'
@@ -27,8 +28,8 @@ export default function CountryList() {
 
     const fetchCountry = useCallback(async () => {
         try {
-          const response = await axiosInstance.get(`/masters/country`);
-          setCountryList(response.data.data.country);
+          const payload = await fetchBulkMasters(["country"], { admin: true, includeInactive: true });
+          setCountryList(payload.country || []);
         } catch (error) {
           console.error("Error fetching country:", error);
         }

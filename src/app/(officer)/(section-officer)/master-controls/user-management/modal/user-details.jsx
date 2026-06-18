@@ -5,6 +5,7 @@ import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react';
 import axiosInstance from '@/utils/apiClient';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { toast } from 'react-toastify';
@@ -92,17 +93,14 @@ export function ModalUserDetails({ open = false, setOpen, officer = null, onSave
   useEffect(() => {
     const fetchMasters = async () => {
       try {
-        const [genderRes, recruitmentRes, cadreRes] = await Promise.all([
-          axiosInstance.get('/masters/gender'),
-          axiosInstance.get('/masters/recruitment'),
-          axiosInstance.get('/masters/cadre'),
-        ]);
-
-        setMasters({
-          gender: genderRes.data.data.gender || [],
-          recruitment: recruitmentRes.data.data.recruitment || [],
-          cadre: cadreRes.data.data.cadre || [],
-        });
+        const payload = await fetchBulkMasters(['gender', 'recruitment', 'cadre']);
+        setMasters(
+          mapBulkMasters(payload, {
+            gender: 'gender',
+            recruitment: 'recruitment',
+            cadre: 'cadre',
+          }),
+        );
       } catch (error) {
         toast.error('Error fetching data: ' + (error.response?.data?.message || error.message));
       }
@@ -722,6 +720,5 @@ ModalUserDetails.propTypes = {
   officer: PropTypes.object,
   onSave: PropTypes.func.isRequired,
 };
-
 
 

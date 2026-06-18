@@ -11,8 +11,8 @@ const DOC_TYPES = [
 
 // Size limits in bytes
 const SIZE_LIMITS = {
-  image: 1 * 1024 * 1024, // 1MB
-  document: 2 * 1024 * 1024, // 2MB
+  image: 5 * 1024 * 1024, // 5MB
+  document: 5 * 1024 * 1024, // 5MB
 };
 export const fileTypes = {
   'profile': 1,
@@ -60,11 +60,11 @@ export function validateFile(file, mode = 'both') {
 
   // Size validation
   if (isImage && fileSize > SIZE_LIMITS.image) {
-    return { valid: false, error: 'Image size should not exceed 1 MB.' };
+    return { valid: false, error: 'Image size should not exceed 5 MB.' };
   }
 
   if (isDocument && fileSize > SIZE_LIMITS.document) {
-    return { valid: false, error: 'Document size should not exceed 2 MB.' };
+    return { valid: false, error: 'Document size should not exceed 5 MB.' };
   }
 
   return { valid: true };

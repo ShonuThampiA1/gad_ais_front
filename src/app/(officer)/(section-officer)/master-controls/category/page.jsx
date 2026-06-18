@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   TrashIcon,
@@ -40,8 +41,8 @@ export default function CategoryList() {
 
   const fetchCategory = useCallback(async () => {
     try {
-      const response = await axiosInstance.get(`/masters/category-all`);
-      setCategoryList(response.data.data.category);
+      const payload = await fetchBulkMasters(["category"], { admin: true, includeInactive: true });
+      setCategoryList(payload.category || []);
     } catch (error) {
       console.error("Error fetching category:", error);
     }
@@ -71,7 +72,6 @@ export default function CategoryList() {
 
       if (CategoryData.category_id) {
         const { category_id, ...categoryDataWithoutId } = CategoryData;
-        console.log("Category Data without ID:", categoryDataWithoutId);
         await axiosInstance.put(
           `/masters/category/${category_id}`,
           categoryDataWithoutId

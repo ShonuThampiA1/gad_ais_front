@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function DesignationList() {
   const fetchDesignation = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/designation-all`);
-      console.log("Fetched designationList:", response.data.data.designation);
-      setDesignationList(response.data.data.designation);
+      const payload = await fetchBulkMasters(["designation"], { admin: true, includeInactive: true });
+      setDesignationList(payload.designation || []);
     } catch (error) {
       console.error("Error fetching Designation:", error);
       toast.error("Failed to load designations.");
@@ -65,8 +65,6 @@ export default function DesignationList() {
 
     try {
       const trimmedDesignation = DesignationData.designation.trim().toLowerCase();
-      console.log("Input designation:", trimmedDesignation);
-      console.log("Current designationList:", designationList);
 
       // Check for existing designation
       const existing = designationList.find(
@@ -75,7 +73,6 @@ export default function DesignationList() {
 
       // Case: Designation exists and is deactivated
       if (existing && !existing.is_active && !DesignationData.designation_id) {
-        console.log("Found deactivated designation:", existing);
         setDesignationToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function DesignationList() {
           (des) => des.designation.toLowerCase() === trimmedDesignation
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated designation:", updatedExisting);
           setDesignationToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -189,7 +185,6 @@ export default function DesignationList() {
 
   const handleReactivateClick = (designation_id) => {
     const designation = designationList.find((d) => d.designation_id === designation_id);
-    console.log("Reactivating designation:", designation);
     setDesignationToReactivate(designation);
     setConfirmReactivateOpen(true);
   };

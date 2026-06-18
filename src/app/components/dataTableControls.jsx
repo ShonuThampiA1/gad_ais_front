@@ -3,6 +3,12 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { ModalReminderDetails } from './reminder/modal/reminder-details';
+import { useState } from 'react';
+import { PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { HistoryIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { toast } from "react-toastify";
 
 export function SearchBar({ value, onChange, placeholder = 'Search...' }) {
   return (
@@ -199,4 +205,45 @@ export function PaginationControls({ currentPage, totalPages, onPrevious, onNext
       </div>
     </div>
   );
+}
+
+export function ReminderNotificationControls({selectedUsers, selectedOfficerList, reminderHistoryPath}){
+
+  const router = useRouter();
+  const [reminderModalOpen, setReminderModalOpen] = useState(false);
+  
+  const handleOpenModal = () => {
+    if(selectedUsers.length === 0) {
+      toast.error('Please select at least one officer to send reminder.');
+      return;
+    }
+    setReminderModalOpen(true);
+  }
+
+  return(
+    <div className='flex items-center gap-2 mt-4'>
+      <button
+          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+          onClick={handleOpenModal}
+        >
+          <PaperAirplaneIcon className="h-5 w-5" />
+        <span>Send Reminder ({selectedUsers.length})</span>
+      </button>
+      <button
+        onClick={() =>
+          router.push(reminderHistoryPath)
+        }
+        className="flex items-center gap-2 rounded-lg bg-indigo-100 px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-200 border border-indigo-300"
+      >
+        <HistoryIcon className="h-5 w-5" />
+        <span>Reminder History</span>
+      </button>
+      <ModalReminderDetails
+        open={reminderModalOpen}
+        setOpen={setReminderModalOpen}
+        officerList={selectedOfficerList}
+        selectedUsers={selectedUsers}
+      />
+    </div>
+  )
 }

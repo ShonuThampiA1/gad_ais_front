@@ -39,7 +39,22 @@ export const extractErrorMessage = (error) => {
   if (!data) return null;
 
   if (Array.isArray(data.detail)) {
-    return data.detail.map(d => d.msg).join(', ');
+    // FastAPI/Pydantic often returns an array of objects with `msg`, but some endpoints
+    // return an array of plain strings (e.g. ["Blocked ...", "Detected ..."]).
+    const hasStringItems = data.detail.some((item) => typeof item === 'string');
+
+    const parts = data.detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          return item.msg || item.message || item.detail || null;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    const joiner = hasStringItems ? ' ' : ', ';
+    return parts.length ? parts.join(joiner) : null;
   }
 
   if (typeof data.detail === 'string') return data.detail;

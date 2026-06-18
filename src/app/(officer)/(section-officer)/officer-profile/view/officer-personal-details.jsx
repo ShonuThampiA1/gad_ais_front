@@ -7,6 +7,7 @@ import { toast } from 'react-toastify'; // Import and toast
 import 'react-toastify/dist/ReactToastify.css'; // Import the necessary CSS for Toastify
 import { getServiceTypeName } from '@/utils/serviceTypeUtils';
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
 
 export function OfficerPersonalDetails() {
   const [isModalOpen, setModalOpen] = useState(false)
@@ -109,43 +110,34 @@ export function OfficerPersonalDetails() {
 
     const fetchMasterData = async () => {
       try {
-        const [
-          recruitmentResponse,
-          cadreResponse,
-          genderResponse,
-          stateResponse,
-          tenureResponse,
-          districtResponse,
-          languageResponse,
-          retirementResponse,
-          categoryResponse,
-          designationResponse,
-        ] = await Promise.all([
-          axiosInstance.get('/masters/recruitment'),
-          axiosInstance.get('/masters/cadre'),
-          axiosInstance.get('/masters/gender'),
-          axiosInstance.get('/masters/state'),
-          axiosInstance.get('/masters/tenure'),
-          axiosInstance.get('/masters/district'),
-          axiosInstance.get('/masters/language'),
-          axiosInstance.get('/masters/retirement'),
-          axiosInstance.get('/masters/category'),
-          axiosInstance.get('/masters/designation'),
+        const payload = await fetchBulkMasters([
+          'recruitment',
+          'cadre',
+          'gender',
+          'state',
+          'tenure',
+          'district',
+          'language',
+          'retirement',
+          'category',
+          'designation',
         ]);
 
-        setMasterData({
-          recruitment: recruitmentResponse.data.data.recruitment || [],
-          cadre: cadreResponse.data.data.cadre || [],
-          gender: genderResponse.data.data.gender || [],
-          state: stateResponse.data.data.state || [],
-          tenure: tenureResponse.data.data.tenure || [],
-          district: districtResponse.data.data.district || [],
-          motherTongue: languageResponse.data.data.languages || [],
-          languageKnown: languageResponse.data.data.languages || [],
-          retirement: retirementResponse.data.data.retirement || [],
-          category: categoryResponse.data.data.category || [],
-          designation: designationResponse.data.data.designation || [],
-        });
+        setMasterData(
+          mapBulkMasters(payload, {
+            recruitment: 'recruitment',
+            cadre: 'cadre',
+            gender: 'gender',
+            state: 'state',
+            tenure: 'tenure',
+            district: 'district',
+            motherTongue: 'language',
+            languageKnown: 'language',
+            retirement: 'retirement',
+            category: 'category',
+            designation: 'designation',
+          }),
+        );
       } catch (err) {
         setError('Failed to fetch master data');
         console.error(err);
@@ -161,7 +153,6 @@ export function OfficerPersonalDetails() {
 
 
   const handleSave = async (updatedDetails) => {
-    console.log("Saving...", updatedDetails);
 
     try {
       const response = await axiosInstance.put(
@@ -418,10 +409,8 @@ export function OfficerPersonalDetails() {
 
       if (sparkResponse.status === 200 && sparkResponse.data) {
         const sparkData = sparkResponse.data;
-        console.log("Fetched SPARK data:", sparkData);
 
         const mappedData = mapSparkToPersonalDetails(sparkData, masterData);
-        console.log("Mapped Data:", mappedData);
 
         setTimeout(() => {
           setPersonalDetails((prevDetails) => ({
@@ -609,4 +598,3 @@ export function OfficerPersonalDetails() {
     </>
   );
 }
-

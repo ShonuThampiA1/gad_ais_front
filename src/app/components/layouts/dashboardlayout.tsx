@@ -13,17 +13,18 @@ import {
 import { BellIcon, Bars3Icon, XMarkIcon, KeyIcon, ArrowRightOnRectangleIcon, Cog6ToothIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { AccessibilityToolbar } from '@/app/components/accessibility';
 import { ThemeToggle } from '@/app/components/theme-toggle';
-import { ThemeCustomizer } from '@/app/components/theme/ThemeCustomizer';
 import { Footer } from '../../components/footer';
 import DashboardNavigation from '../dashboard-navigation';
 import UserNav from '../user-nav';
 import ChangePasswordModal from '@/app/(auth)/change-password/change-password-modal';
+import ChangeCredentialModal from '@/app/(auth)/change-credential/change-credential-modal';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import NotificationModal from '@/app/components/notifications';
 import axiosInstance from '@/utils/apiClient';
 import useAuth from '@/utils/useAuth';
+import toast from 'react-hot-toast';
 
 interface Notification {
   id: number;
@@ -44,6 +45,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const [role, setRole] = useState<number | null>(null);
   const [isChangePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [isChangeCredentialModalOpen, setChangeCredentialModalOpen] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [isPasswordExpired, setIsPasswordExpired] = useState(false);
   const [isNotificationModalOpen, setNotificationModalOpen] = useState(false);
@@ -74,6 +76,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const iconClass = "h-4 w-4 text-indigo-600 dark:text-indigo-300";
     
     switch (action) {
+      case 'changeCredential':
+        return <Cog6ToothIcon className={iconClass} />;
       case 'changePassword':
         return <KeyIcon className={iconClass} />;
       case 'signOut':
@@ -145,7 +149,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const handleMenuAction = (action: string) => {
-    if (action === 'changePassword') {
+    if (action === 'changeCredential') {
+      setChangeCredentialModalOpen(true);
+    } else if (action === 'changePassword') {
       setChangePasswordModalOpen(true);
     } else if (action === 'signOut') {
       signOut();
@@ -163,10 +169,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const userNavigation = [
     { name: 'Your Profile', href: '/er-profile', role: [2] },
-    { name: 'Settings', href: '#' },
+    { name: 'Settings', action: 'changeCredential' },
     { name: 'Change Password', action: 'changePassword' },
     { name: 'Sign out', action: 'signOut' },
   ];
+
+  const handleCredentialChangeSuccess = (message: string) => {
+    setChangeCredentialModalOpen(false);
+    sessionStorage.clear();
+    toast.success(message || 'Credential change completed successfully. Please sign in again.');
+    router.push('/login');
+  };
 
   const filteredNavigation = role !== null
     ? userNavigation.filter((item) => (item.role ? item.role.includes(role) : true))
@@ -190,10 +203,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="min-h-screen flex flex-col relative">
         {/* ==== TOP BAR – KARMASRI ONLY ==== */}
         <Disclosure as="nav" className="border-b border-neutral-200 bg-primary-500 text-white dark:bg-neutral-800 dark:border-neutral-900 relative z-50">
-          <div className="mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex h-12 items-center justify-between">
+          <div className="px-0">
+            <div className="flex min-h-12 items-center justify-between gap-3 py-2">
               <div className="flex-1 flex justify-center sm:justify-start">
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tighter leading-none relative">
+                <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-tighter leading-none relative">
                   <span className="absolute inset-0" style={{ color: 'rgba(30,58,138,0.3)', transform: 'translate(1px,2px)', filter: 'blur(1px)' }}>KARMASRI</span>
                   <span className="absolute inset-0" style={{ color: 'rgba(30,58,138,0.2)', transform: 'translate(2px,4px)', filter: 'blur(2px)' }}>KARMASRI</span>
                   <span className="absolute inset-0" style={{ color: 'rgba(0,0,0,0.15)', transform: 'translate(3px,6px)', filter: 'blur(3px)' }}>KARMASRI</span>
@@ -220,16 +233,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* ==== MAIN NAVIGATION BAR ==== */}
         <Disclosure as="nav" className="bg-white dark:bg-neutral-700 xl:border-b border-neutral-300 dark:border-neutral-800 relative z-100">
-          <div className="mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex h-16 items-center justify-between">
+          <div className="px-0">
+            <div className="flex min-h-16 items-center justify-between gap-3 py-3 xl:py-0">
               {/* Logo */}
-              <div className="flex-shrink-0">
+              <div className="min-w-0 flex-shrink">
                 <Image
                   src="/images/logos/logo-en-white.png"
                   alt="Logo"
                   width={140}
                   height={40}
-                  className="h-10 w-auto dark:hidden"
+                  className="h-8 w-auto max-w-[180px] sm:h-10 sm:max-w-[260px] dark:hidden"
+                  style={{ width: 'auto' }}
                   priority
                 />
                 <Image
@@ -237,14 +251,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   alt="Logo"
                   width={140}
                   height={40}
-                  className="h-10 w-auto hidden dark:block"
+                  className="hidden h-8 w-auto max-w-[180px] sm:h-10 sm:max-w-[260px] dark:block"
+                  style={{ width: 'auto' }}
                   priority
                 />
               </div>
 
               {/* Desktop Navigation */}
               <div className="hidden xl:flex md:items-center md:space-x-4 flex-1 justify-center">
-                <DashboardNavigation />
+                <DashboardNavigation variant="desktop" />
               </div>
 
               {/* Right Side Icons (Desktop) */}
@@ -263,7 +278,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     </span>
                   )}
                 </button>
-                <ThemeCustomizer />
                 <ThemeToggle />
                 <Menu as="div" className="relative">
                   <MenuButton className="flex items-center rounded-full bg-gray-200 p-1 focus:outline-none focus:ring-2 focus:ring-primary-500">
@@ -293,7 +307,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </div>
 
               {/* Mobile Menu Button */}
-              <div className="flex xl:hidden">
+              <div className="flex shrink-0 xl:hidden">
                 <DisclosureButton className="inline-flex items-center justify-center p-2 rounded-b-xl text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-neutral-600 transition-colors duration-200">
                   <Bars3Icon className="h-6 w-6 block group-data-[open]:hidden" />
                   <XMarkIcon className="h-6 w-6 hidden group-data-[open]:block" />
@@ -329,7 +343,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-2 mb-2">
                     Navigation
                   </h3>
-                  <DashboardNavigation />
+                  <DashboardNavigation variant="mobile" />
                 </div>
 
                 {/* Quick Actions Section */}
@@ -411,7 +425,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* ==== MAIN CONTENT ==== */}
         <main className="flex-1 bg-neutral-50 dark:bg-neutral-900 relative z-10">
-          <div className="mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="px-0">
             {children}
           </div>
         </main>
@@ -423,6 +437,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             closeModal={() => setChangePasswordModalOpen(false)}
             isFirstLogin={isFirstLogin}
             isPasswordExpired={isPasswordExpired}
+          />
+        )}
+
+        {isChangeCredentialModalOpen && (
+          <ChangeCredentialModal
+            closeModal={() => setChangeCredentialModalOpen(false)}
+            onSuccessLogout={handleCredentialChangeSuccess}
           />
         )}
 

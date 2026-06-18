@@ -8,15 +8,18 @@ import { toast } from 'react-toastify';
 import PrimaryDetails from '../primary-details';
 import axiosInstance from '@/utils/apiClient';
 import { getServiceTypeName } from '@/utils/serviceTypeUtils';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
 import { useProfileCompletion } from '@/contexts/Profile-completion-context';
+import { canEditErProfile, readStoredErProfileWorkflowContext } from '@/utils/erProfileWorkflow';
 
-export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
-  console.log('PersonalDetails profileData:', profileData);
+export function PersonalDetails({ profileData, sharedMasterData, sharedMastersReady = false, guidedModeEnabled = false }) {
   const [isModalOpen, setModalOpen] = useState(false);
   const [personalDetails, setPersonalDetails] = useState({});
   const [officerFields, setOfficerFields] = useState({ GAD_OFFICER: [], AIS_OFFICER: [], DB_SPARK_API: [] });
   const [sparkFields, setSparkFields] = useState(new Set());
   const [error, setError] = useState(null);
+  const [masterLoading, setMasterLoading] = useState(true);
+  const saveInFlightRef = useRef(false);
   const [masterData, setMasterData] = useState({
     recruitment: [], cadre: [], gender: [], state: [], tenure: [], district: [],
     designation: [], retirement: [], motherTongue: [], languageKnown: [], category: [], bloodGroup: [],
@@ -27,8 +30,8 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
   const [localProfileData, setLocalProfileData] = useState(profileData);
   const hasAutoGuidedOpened = useRef(false);
   // Get profile status from sessionStorage
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3'; // Disable for submitted or approved
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
   const { updateSectionProgress,markSectionLoaded  } = useProfileCompletion();
 
   const mandatoryFields = [
@@ -63,6 +66,23 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
     return !officerFields.DB_SPARK_API || officerFields.DB_SPARK_API.length === 0;
   }, [officerFields.DB_SPARK_API]);
 
+  const hasMasterData = useMemo(() => {
+    const requiredMasterKeys = [
+      'recruitment',
+      'cadre',
+      'gender',
+      'state',
+      'district',
+      'motherTongue',
+      'languageKnown',
+      'retirement',
+      'category',
+      'bloodGroup'
+    ];
+
+    return requiredMasterKeys.every((key) => Array.isArray(masterData[key]) && masterData[key].length > 0);
+  }, [masterData]);
+
   const getMasterValue = useCallback((id, key) => {
     if (!id) return 'N/A';
     const keyMap = {
@@ -85,7 +105,24 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
     if (!masterKey || !masterData[masterKey]) return 'N/A';
     const idKey = Object.keys(masterData[masterKey][0] || {}).find(k => k.includes('_id')) || 'id';
     const match = masterData[masterKey].find(item => item[idKey] == id);
-    return match ? (match[masterKey] || match.recruitment || match.cadre || match.state || match.gender || match.tenures || match.district || match.language || match.retirement || match.designation || match.category || match.blood_group || 'N/A') : 'N/A';
+    return match
+      ? (
+          (key === 'category_id' && (match.category_abbr || match.category))
+          || match[masterKey]
+          || match.recruitment
+          || match.cadre
+          || match.state
+          || match.gender
+          || match.tenures
+          || match.district
+          || match.language
+          || match.retirement
+          || match.designation
+          || match.category
+          || match.blood_group
+          || 'N/A'
+        )
+      : 'N/A';
   }, [masterData]);
 
   const mapSparkDataToPersonalDetails = useCallback((sparkData, masterData) => {
@@ -137,7 +174,13 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
     if (districtMap.permanent && address.permanent_address?.district) sparkKeys.add('district_id_per');
     if (districtMap.current && address.current_address?.district) sparkKeys.add('district_id_com');
 
-    const categoryId = masterData.category.find(c => c.category === personal.category)?.category_id || null;
+    const sparkCategory = normalize(personal.category);
+    const categoryId =
+      masterData.category.find((c) => {
+        const abbr = normalize(c.category_abbr);
+        const categoryName = normalize(c.category);
+        return sparkCategory && (abbr === sparkCategory || categoryName === sparkCategory);
+      })?.category_id || null;
     if (categoryId && personal.category) sparkKeys.add('category_id');
 
     const bloodGroupId = masterData.bloodGroup.find(bg => normalize(bg.blood_group) === normalize(personal.blood_group))?.blood_group_id || null;
@@ -185,7 +228,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
       state_id_com: stateMap.current || '',
       district_id_com: districtMap.current || ''
     };
-    console.log("detailssssssssssss=============", details)
 
     return { details, sparkKeys };
   }, [masterData]);
@@ -401,63 +443,72 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
     const storedProfile = sessionStorage.getItem('profileData');
     if (storedProfile) {
        setLocalProfileData(JSON.parse(storedProfile));
-        console.log('Updated localProfileData from sessionStorage:', storedProfile);
     } else {
     setLocalProfileData(profileData);
-      console.log('Updated localProfileData from props:', profileData);
     
     }
   }, [profileData]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
-      const endpoints = [
-        { key: 'recruitment', url: '/masters/recruitment', dataKey: 'recruitment' },
-        { key: 'cadre', url: '/masters/cadre', dataKey: 'cadre' },
-        { key: 'gender', url: '/masters/gender', dataKey: 'gender' },
-        { key: 'state', url: '/masters/state', dataKey: 'state' },
-        { key: 'tenure', url: '/masters/tenure', dataKey: 'tenure' },
-        { key: 'district', url: '/masters/district', dataKey: 'district' },
-        { key: 'motherTongue', url: '/masters/language', dataKey: 'languages' },
-        { key: 'languageKnown', url: '/masters/language', dataKey: 'languages' },
-        { key: 'retirement', url: '/masters/retirement', dataKey: 'retirement' },
-        { key: 'designation', url: '/masters/designation', dataKey: 'designation' },
-        { key: 'category', url: '/masters/category', dataKey: 'category' },
-        { key: 'bloodGroup', url: '/masters/blood-groups', dataKey: 'blood-group' }
-      ];
+      if (!sharedMastersReady) {
+        return null;
+      }
+
+      if (sharedMasterData) {
+        setMasterData(sharedMasterData);
+        setMasterLoading(false);
+        return sharedMasterData;
+      }
+
+      setMasterLoading(true);
       try {
-        const results = await Promise.allSettled(endpoints.map(endpoint => axiosInstance.get(endpoint.url)));
-        const masterDataResult = {};
-        results.forEach((result, index) => {
-          const { key, dataKey } = endpoints[index];
-          if (result.status === 'fulfilled') {
-            const apiData = result.value?.data?.data || {};
-            masterDataResult[key] = apiData[dataKey] || [];
-          } else {
-            toast.warn(`Failed to fetch ${key}`, {
-              className: 'bg-primary-500 text-white',
-              progressClassName: 'bg-primary-200'
-            });
-            masterDataResult[key] = [];
-          }
+        const payload = await fetchBulkMasters([
+          'recruitment',
+          'cadre',
+          'gender',
+          'state',
+          'tenure',
+          'district',
+          'language',
+          'retirement',
+          'designation',
+          'category',
+          'blood_group',
+        ]);
+        const masterDataResult = mapBulkMasters(payload, {
+          recruitment: 'recruitment',
+          cadre: 'cadre',
+          gender: 'gender',
+          state: 'state',
+          tenure: 'tenure',
+          district: 'district',
+          motherTongue: 'language',
+          languageKnown: 'language',
+          retirement: 'retirement',
+          designation: 'designation',
+          category: 'category',
+          bloodGroup: 'blood_group',
         });
         setMasterData(masterDataResult);
         return masterDataResult;
       } catch (err) {
         setError('An unexpected error occurred while fetching master data.');
         return null;
+      } finally {
+        setMasterLoading(false);
       }
     };
 
     fetchMasterData();
-  }, []); // Empty deps: fetch masters only once
+  }, [sharedMasterData, sharedMastersReady]); // Prefer parent masters, otherwise fall back once locally
 
   // Separate effect to process data when both masterData and localProfileData are available
   useEffect(() => {
-    if (masterData && Object.keys(masterData).length > 0 && localProfileData) {
+    if (!masterLoading && hasMasterData && localProfileData) {
       processProfileData(masterData, localProfileData);
     }
-  }, [masterData, localProfileData]); // Depend on both
+  }, [masterData, localProfileData, masterLoading, hasMasterData]); // Depend on both
 
   const processProfileData = useCallback((masterData, currentProfileData) => {
     if (!currentProfileData) return;
@@ -481,7 +532,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
   ...(officerInfo?.fields?.GAD_OFFICER || {}),
   ...(officerInfo?.fields?.UNKNOWN || {})
 };
-    console.log('DB Data:', dbdata);
     const { details: sparkMappedDetails, sparkKeys } = masterData
       ? mapSparkDataToPersonalDetails(sparkData, masterData)
       : { details: {}, sparkKeys: new Set() };
@@ -494,9 +544,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
 
     const mergedDetails = { ...primaryDetails };
     const honorificsDB = officerInfo?.honorifics || '';
-    console.log('Honorifics from DB:', honorificsDB);
-    console.log('Honorifics from Spark:', sparkMappedDetails.honorifics);
-    console.log('mergedDetails==',mergedDetails)
     if (honorificsDB) {
       mergedDetails['honorifics'] = honorificsDB;
     }
@@ -533,10 +580,14 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
     updatePersonalDetails(mergedDetails);
     updateFormData(mergedDetails);
     setSparkFields(sparkKeys);
-   sessionStorage.setItem('personal_details', JSON.stringify(mergedDetails));
   }, [updatePersonalDetails, updateFormData, mapSparkDataToPersonalDetails]);
 
   const handleSave = useCallback(async (updated_data) => {
+    if (saveInFlightRef.current) return false;
+    saveInFlightRef.current = true;
+    setTimeout(() => {
+      saveInFlightRef.current = false;
+    }, 2500);
     try {
       const mergedDetails = {
         ...personalDetails,
@@ -547,32 +598,44 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
         'district_id_per', 'district_id_com', 'address_line1_per', 'address_line2_per',
         'pin_code_per', 'state_id_per', 'address_line1_com', 'address_line2_com',
         'pin_code_com', 'gender_id', 'state_id_com', 'first_name', 'last_name',
-        'pen_number', 'pan_no', 'retirement_date', 'category_id', 'blood_group_id','date_of_joining'
+        'pen_number', 'pan_no', 'pf_number', 'praan_number', 'retirement_date',
+        'category_id', 'blood_group_id', 'date_of_joining'
       ];
 
       // Preserve existing spark_data
       const preservedSparkData = localProfileData.spark_data?.data || {};
       const dbSparkApiFields = {};
+      const isUsableSparkValue = (value) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        String(value).trim().toLowerCase() !== 'string';
+      const {
+        sparkKeys: currentSparkKeys,
+      } = mapSparkDataToPersonalDetails(preservedSparkData, masterData);
+      const actualSparkFieldSet = new Set(currentSparkKeys);
+      const existingOfficerInfo =
+        localProfileData.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+      const filteredExistingDbSparkApi = Object.fromEntries(
+        Object.entries(existingOfficerInfo.fields?.DB_SPARK_API || {}).filter(
+          ([key, value]) => actualSparkFieldSet.has(key) && isUsableSparkValue(value)
+        )
+      );
+
       sparkFieldsList.forEach((key) => {
-        if (localProfileData.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0]?.fields?.DB_SPARK_API?.[key]) {
-          dbSparkApiFields[key] = localProfileData.officer_data.get_all_officer_info_by_user_id.officer_info[0].fields.DB_SPARK_API[key];
-        } else if (updated_data.spark_data[key]) {
-          dbSparkApiFields[key] = updated_data.spark_data[key];
+        if (!actualSparkFieldSet.has(key)) {
+          return;
+        }
+
+        const updatedSparkValue = updated_data.spark_data?.[key];
+        const existingDbSparkValue = filteredExistingDbSparkApi[key];
+
+        if (isUsableSparkValue(updatedSparkValue)) {
+          dbSparkApiFields[key] = updatedSparkValue;
+        } else if (isUsableSparkValue(existingDbSparkValue)) {
+          dbSparkApiFields[key] = existingDbSparkValue;
         }
       });
-
-      updatePersonalDetails(mergedDetails);
-      updateFormData(mergedDetails);
-      sessionStorage.setItem('personal_details', JSON.stringify(mergedDetails));
-
-      const newSparkFields = new Set(sparkFields);
-      sparkFieldsList.forEach((key) => {
-        if (dbSparkApiFields[key]) {
-          newSparkFields.add(key);
-        }
-      });
-      
-      setSparkFields(newSparkFields);
 
       const response = await axiosInstance.put('/officer/officer', {
         user_data: updated_data.user_data,
@@ -584,6 +647,10 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
         const sparkData = apiData.spark_data?.data || preservedSparkData;
         const officerDataRoot = apiData.officer_data?.get_all_officer_info_by_user_id || {};
         const officerInfo = officerDataRoot.officer_info?.[0] || localProfileData.officer_data?.get_all_officer_info_by_user_id?.officer_info?.[0] || {};
+        const mergedDbSparkApiFields = {
+          ...filteredExistingDbSparkApi,
+          ...dbSparkApiFields
+        };
 
         // Define user-editable fields for AIS_OFFICER
         const userEditableFields = [
@@ -600,7 +667,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
             }
           });
                   const user_details = JSON.parse(sessionStorage.getItem('user_details')) || {};
-                  console.log("user_details updated==",user_details)
                   user_details.honorifics = mergedDetails.honorifics || user_details.honorifics;
                   user_details.first_name = mergedDetails.first_name || user_details.first_name;
                   user_details.last_name = mergedDetails.last_name || user_details.last_name;
@@ -620,8 +686,7 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
                     is_super_annuated: officerInfo.is_super_annuated || false,
                   fields: {
             DB_SPARK_API: {
-              ...officerInfo.fields?.DB_SPARK_API,
-              ...dbSparkApiFields
+              ...mergedDbSparkApiFields
             },
             GAD_OFFICER: {
               dob: officerInfo.fields?.GAD_OFFICER?.dob || "",
@@ -651,7 +716,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
             data: sparkData
           }
         };
-       console.log("updated profile data===",updatedProfileData);
         // Update both localProfileData and profileData in sessionStorage
         setLocalProfileData(updatedProfileData);
         sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
@@ -659,12 +723,12 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
         const updatedOfficerFields = {
           GAD_OFFICER: officerInfo.fields?.GAD_OFFICER ? Object.keys(officerInfo.fields.GAD_OFFICER) : [],
           AIS_OFFICER: Object.keys({ ...officerInfo.fields?.AIS_OFFICER, ...aisOfficerFields }),
-          DB_SPARK_API: Object.keys({ ...officerInfo.fields?.DB_SPARK_API, ...dbSparkApiFields }),
+          DB_SPARK_API: Object.keys(mergedDbSparkApiFields),
         };
         setOfficerFields(updatedOfficerFields);
 
         const { details: sparkMappedDetails, sparkKeys } = mapSparkDataToPersonalDetails(sparkData, masterData);
-        const finalSparkFields = new Set(newSparkFields);
+        const finalSparkFields = new Set(currentSparkKeys);
         sparkKeys.forEach((key) => {
           finalSparkFields.add(key);
         });
@@ -676,8 +740,8 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
           }
         });
         sparkFieldsList.forEach((key) => {
-          if (dbSparkApiFields[key]) {
-            finalDetails[key] = dbSparkApiFields[key];
+          if (mergedDbSparkApiFields[key]) {
+            finalDetails[key] = mergedDbSparkApiFields[key];
           } else if (sparkMappedDetails[key]) {
             finalDetails[key] = sparkMappedDetails[key];
           }
@@ -686,7 +750,6 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
         updatePersonalDetails(finalDetails);
         updateFormData(finalDetails);
         setSparkFields(finalSparkFields);
-        sessionStorage.setItem('personal_details', JSON.stringify(finalDetails));
 
        toast.success('Profile updated successfully', {
   className: 'bg-primary-500 text-white',
@@ -696,12 +759,14 @@ export function PersonalDetails({ profileData, guidedModeEnabled = false }) {
 setTimeout(() => {
   window.location.reload();
 }, 1200); // Adjust the delay (in ms) if needed – 1200ms = 1.2 seconds
+        return true;
       } else {
 
         toast.error('Failed to update profile', {
           className: 'bg-red-500 text-white',
           progressClassName: 'bg-red-200'
         });
+        return false;
       }
     } catch (err) {
       console.error('Full error object:', err);
@@ -718,6 +783,7 @@ setTimeout(() => {
         className: "bg-red-500 text-white",
         progressClassName: "bg-red-200",
       });
+      return false;
     }
   }, [personalDetails, localProfileData, sparkFields, masterData, mapSparkDataToPersonalDetails, updatePersonalDetails, updateFormData]);
 
@@ -783,7 +849,11 @@ setTimeout(() => {
     return <div className="text-red-500 text-center p-4 rounded-lg bg-red-50 dark:bg-red-900/30">{error}</div>;
   }
 
+  const ALWAYS_GAD_SOURCE_FIELDS = new Set(['email', 'mobile_no']);
+
   const renderSparkIndicator = (fieldKey) => {
+  if (fieldKey === 'age') return null;
+  if (ALWAYS_GAD_SOURCE_FIELDS.has(fieldKey)) return null;
   if (!sparkFields.has(fieldKey)) return null;
   return (
     <div className="absolute top-2 right-2 group">
@@ -800,18 +870,22 @@ setTimeout(() => {
 };
 
 const renderGadOfficerIndicator = (fieldKey) => {
-  // Show GAD indicator if field is in GAD_OFFICER and NOT in SPARK
-  if (!officerFields.GAD_OFFICER.includes(fieldKey) || sparkFields.has(fieldKey)) return null;
+  if (fieldKey === 'age') return null;
+  // Email and mobile are always shown as sourced from GAD officer.
+  const isAlwaysGadSource = ALWAYS_GAD_SOURCE_FIELDS.has(fieldKey);
+  // Show GAD indicator if field is explicitly fixed to GAD source,
+  // or if field is in GAD_OFFICER and not in SPARK.
+  if (!isAlwaysGadSource && (!officerFields.GAD_OFFICER.includes(fieldKey) || sparkFields.has(fieldKey))) return null;
   return (
     <div className="absolute top-2 right-2 group">
-      <span className="inline-flex items-center p-0.5 rounded-full bg-indigo-100 text-indigo-600 text-xs" aria-label="Sourced by AS Officer">
+      <span className="inline-flex items-center p-0.5 rounded-full bg-indigo-100 text-indigo-600 text-xs" aria-label="Sourced from GAD Officer">
         <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 8 8">
           <circle cx="4" cy="4" r="3" />
         </svg>
       </span>
       <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10">
         <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 shadow-md whitespace-nowrap">
-          Updated by AS-II
+          {isAlwaysGadSource ? 'From GAD Officer' : 'Updated by AS-II'}
         </div>
       </div>
     </div>
@@ -819,6 +893,7 @@ const renderGadOfficerIndicator = (fieldKey) => {
 };
 
 const renderUserIndicator = (fieldKey) => {
+  if (fieldKey === 'age') return null;
   // Show user indicator if field is NOT from SPARK and NOT from GAD_OFFICER
   // This means it's a user-editable field that the user has saved
   if (sparkFields.has(fieldKey) || officerFields.GAD_OFFICER.includes(fieldKey)) return null;
@@ -850,9 +925,25 @@ const renderUserIndicator = (fieldKey) => {
   );
 };
 
+const fieldDependsOnMasterData = (field) => {
+  if (field.isMaster) return true;
+  return field.key === 'languages_known';
+};
+
+const renderFieldValueSkeleton = () => (
+  <div className="mt-1 space-y-2 animate-pulse">
+    <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+    <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+  </div>
+);
+
  return (
     <div className="p-2 mx-auto w-full bg-white dark:bg-gray-950 relative z-[1]">
-      <PrimaryDetails personalDetails={personalDetails} masterData={masterData} />
+      <PrimaryDetails
+        personalDetails={personalDetails}
+        masterData={masterData}
+        masterLoading={masterLoading || !hasMasterData}
+      />
       <div className="space-y-3">
         {sections.map((section) => (
           <div key={section.title}>
@@ -988,18 +1079,22 @@ const renderUserIndicator = (fieldKey) => {
                               <p className="text-xs font-medium tracking-wide text-gray-500 dark:text-gray-400 mb-0.5">
                                 {field.label}
                               </p>
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white break-all line-clamp-3">
-                                {field.computeValue
-                                  ? (() => {
-                                      const val = field.computeValue();
-                                      return (val === null || val === undefined || Number.isNaN(val)) ? 'N/A' : String(val);
-                                    })()
-                                  : field.isMaster
-                                    ? getMasterValue(personalDetails[field.key], field.key)
-                                    : (personalDetails[field.key] && !Number.isNaN(personalDetails[field.key]))
-                                      ? String(personalDetails[field.key])
-                                      : 'N/A'}
-                              </p>
+                              {masterLoading && fieldDependsOnMasterData(field) ? (
+                                renderFieldValueSkeleton()
+                              ) : (
+                                <p className="text-sm font-semibold text-gray-900 dark:text-white break-all line-clamp-3">
+                                  {field.computeValue
+                                    ? (() => {
+                                        const val = field.computeValue();
+                                        return (val === null || val === undefined || Number.isNaN(val)) ? 'N/A' : String(val);
+                                      })()
+                                    : field.isMaster
+                                      ? getMasterValue(personalDetails[field.key], field.key)
+                                      : (personalDetails[field.key] && !Number.isNaN(personalDetails[field.key]))
+                                        ? String(personalDetails[field.key])
+                                        : 'N/A'}
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1028,18 +1123,22 @@ const renderUserIndicator = (fieldKey) => {
                                 <p className="text-xs font-medium tracking-wide text-gray-500 dark:text-gray-400 mb-0.5">
                                   {field.label}
                                 </p>
-                                <p className="text-sm font-semibold text-gray-900 dark:text-white break-all line-clamp-3">
-                                  {field.computeValue
-                                    ? (() => {
-                                        const val = field.computeValue();
-                                        return (val === null || val === undefined || Number.isNaN(val)) ? 'N/A' : val;
-                                      })()
-                                    : field.isMaster
-                                      ? getMasterValue(personalDetails[field.key], field.key)
-                                      : (personalDetails[field.key] && !Number.isNaN(personalDetails[field.key]))
-                                        ? personalDetails[field.key]
-                                        : 'N/A'}
-                                </p>
+                                {masterLoading && fieldDependsOnMasterData(field) ? (
+                                  renderFieldValueSkeleton()
+                                ) : (
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-white break-all line-clamp-3">
+                                    {field.computeValue
+                                      ? (() => {
+                                          const val = field.computeValue();
+                                          return (val === null || val === undefined || Number.isNaN(val)) ? 'N/A' : val;
+                                        })()
+                                      : field.isMaster
+                                        ? getMasterValue(personalDetails[field.key], field.key)
+                                        : (personalDetails[field.key] && !Number.isNaN(personalDetails[field.key]))
+                                          ? personalDetails[field.key]
+                                          : 'N/A'}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1065,4 +1164,3 @@ const renderUserIndicator = (fieldKey) => {
     </div>
   );
 }
-

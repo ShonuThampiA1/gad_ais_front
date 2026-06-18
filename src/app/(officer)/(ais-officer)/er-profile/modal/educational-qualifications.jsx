@@ -34,6 +34,8 @@ export function ModalEducationalQualifications({
   }) {
   const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditing = Boolean(educationalQualifications?.ais_edu_id);
   const [sparkUpdatedFields, setSparkUpdatedFields] = useState({});
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
 
@@ -53,7 +55,6 @@ export function ModalEducationalQualifications({
       setErrors({});
       setSparkUpdatedFields({});
       setUserUpdatedFields(new Set());
-      console.log("Modal opened with educationalQualifications:", JSON.stringify(educationalQualifications, null, 2));
     }
   }, [open, educationalQualifications]);
 
@@ -127,6 +128,7 @@ export function ModalEducationalQualifications({
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     const newErrors = {};
 
@@ -150,11 +152,27 @@ export function ModalEducationalQualifications({
 
     setErrors(newErrors);
 
-    if (Object.keys(newErrors).length > 0) return;
+    if (Object.keys(newErrors).length > 0) {
+      const firstKey = Object.keys(newErrors).find((key) => newErrors[key]);
+      if (firstKey && typeof document !== "undefined") {
+        window.setTimeout(() => {
+          const target =
+            document.querySelector(`[name="${firstKey}"]`) ||
+            document.querySelector(`[data-field="${firstKey}"]`) ||
+            document.getElementById(firstKey);
+          target?.scrollIntoView({ behavior: "smooth", block: "center" });
+          target?.focus?.();
+        }, 0);
+      }
+      return;
+    }
 
-    // Construct spark_data and user_data based on field status
-    const sparkData = {};
-    const userData = {};
+    setIsSubmitting(true);
+
+    try {
+      // Construct spark_data and user_data based on field status
+      const sparkData = {};
+      const userData = {};
 
     fields.forEach((field) => {
       const key = field.key;
@@ -174,12 +192,14 @@ export function ModalEducationalQualifications({
       user_data: userData,
     };
 
-    console.log("Modal handleSave updatedData:", JSON.stringify(updatedData, null, 2));
-    await onSave(updatedData);
-    setFormData(initialFormData);
-    setOpen(false);
-    setUserUpdatedFields(new Set());
-    setSparkUpdatedFields({});
+      await onSave(updatedData);
+      setFormData(initialFormData);
+      setOpen(false);
+      setUserUpdatedFields(new Set());
+      setSparkUpdatedFields({});
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -271,7 +291,7 @@ export function ModalEducationalQualifications({
       />
       <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
         <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-          <DialogPanel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-700 dark:text-white px-4 pb-4 pt-5 text-left shadow-xl transition-all data-[closed]:translate-y-4 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in sm:my-8 sm:w-full sm:max-w-4xl sm:p-6 data-[closed]:sm:translate-y-0 data-[closed]:sm:scale-95">
+          <DialogPanel className="relative transform overflow-visible rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all dark:bg-gray-700 dark:text-white data-[closed]:translate-y-4 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in sm:my-8 sm:w-full sm:max-w-4xl sm:p-6 data-[closed]:sm:translate-y-0 data-[closed]:sm:scale-95">
             <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
               <button
                 type="button"
@@ -307,9 +327,12 @@ export function ModalEducationalQualifications({
                         </div>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                       {fields.map((field) => (
-                        <div key={field.key} className="relative">
+                        <div
+                          key={field.key}
+                          className={`relative ${field.key === 'qualification_id' ? 'lg:col-span-2' : ''}`}
+                        >
                           <label className="block text-sm font-medium text-gray-700 dark:text-white">
                             {field.label}
                             {requiredFields.includes(field.key) && (
@@ -368,9 +391,10 @@ export function ModalEducationalQualifications({
                     </button>
                     <button
                       type="submit"
-                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      disabled={isSubmitting}
+                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                     </button>
                   </div>
                 </div>

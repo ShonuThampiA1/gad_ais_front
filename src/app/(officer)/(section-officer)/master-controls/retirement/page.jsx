@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function RetirementList() {
   const fetchRetirements = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/retirement-all`);
-      console.log("Fetched retirementList:", response.data.data.retirement);
-      setRetirementList(response.data.data.retirement || []);
+      const payload = await fetchBulkMasters(["retirement"], { admin: true, includeInactive: true });
+      setRetirementList(payload.retirement || []);
     } catch (error) {
       console.error("Error fetching Retirements:", error);
       toast.error("Failed to load retirements.");
@@ -65,8 +65,6 @@ export default function RetirementList() {
 
     try {
       const trimmedRetirement = RetirementData.retirement.trim().toLowerCase();
-      console.log("Input retirement:", trimmedRetirement);
-      console.log("Current retirementList:", retirementList);
 
       // Check for existing retirement
       const existing = retirementList.find(
@@ -75,7 +73,6 @@ export default function RetirementList() {
 
       // Case: Retirement exists and is deactivated
       if (existing && !existing.is_active && !RetirementData.retirement_id) {
-        console.log("Found deactivated retirement:", existing);
         setRetirementToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function RetirementList() {
           (item) => item.retirement.toLowerCase() === trimmedRetirement
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated retirement:", updatedExisting);
           setRetirementToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -191,7 +187,6 @@ export default function RetirementList() {
 
   const handleReactivateClick = (retirement_id) => {
     const retirement = retirementList.find((r) => r.retirement_id === retirement_id);
-    console.log("Reactivating retirement:", retirement);
     setRetirementToReactivate(retirement);
     setConfirmReactivateOpen(true);
   };

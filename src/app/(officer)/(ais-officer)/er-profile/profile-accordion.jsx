@@ -55,8 +55,12 @@ const CARD_BASED_SECTION_KEYS = new Set([
   'awards',
 ]);
 
-export function ProfileAccordion({ openIndices, toggleAccordion, profileData, sectionRefs, activeSection, guidedModeEnabled = false }) {
-  const { sectionProgress } = useProfileCompletion();
+export function ProfileAccordion({ openIndices, toggleAccordion, profileData, sharedMasterData, sharedMastersReady, sectionRefs, activeSection, guidedModeEnabled = false }) {
+  const { sectionProgress, sectionLoaded } = useProfileCompletion();
+  const dependentProgress = sectionProgress.dependent || { completed: 0, total: 0 };
+  const hasUnsavedDependentDetails = dependentProgress.total > 0 && dependentProgress.completed < dependentProgress.total;
+  const personalProgress = sectionProgress.personal || { completed: 0, total: 0 };
+  const officerDetailsProgressReady = Boolean(sectionLoaded.personal && sectionLoaded.dependent);
 
   const getGuidedHint = (sectionTitle) => {
     const key = SECTION_PROGRESS_KEY_BY_TITLE[sectionTitle];
@@ -68,6 +72,9 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
     }
 
     if (sectionTitle === 'Officer Details') {
+      if (hasUnsavedDependentDetails) {
+        return 'Personal Information may be complete, but Officer Details is still blocked because some SPARK dependent entries are not saved yet.';
+      }
       return 'Start with Personal Information and use the Edit button inside that card, then continue to Dependent Details tree to add/update dependents and save them.';
     }
 
@@ -92,30 +99,30 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
       title: 'Officer Details',
       content: (
         <div>
-          <PersonalDetails profileData={profileData} guidedModeEnabled={guidedModeEnabled} />
-          <DependentDetails profileData={profileData} />
+          <PersonalDetails profileData={profileData} sharedMasterData={sharedMasterData?.personal} sharedMastersReady={sharedMastersReady} guidedModeEnabled={guidedModeEnabled} />
+          <DependentDetails profileData={profileData} sharedMasterData={sharedMasterData?.dependent} sharedMastersReady={sharedMastersReady} />
         </div>
       ),
     },
     {
       icon: AcademicCapIcon,
       title: 'Educational Qualifications',
-      content: <EducationalQualifications profileData={profileData} />,
+      content: <EducationalQualifications profileData={profileData} sharedMasterData={sharedMasterData?.education} sharedMastersReady={sharedMastersReady} />,
     },
     {
       icon: BriefcaseIcon,
       title: 'Service Details',
-      content: <ServiceDetails profileData={profileData} />,
+      content: <ServiceDetails profileData={profileData} masterData={sharedMasterData?.service} sharedMastersReady={sharedMastersReady} />,
     },
     {
       icon: GlobeAmericasIcon,
       title: 'Deputation Details',
-      content: <CentralDeputationDetails profileData={profileData} />,
+      content: <CentralDeputationDetails profileData={profileData} sharedMasterData={sharedMasterData?.centralDeputation} sharedMastersReady={sharedMastersReady} />,
     },
     {
       icon: PresentationChartBarIcon,
       title: 'Training Details',
-      content: <CareerTrainingDetails profileData={profileData} />,
+      content: <CareerTrainingDetails profileData={profileData} sharedMasterData={sharedMasterData?.training} sharedMastersReady={sharedMastersReady} />,
     },
     {
       icon: TrophyIcon,  
@@ -125,7 +132,7 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
     {
       icon: HandRaisedIcon,
       title: 'Disability Details',
-      content: <DisabilityDetails profileData={profileData} />,
+      content: <DisabilityDetails profileData={profileData} sharedMasterData={sharedMasterData?.disability} sharedMastersReady={sharedMastersReady} />,
     },
     {
       icon: NoSymbolIcon,
@@ -137,6 +144,20 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
   // Check if current section is active
   const isSectionActive = (index) => {
     return SECTION_INDEX_MAP[index] === activeSection;
+  };
+
+  const renderOfficerDetailsProgress = () => {
+    if (!officerDetailsProgressReady) {
+      return (
+        <div className="mt-1 h-5 w-32 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      );
+    }
+
+    return (
+      <span className="mt-1 inline-flex w-fit items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
+        {personalProgress.completed} of {personalProgress.total} completed
+      </span>
+    );
   };
 
   return (
@@ -164,9 +185,21 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
                   className={`h-5 w-5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'} shrink-0`}
                   strokeWidth={2}
                 />
-                <span className={isActive ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : ''}>
-                  {item.title}
-                </span>
+                <div className="flex flex-col">
+                  <span className={isActive ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : ''}>
+                    {item.title}
+                  </span>
+                  {item.title === 'Officer Details' && (
+                    <>
+                      {renderOfficerDetailsProgress()}
+                      {officerDetailsProgressReady && hasUnsavedDependentDetails && (
+                        <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                          ⚠ Dependent Details not saved
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <span className="ml-auto">
                 <ChevronDownIcon
@@ -189,10 +222,29 @@ export function ProfileAccordion({ openIndices, toggleAccordion, profileData, se
                 >
                   <div className="px-2 py-2 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
                     {guidedModeEnabled && (
-                      <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
+                      <motion.div
+                        animate={{
+                          boxShadow: [
+                            '0 0 0 0 rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(110, 231, 183, 0.45)',
+                            '0 0 0 4px rgba(16, 185, 129, 0.12), 0 0 18px rgba(16, 185, 129, 0.22)',
+                            '0 0 0 0 rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(110, 231, 183, 0.45)',
+                          ],
+                          borderColor: [
+                            'rgba(110, 231, 183, 0.9)',
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(110, 231, 183, 0.9)',
+                          ],
+                        }}
+                        transition={{
+                          duration: 2.2,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }}
+                        className="mb-3 rounded-lg border bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100"
+                      >
                         <p className="font-semibold">Guided hint</p>
                         <p className="mt-1">{getGuidedHint(item.title)}</p>
-                      </div>
+                      </motion.div>
                     )}
                     {item.content}
                   </div>

@@ -4,6 +4,21 @@
 
 import { remove } from "jszip";
 
+const unwrapFieldValue = (value) => {
+    if (value && typeof value === "object" && !Array.isArray(value) && "value" in value) {
+        return value.value
+    }
+    return value
+}
+
+const unwrapObjectFields = (obj) => {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj
+
+    return Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [key, unwrapFieldValue(value)])
+    )
+}
+
 const formatDate = (value) => {
     if (!value) return null
     const date = new Date(value)
@@ -39,6 +54,7 @@ const removeUnwantedFields = (item) => {
             value === "N/A" ||
             (typeof value === "string" && value.trim() === "") ||
             [
+                "_fieldSources",
                 "documentId",
                 "documentIds",
                 "death_certificate",
@@ -65,9 +81,8 @@ const cleanAddressSection = (addresses = []) =>
     addresses
         .filter(a => a?.title && a?.value)
         .map(a => ({
-            ...a,
             title: a.title,
-            value: a.value
+            value: unwrapFieldValue(a.value)
         }));
 
 /* ============================
@@ -131,7 +146,7 @@ export const buildUserDetailsForDisplay = (raw) => {
         full_name: raw.full_name,
         position: raw.position,
         profile_image: raw.profile_image,
-        personal_details: raw.personal_details,
+        personal_details: unwrapObjectFields(raw.personal_details),
 
         address_details: cleanAddressSection(raw.address_details),
 

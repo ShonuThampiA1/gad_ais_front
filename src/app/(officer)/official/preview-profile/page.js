@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowDownTrayIcon, CheckCircleIcon, ArrowLeftIcon, ExclamationTriangleIcon, ExclamationCircleIcon, CheckBadgeIcon, DocumentTextIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { BoltIcon, UserIcon } from '@heroicons/react/24/solid';
 import { toast } from "react-toastify";
 import axiosInstance from '@/utils/apiClient';
 import { axiosInstanceFile } from '../../../../utils/apiClient';
@@ -12,6 +13,185 @@ import pdfGenerator from '../../../../utils/pdfGenerator';
 import saveDocument from '../../../../utils/saveDocument';
 import OTPModal from '../../../components/otpModal';
 import downloadFile from '../../../../utils/downloadFile';
+import { formatDateToDDMMYYYY } from '@/utils/dateFormat';
+
+const DEFAULT_AVATAR = "/images/avatar.jpg";
+
+const normalizeFieldSource = (source) => {
+  if (!source) return null;
+  if (source === 'DB_SPARK_API' || source === 'SPARK_API' || source === 'SPARK') return 'SPARK';
+  if (source === 'GAD_OFFICER') return 'GAD_OFFICER';
+  if (source === 'AIS_OFFICER') return 'AIS_OFFICER';
+  return null;
+};
+
+const getDisplayValue = (field) => {
+  if (field && typeof field === 'object' && 'value' in field) {
+    return field.value;
+  }
+  return field;
+};
+
+const createPreviewField = (value, source = null) => {
+  const normalizedValue = value || "N/A";
+  return {
+    value: normalizedValue,
+    source: normalizedValue === "N/A" ? null : normalizeFieldSource(source),
+  };
+};
+
+const getFieldSourceFromRecord = (record, fieldNames = []) => {
+  if (!record?.fields) return null;
+  const fields = record.fields;
+
+  // Flat shape: { field_name: "AIS_OFFICER" | "GAD_OFFICER" | "SPARK_API" }
+  for (const fieldName of fieldNames) {
+    const flatSource = normalizeFieldSource(fields[fieldName]);
+    if (flatSource) return flatSource;
+  }
+
+  // Nested shape: { AIS_OFFICER: { field_name: value }, GAD_OFFICER: { ... } }
+  for (const sourceKey of Object.keys(fields)) {
+    const sourceFields = fields[sourceKey];
+    if (!sourceFields || typeof sourceFields !== 'object' || Array.isArray(sourceFields)) continue;
+
+    for (const fieldName of fieldNames) {
+      if (
+        sourceFields[fieldName] !== undefined &&
+        sourceFields[fieldName] !== null &&
+        sourceFields[fieldName] !== ""
+      ) {
+        return normalizeFieldSource(sourceKey);
+      }
+    }
+  }
+
+  return null;
+};
+
+const getServiceDuplicateKey = (service) => {
+  const additionalChargeValue = service?.is_additional_charge ?? service?.additional_charge;
+  const isAdditionalCharge =
+    additionalChargeValue === true ||
+    additionalChargeValue === 'true' ||
+    additionalChargeValue === 'True' ||
+    additionalChargeValue === 'YES' ||
+    additionalChargeValue === 'Yes' ||
+    additionalChargeValue === 'yes';
+  if (isAdditionalCharge) return '';
+  const start = service?.start_date ? String(service.start_date).split('T')[0] : '';
+  const end = service?.end_date ? String(service.end_date).split('T')[0] : 'ongoing';
+  if (!start) return '';
+  return `${start}__${end}`;
+};
+
+const getServiceDuplicateMetaMap = (services = []) => {
+  const grouped = new Map();
+
+  services.forEach((service) => {
+    const key = getServiceDuplicateKey(service);
+    if (!key) return;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(service);
+  });
+
+  const duplicates = new Map();
+  grouped.forEach((items, key) => {
+    if (items.length > 1) {
+      duplicates.set(key, { count: items.length });
+    }
+  });
+
+  return duplicates;
+};
+
+const SourceIndicator = ({ source }) => {
+  if (!source) return null;
+
+  if (source === 'SPARK') {
+    return (
+      <div className="group relative inline-flex">
+        <span className="inline-flex items-center rounded-full bg-orange-100 p-0.5 text-orange-700">
+          <BoltIcon className="h-2.5 w-2.5" />
+        </span>
+        <div className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden group-hover:block">
+          <div className="whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+            Synced from SPARK
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (source === 'GAD_OFFICER') {
+    return (
+      <div className="group relative inline-flex">
+        <span className="inline-flex items-center rounded-full bg-indigo-100 p-0.5 text-indigo-700">
+          <span className="h-2 w-2 rounded-full bg-indigo-500" />
+        </span>
+        <div className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden group-hover:block">
+          <div className="whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+            Updated by AS-II
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (source === 'AIS_OFFICER') {
+    return (
+      <div className="group relative inline-flex">
+        <span className="inline-flex items-center rounded-full bg-violet-100 p-0.5 text-violet-700">
+          <UserIcon className="h-2.5 w-2.5" />
+        </span>
+        <div className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden group-hover:block">
+          <div className="whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg">
+            Updated by AIS Officer
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const SourceLegend = () => (
+  <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-white">
+      <span className="inline-flex items-center rounded-full bg-orange-100 p-0.5 text-orange-600">
+        <BoltIcon className="h-3 w-3" />
+      </span>
+      <span>Synced from SPARK</span>
+    </div>
+    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-white">
+      <span className="inline-flex items-center rounded-full bg-indigo-100 p-0.5 text-indigo-600">
+        <span className="mx-[3px] my-[3px] h-2 w-2 rounded-full bg-indigo-500" />
+      </span>
+      <span>Updated by AS-II</span>
+    </div>
+    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-white">
+      <span className="inline-flex items-center rounded-full bg-violet-100 p-0.5 text-violet-600">
+        <UserIcon className="h-3 w-3" />
+      </span>
+      <span>Updated by AIS Officer</span>
+    </div>
+  </div>
+);
+
+const getStatusFlowLabel = (status) => {
+  const actionKey = String(status?.action_key || '').trim().toLowerCase();
+
+  if (actionKey === 'return_for_correction' || actionKey === 'returned_for_correction' || actionKey === 'returned for correction') {
+    return 'AS II Review -->Officer (RETURN FOR CORRECTION)';
+  }
+
+  if (actionKey === 'resubmit' || actionKey === 'resubmitted' || actionKey === 're_submit') {
+    return 'Officer (RESUBMITTED ) -->AS II Review';
+  }
+
+  return `${status?.from_activity_name || 'N/A'} -> ${status?.to_activity_name || 'N/A'}`;
+};
 
 const ProfilePreviewPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,6 +206,8 @@ const ProfilePreviewPage = () => {
   const fullName = `${loggedInUser?.first_name || ''} ${loggedInUser?.last_name || ''}`.trim();
   const mobileNo = loggedInUser?.mobile_no || null;
   const roleId = sessionStorage.getItem('role_id');
+  const isSuperAdminView = roleId === '7';
+  const previewApiBase = isSuperAdminView ? '/admin' : '/as-II';
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [signerPortModalOpen, setSignerPortModalOpen] = useState(false);
   const [confirmationAction, setConfirmationAction] = useState('');
@@ -45,16 +227,65 @@ const ProfilePreviewPage = () => {
   const [documentError, setDocumentError] = useState(null);
   const [documentNumber, setDocumentNumber] = useState(null);
   const [profileDocumentError, setProfileDocumentError] = useState(null);
+  const [selectedRemarkTargets, setSelectedRemarkTargets] = useState([]);
+  const remarkTextareaRef = useRef(null);
+  const hasDuplicateServicePeriods = Boolean(
+    userDetails?.service_details?.length &&
+    getServiceDuplicateMetaMap(userDetails.service_details).size > 0
+  );
 
   const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+
+    try {
+      const rawValue = String(dateString).trim();
+      if (!rawValue) return "N/A";
+
+      const datePart = rawValue.split(" ")[0];
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return formatDateToDDMMYYYY(datePart);
+      }
+
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(datePart)) {
+        return datePart;
+      }
+
+      if (/^\d{2}-\d{2}-\d{4}$/.test(datePart)) {
+        const [day, month, year] = datePart.split("-");
+        return `${day}/${month}/${year}`;
+      }
+
+      const parsedDate = new Date(rawValue);
+      if (isNaN(parsedDate.getTime())) return "N/A";
+
+      const isoDate = [
+        parsedDate.getFullYear(),
+        String(parsedDate.getMonth() + 1).padStart(2, '0'),
+        String(parsedDate.getDate()).padStart(2, '0'),
+      ].join('-');
+
+      return formatDateToDDMMYYYY(isoDate);
+    } catch (error) {
+      console.error("Date formatting error:", error);
+      return "N/A";
+    }
+  };
+
+  const formatDateTime = (dateString) => {
     if (!dateString) return "N/A";
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return "N/A";
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
+      return date.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
     } catch (error) {
       console.error("Date formatting error:", error);
       return "N/A";
@@ -89,6 +320,7 @@ const ProfilePreviewPage = () => {
 
   const transformOfficerData = useCallback((data) => {
     const officerInfo = data.ais_officer_info;
+    const officerSource = (fieldNames) => getFieldSourceFromRecord(officerInfo, fieldNames);
 
     // Create a map of family members for parent lookup
     const familyMap = {};
@@ -106,32 +338,40 @@ const ProfilePreviewPage = () => {
       position: formatField(officerInfo.service_type_name, "Service Type") || "N/A",
       profile_image: officerInfo.profile_image
         ? `${process.env.NEXT_PUBLIC_API_URL}/officer/get-image/${officerInfo.profile_image}?t=${new Date().getTime()}`
-        : null,
+        : DEFAULT_AVATAR,
       personal_details: {
-        "Full Name": `${officerInfo.honorifics ? formatField(officerInfo.honorifics, "Honorifics") + " " : ""}${officerInfo.first_name || ""} ${officerInfo.last_name || ""}`.trim(),
-        "Date of Birth": formatDate(officerInfo.dob),
-        "Gender": formatField(officerInfo.gender, "Gender") || "N/A",
-        "Blood Group": formatField(officerInfo.blood_group, "Blood Group") || "N/A",
-        "Email": officerInfo.email || "N/A",
-        "Alternative Email": officerInfo.alternative_email || "N/A",
-        "Mobile No": officerInfo.mobile_no || "N/A",
-        "Alternative Mobile No": officerInfo.alternative_mobile_no || "N/A",
-        "Karmasri ID": officerInfo.identity_number || "N/A",
-        "PEN": officerInfo.pen_number || "N/A",
-        "AIS Number": formatField(officerInfo.ais_number, "AIS Number") || "N/A",
-        "PAN": formatField(officerInfo.pan_no, "PAN") || "N/A",
-        "PRAN": officerInfo.praan_number || "N/A",
-        "PF Number": officerInfo.pf_number || "N/A",
-        "Source of Recruitment": formatField(officerInfo.recruitment, "Source of Recruitment") || "N/A",
-        "Cadre": formatField(officerInfo.cadre, "Cadre") || "N/A",
-        "Allotment Year": officerInfo.allotment_year || "N/A",
-        "Date of Joining": formatDate(officerInfo.date_of_joining),
-        "Service Type": formatField(officerInfo.service_type_name, "Service Type") || "N/A",
-        "Mother Tongue": formatField(officerInfo.mother_tongue, "Mother Tongue") || "N/A",
-        "Languages Known": officerInfo.languages_known?.map(lang => formatField(lang, "Languages Known")).join(", ") || "N/A",
-        "Category": formatField(officerInfo.category, "Category") || "N/A",
-        "Retirement Date": formatDate(officerInfo.retirement_date),
-        "Mode of Retirement": formatField(officerInfo.retirement, "Mode of Retirement") || "N/A",
+        "Full Name": createPreviewField(
+          `${officerInfo.honorifics ? formatField(officerInfo.honorifics, "Honorifics") + " " : ""}${officerInfo.first_name || ""} ${officerInfo.last_name || ""}`.trim(),
+          officerSource(['honorifics', 'first_name', 'last_name'])
+        ),
+        "Date of Birth": createPreviewField(formatDate(officerInfo.dob), officerSource(['dob'])),
+        "Gender": createPreviewField(formatField(officerInfo.gender, "Gender") || "N/A", officerSource(['gender_id', 'gender'])),
+        "Blood Group": createPreviewField(formatField(officerInfo.blood_group, "Blood Group") || "N/A", officerSource(['blood_group_id', 'blood_group'])),
+        "Email": createPreviewField(officerInfo.email || "N/A", officerSource(['email'])),
+        "Alternative Email": createPreviewField(officerInfo.alternative_email || "N/A", officerSource(['alternative_email'])),
+        "Mobile No": createPreviewField(officerInfo.mobile_no || "N/A", officerSource(['mobile_no'])),
+        "Alternative Mobile No": createPreviewField(officerInfo.alternative_mobile_no || "N/A", officerSource(['alternative_mobile_no'])),
+        "Karmasri ID": createPreviewField(officerInfo.identity_number || "N/A", officerSource(['identity_number'])),
+        "PEN": createPreviewField(officerInfo.pen_number || "N/A", officerSource(['pen_number'])),
+        "AIS Number": createPreviewField(formatField(officerInfo.ais_number, "AIS Number") || "N/A", officerSource(['ais_number'])),
+        "PAN": createPreviewField(formatField(officerInfo.pan_no, "PAN") || "N/A", officerSource(['pan_no'])),
+        "PRAN": createPreviewField(officerInfo.praan_number || "N/A", officerSource(['praan_number'])),
+        "PF Number": createPreviewField(officerInfo.pf_number || "N/A", officerSource(['pf_number'])),
+        "Source of Recruitment": createPreviewField(formatField(officerInfo.recruitment, "Source of Recruitment") || "N/A", officerSource(['source_of_recruitment_id', 'recruitment'])),
+        "Cadre": createPreviewField(formatField(officerInfo.cadre, "Cadre") || "N/A", officerSource(['cadre_id', 'cadre'])),
+        "Allotment Year": createPreviewField(officerInfo.allotment_year || "N/A", officerSource(['allotment_year'])),
+        "Date of Joining": createPreviewField(formatDate(officerInfo.date_of_joining), officerSource(['date_of_joining'])),
+        "Service Type": createPreviewField(formatField(officerInfo.service_type_name, "Service Type") || "N/A", officerSource(['service_type_id', 'service_type_name'])),
+        "Mother Tongue": createPreviewField(formatField(officerInfo.mother_tongue, "Mother Tongue") || "N/A", officerSource(['mother_tongue_id', 'mother_tongue'])),
+        "Languages Known": createPreviewField(officerInfo.languages_known?.map(lang => formatField(lang, "Languages Known")).join(", ") || "N/A", officerSource(['languages_known'])),
+        "Category": createPreviewField(
+          formatField(officerInfo.category, "Category") ||
+          officerInfo.category_id?.toString() ||
+          "N/A",
+          officerSource(['category_id', 'category'])
+        ),
+        "Retirement Date": createPreviewField(formatDate(officerInfo.retirement_date), officerSource(['retirement_date'])),
+        "Mode of Retirement": createPreviewField(formatField(officerInfo.retirement, "Mode of Retirement") || "N/A", officerSource(['retirement_id', 'retirement'])),
       },
       address_details: [
         {
@@ -143,6 +383,7 @@ const ProfilePreviewPage = () => {
             formatField(officerInfo.state_com, "State Com"),
             officerInfo.pin_code_com,
           ].filter(Boolean).join(", ") || "N/A",
+          source: officerSource(['address_line1_com', 'address_line2_com', 'district_id_com', 'state_id_com', 'pin_code_com']),
         },
         {
           title: "Permanent Address",
@@ -153,6 +394,7 @@ const ProfilePreviewPage = () => {
             formatField(officerInfo.state_per, "State Per"),
             officerInfo.pin_code_per,
           ].filter(Boolean).join(", ") || "N/A",
+          source: officerSource(['address_line1_per', 'address_line2_per', 'district_id_per', 'state_id_per', 'pin_code_per']),
         },
       ],
       dependent_details: data.family?.length
@@ -218,10 +460,11 @@ const ProfilePreviewPage = () => {
           const isFromHistory = getFieldValue(dep, ['is_from_history']) === true ||
             getFieldValue(dep, ['is_from_history']) === "true" ||
             getFieldValue(dep, ['is_from_history']) === "True";
+          const sourceFor = (fieldNames) => getFieldSourceFromRecord(dep, fieldNames);
 
           return {
             relation: (formatField(relation, "Relation") === "Current Spouse" ? "Spouse" : formatField(relation, "Relation")) || "Dependents",
-            name: `${formatField(firstName, "First Name")} ${formatField(lastName, "Last Name")}`.trim() || "N/A",
+            name: [formatField(firstName), formatField(lastName)].filter(Boolean).join(' ') || "N/A",
             date_of_birth: formatDate(dob),
             gender: genderValue,
             email: email || "N/A",
@@ -244,6 +487,22 @@ const ProfilePreviewPage = () => {
             mother_id: motherId,
             spouse_id: spouseId,
             parent_name: parentName,
+            _fieldSources: {
+              name: sourceFor(['first_name', 'last_name']),
+              date_of_birth: sourceFor(['dob', 'date_of_birth']),
+              gender: sourceFor(['gender_id', 'gender_name', 'gender']),
+              email: sourceFor(['email_id', 'email']),
+              mobile_number: sourceFor(['mobile_number', 'mobile_no']),
+              ais_officer: sourceFor(['is_ais_officer']),
+              government_servant: sourceFor(['is_govt_servant', 'government_servant']),
+              institution: sourceFor(['institution_name', 'institution']),
+              occupation: sourceFor(['occupation_category', 'occupation']),
+              status: sourceFor(['is_alive', 'death_date', 'divorce_date', 'relation']),
+              death_date: sourceFor(['death_date']),
+              divorce_date: sourceFor(['divorce_date']),
+              parent_name: sourceFor(['father_id', 'mother_id', 'spouse_id']),
+              type: sourceFor(['is_from_history']),
+            },
           };
         })
         : [],
@@ -252,6 +511,11 @@ const ProfilePreviewPage = () => {
           qualification: formatField(edu.qualification, "Qualification") || "N/A",
           institute: formatField(edu.institute_name, "Institute Name") || "N/A",
           subject: formatField(edu.subject_name, "Subject Name") || "N/A",
+          _fieldSources: {
+            qualification: getFieldSourceFromRecord(edu, ['qualification_id', 'qualification']),
+            institute: getFieldSourceFromRecord(edu, ['institute_name']),
+            subject: getFieldSourceFromRecord(edu, ['subject_name']),
+          },
         }))
         : [],
       central_deputation: data.ais_central_deputation?.length
@@ -266,6 +530,18 @@ const ProfilePreviewPage = () => {
           office: formatField(dep.agency, "Agency") || "N/A",
           department: formatField(dep.administrative_department, "Administrative Department") || "N/A",
           deputation_type: formatField(dep.deputation_type, "Deputation Type") || "N/A",
+          _fieldSources: {
+            designation: getFieldSourceFromRecord(dep, ['cen_designation', 'designation', 'cen_designation_id']),
+            phone: getFieldSourceFromRecord(dep, ['phone_no']),
+            state: getFieldSourceFromRecord(dep, ['state', 'state_id']),
+            start_date: getFieldSourceFromRecord(dep, ['start_date']),
+            end_date: getFieldSourceFromRecord(dep, ['end_date']),
+            tenure: getFieldSourceFromRecord(dep, ['tenure_id', 'tenures']),
+            ministry: getFieldSourceFromRecord(dep, ['cen_min_id', 'ministry']),
+            office: getFieldSourceFromRecord(dep, ['cen_org_id', 'agency_id', 'agency']),
+            department: getFieldSourceFromRecord(dep, ['cen_dept_id', 'administrative_department']),
+            deputation_type: getFieldSourceFromRecord(dep, ['deputation_type']),
+          },
         }))
         : [],
       service_details: data.ais_service_history?.length
@@ -288,6 +564,26 @@ const ProfilePreviewPage = () => {
           order_date: formatDate(service.order_date),
           basic_pay: service.basic_pay || "N/A",
           other_details: formatField(service.other_details, "Other Details") || "N/A",
+          _fieldSources: {
+            designation: getFieldSourceFromRecord(service, ['designation', 'designation_id']),
+            ministry: getFieldSourceFromRecord(service, ['ministry', 'ministry_id']),
+            department: getFieldSourceFromRecord(service, ['administrative_department', 'administrative_department_id']),
+            office: getFieldSourceFromRecord(service, ['agency', 'agency_id']),
+            state: getFieldSourceFromRecord(service, ['state', 'state_id']),
+            district: getFieldSourceFromRecord(service, ['district', 'district_id']),
+            grade: getFieldSourceFromRecord(service, ['grade', 'grade_id']),
+            level: getFieldSourceFromRecord(service, ['level', 'level_id']),
+            posting_type: getFieldSourceFromRecord(service, ['posting_types', 'posting_type_id']),
+            additional_charge: getFieldSourceFromRecord(service, ['is_additional_charge']),
+            address: getFieldSourceFromRecord(service, ['address']),
+            phone_no: getFieldSourceFromRecord(service, ['phone_no']),
+            start_date: getFieldSourceFromRecord(service, ['start_date']),
+            end_date: getFieldSourceFromRecord(service, ['end_date']),
+            order_no: getFieldSourceFromRecord(service, ['order_no']),
+            order_date: getFieldSourceFromRecord(service, ['order_date']),
+            basic_pay: getFieldSourceFromRecord(service, ['basic_pay']),
+            other_details: getFieldSourceFromRecord(service, ['other_details']),
+          },
         }))
         : [],
       training_details: data.ais_training_info?.length
@@ -301,15 +597,32 @@ const ProfilePreviewPage = () => {
           start_date: formatDate(training.training_from),
           end_date: formatDate(training.training_to),
           documentIds: training.documents || [],
+          _fieldSources: {
+            training_type: getFieldSourceFromRecord(training, ['training_type_id', 'training_type']),
+            country: getFieldSourceFromRecord(training, ['country_id', 'country']),
+            institute_name: getFieldSourceFromRecord(training, ['institute_name']),
+            subject: getFieldSourceFromRecord(training, ['subject']),
+            place: getFieldSourceFromRecord(training, ['place']),
+            start_date: getFieldSourceFromRecord(training, ['training_from']),
+            end_date: getFieldSourceFromRecord(training, ['training_to']),
+          },
         }))
         : [],
       awards_and_publications: data.ais_rewards?.length
         ? data.ais_rewards.map(reward => ({
           award_name: formatField(reward.rew_name, "Reward Name") || "N/A",
+          award_category: formatField(reward.reward_type, "Award Category") || "N/A",
           awarded_by: formatField(reward.rew_from, "Reward From") || "N/A",
           received_date: formatDate(reward.received_on),
           description: formatField(reward.rew_description, "Reward Description") || "N/A",
           documentId: reward.reward_doc || null,
+          _fieldSources: {
+            award_name: getFieldSourceFromRecord(reward, ['rew_name']),
+            award_category: getFieldSourceFromRecord(reward, ['reward_type']),
+            awarded_by: getFieldSourceFromRecord(reward, ['rew_from']),
+            received_date: getFieldSourceFromRecord(reward, ['received_on']),
+            description: getFieldSourceFromRecord(reward, ['rew_description']),
+          },
         }))
         : [],
       disability_details: data.ais_officer_disability?.length
@@ -319,14 +632,27 @@ const ProfilePreviewPage = () => {
           expiry_date: formatDate(disability.dis_valid_up_to),
           documentId: disability.disability_proof || null,
           udid_document_number: formatField(disability.udid_number, "UDID Document Number") || "N/A",
+          _fieldSources: {
+            disability_type: getFieldSourceFromRecord(disability, ['disability_type_id', 'disability']),
+            disability_percentage: getFieldSourceFromRecord(disability, ['disability_perc']),
+            expiry_date: getFieldSourceFromRecord(disability, ['dis_valid_up_to']),
+            udid_document_number: getFieldSourceFromRecord(disability, ['udid_number']),
+          },
         }))
         : [],
       disciplinary_details: data.ais_suspension_info?.length
         ? data.ais_suspension_info.map(susp => ({
           suspension_reason: formatField(susp.suspension_details, "Disciplinary  Details") || "N/A",
+          order_number: formatField(susp.sus_order_number, "Order Number") || "N/A",
           from_period: formatDate(susp.from_period),
           to_period: formatDate(susp.to_period),
           documentId: susp.suspension_document || null,
+          _fieldSources: {
+            suspension_reason: getFieldSourceFromRecord(susp, ['suspension_details']),
+            order_number: getFieldSourceFromRecord(susp, ['sus_order_number']),
+            from_period: getFieldSourceFromRecord(susp, ['from_period']),
+            to_period: getFieldSourceFromRecord(susp, ['to_period']),
+          },
         }))
         : [],
       experience_details: data.ais_experience?.length
@@ -344,10 +670,10 @@ const ProfilePreviewPage = () => {
   useEffect(() => {
     const fetchOfficerData = async () => {
       try {
-        if (roleId !== '5') throw new Error('Unauthorized access. Role 5 required.');
+        if (!['5', '7'].includes(roleId || '')) throw new Error('Unauthorized access. Role 5 or Role 7 required.');
         if (!aisPerId) throw new Error('No profile ID found. Please go back.');
 
-        const response = await axiosInstance.post('/as-II/officer-preview', {
+        const response = await axiosInstance.post(`${previewApiBase}/officer-preview`, {
           ais_per_id: aisPerId,
         });
 
@@ -368,13 +694,13 @@ const ProfilePreviewPage = () => {
     };
 
     fetchOfficerData();
-  }, [aisPerId, transformOfficerData]);
+  }, [aisPerId, previewApiBase, roleId, transformOfficerData]);
 
   useEffect(() => {
     const fetchStatusTimeline = async () => {
       if (!aisPerId) return;
       try {
-        const response = await axiosInstance.post("/as-II/profile-submit-status", {
+        const response = await axiosInstance.post(`${previewApiBase}/profile-submit-status`, {
           ais_per_id: String(aisPerId),
         });
         if (response.data.success) {
@@ -389,7 +715,7 @@ const ProfilePreviewPage = () => {
     };
 
     fetchStatusTimeline();
-  }, [aisPerId]);
+  }, [aisPerId, previewApiBase]);
 
   const openDocumentModal = async (documentArray) => {
     if (!documentArray || documentArray.length === 0) return;
@@ -412,7 +738,6 @@ const ProfilePreviewPage = () => {
       setCurrentDocIndex(0);
       setDocumentModalOpen(true);
     } catch (error) {
-      console.log("Document fetch error:", error);
       setDocumentError("Failed to load documents");
       toast.error("Failed to load documents");
     } finally {
@@ -444,8 +769,13 @@ const ProfilePreviewPage = () => {
   };
 
   const formatField = (value) => {
-    if (!value || typeof value !== 'string') return value;
-    return value;
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') return value;
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return null;
+    const lowerValue = trimmedValue.toLowerCase();
+    if (lowerValue === 'null' || lowerValue === 'undefined' || lowerValue === 'n/a') return null;
+    return trimmedValue;
   };
 
   const getStatusColor = (status) => {
@@ -462,13 +792,66 @@ const ProfilePreviewPage = () => {
   };
 
   const latestStatus = statusTimeline.find(status => status.is_current) || statusTimeline[statusTimeline.length - 1] || {};
-  const isActionAllowed = ['submit', 'resubmit'].includes(latestStatus.action_key?.toLowerCase());
+  const isActionAllowed = !isSuperAdminView && ['submit', 'resubmit'].includes(latestStatus.action_key?.toLowerCase());
   const currentStatus = latestStatus.action_key ? getDisplayStatus(latestStatus.action_key) : userDetails?.personal_details?.Status || 'Pending';
-  const allowedCharsRegex = /^[A-Za-z0-9\s().,\/-]+$/;
+  const allowedCharsRegex = /^[A-Za-z0-9\s().,\/:>&'\-\n]+$/;
+  const remarkMaxLength = 2000;
 
   const validateRemarkChars = (value) => {
     return allowedCharsRegex.test(value);
   };
+
+  const buildRemarkTargetPrefix = useCallback((targets) => {
+    if (!targets.length) return '';
+
+    const paths = targets.map((target) => target.path);
+    if (paths.length === 1) return `Correction needed in:\n1. ${paths[0]},`;
+
+    return `Correction needed in:\n${paths
+      .map((path, index) => `${index + 1}. ${path},`)
+      .join('\n')}`;
+  }, []);
+
+  const focusRemarkTextarea = useCallback(() => {
+    window.setTimeout(() => {
+      if (remarkTextareaRef.current) {
+        remarkTextareaRef.current.focus();
+        remarkTextareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 0);
+  }, []);
+
+  const insertRemarkTarget = useCallback((target) => {
+    if (!target?.key || !target?.path) return;
+
+    const existingIndex = selectedRemarkTargets.findIndex((item) => item.key === target.key);
+    const nextTargets = existingIndex >= 0
+      ? selectedRemarkTargets.filter((item) => item.key !== target.key)
+      : [...selectedRemarkTargets, target];
+
+    setSelectedRemarkTargets(nextTargets);
+    if (remarkError) setRemarkError('');
+    focusRemarkTextarea();
+  }, [focusRemarkTextarea, remarkError, selectedRemarkTargets]);
+
+  const handleAddTargetsToRemark = useCallback(() => {
+    if (!selectedRemarkTargets.length) return;
+
+    const targetBlock = buildRemarkTargetPrefix(selectedRemarkTargets);
+    setRemark((prev) => {
+      const trimmedPrev = prev.trim();
+      if (!trimmedPrev) {
+        return `${targetBlock}\n`;
+      }
+      if (trimmedPrev.startsWith(targetBlock)) {
+        return prev;
+      }
+      return `${targetBlock}\n${prev}`;
+    });
+    setSelectedRemarkTargets([]);
+    if (remarkError) setRemarkError('');
+    focusRemarkTextarea();
+  }, [buildRemarkTargetPrefix, focusRemarkTextarea, remarkError, selectedRemarkTargets]);
 
   const handleActionClick = (action) => {
     const trimmedRemark = remark.trim();
@@ -476,12 +859,12 @@ const ProfilePreviewPage = () => {
       setRemarkError('Remarks must be at least 5 characters long.');
       return;
     }
-    if (trimmedRemark.length > 150) {
-      setRemarkError('Remarks cannot exceed 150 characters.');
+    if (trimmedRemark.length > remarkMaxLength) {
+      setRemarkError(`Remarks cannot exceed ${remarkMaxLength} characters.`);
       return;
     }
-    if (!validateRemarkChars(remark)) {  // ← NEW: Char validation
-      setRemarkError('Remarks can only contain letters, numbers, spaces, and these characters: ( ) . , - /');
+    if (!validateRemarkChars(remark)) {
+      setRemarkError("Remarks can only contain letters, numbers, spaces, and these characters: ( ) . , - / : > & '");
       return;
     }
     if (!['approve', 'return_for_correction'].includes(action)) {
@@ -494,24 +877,17 @@ const ProfilePreviewPage = () => {
   };
 
   const handleConfirmAction = async () => {
-    console.log("confirmed");
     if (confirmationAction === 'approve') {
-      console.log("approving with otp");
-      console.log("loggedInUser===", loggedInUser);
-      console.log("mobileNo===", mobileNo);
-      console.log("fullName===", fullName);
       if (mobileNo && fullName) {
-        console.log("requesting otp");
+        setShowConfirmationModal(false);
+        setShowOtpModal(true);
         const response = await axiosInstance.post('evc/otp/request', {
           phone: mobileNo,
           actor: String(fullName),
           role: roleId,
         });
-        console.log("otp response===", response);
         if (response.data.success) {
           setOtpId(response.data.data?.otp_id)
-          setShowConfirmationModal(false);
-          setShowOtpModal(true);
         }
       }
     } else {
@@ -531,14 +907,13 @@ const ProfilePreviewPage = () => {
         otp,
         actor: String(fullName),
       });
-      console.log("otp verification response===", response);
 
       if (response.data.success) {
         setShowOtpModal(false);
         toast.success('OTP Verified');
         await handleSubmitAction(); // optional await
       } else {
-        toast.error('OTP verification failed');
+        toast.error('Invalid OTP. OTP verification failed');
       }
     } catch (error) {
       console.error(error);
@@ -549,19 +924,20 @@ const ProfilePreviewPage = () => {
   };
 
   const handleSubmitAction = async () => {
-    const trimmedRemark = remark.trim();
+    const finalRemark = remark;
+    const trimmedRemark = finalRemark.trim();
     if (trimmedRemark.length < 5) {
       setRemarkError('Remarks must be at least 5 characters long.');
       setSignerPortModalOpen(false);
       return;
     }
-    if (trimmedRemark.length > 150) {
-      setRemarkError('Remarks cannot exceed 150 characters.');
+    if (trimmedRemark.length > remarkMaxLength) {
+      setRemarkError(`Remarks cannot exceed ${remarkMaxLength} characters.`);
       setSignerPortModalOpen(false);
       return;
     }
-    if (!validateRemarkChars(remark)) {
-      setRemarkError('Remarks can only contain letters, numbers, spaces, and these characters: ( ) . , - /');
+    if (!validateRemarkChars(finalRemark)) {
+      setRemarkError("Remarks can only contain letters, numbers, spaces, and these characters: ( ) . , - / : > & '");
       setSignerPortModalOpen(false);
       return;
     }
@@ -577,7 +953,6 @@ const ProfilePreviewPage = () => {
     try {
       let pdfFile = null;
       let docNum = null;
-      console.log("Submitting action:", confirmationAction);
       // Check if document number exists before proceeding
       if (!documentNumber) {
         throw new Error('No officer profile document found. Cannot proceed with approval.');
@@ -599,7 +974,7 @@ const ProfilePreviewPage = () => {
               actor: String(fullName),
               reason: "ER Profile Approved"
             });
-            if(!signresponse.data.signed){
+            if (!signresponse.data.signed) {
               throw new Error('Failed to initiate e-sign process');
             }
 
@@ -607,7 +982,6 @@ const ProfilePreviewPage = () => {
               {
                 responseType: "blob"
               });
-            console.log("signfile===", signfile)
             const blob = new Blob([signfile.data], { type: "application/pdf" });
             const signedFile = new File(
               [blob],
@@ -632,11 +1006,11 @@ const ProfilePreviewPage = () => {
       const response = await axiosInstance.post('/as-II/profile-status-change', {
         ais_per_id: aisPerId,
         action: confirmationAction,
-        remarks: remark,
+        remarks: finalRemark,
       });
-      console.log("Profile status response:", response);
       setShowConfirmationModal(false);
       setRemark('');
+      setSelectedRemarkTargets([]);
       const refreshResponse = await axiosInstance.post('/as-II/officer-preview', {
         ais_per_id: aisPerId,
       });
@@ -723,14 +1097,12 @@ const ProfilePreviewPage = () => {
       return;
     }
     else {
-      console.log("PEN===", userDetails.personal_details.PEN);
       try {
         const resp = await axiosInstance.post('/file-uploader/fetch-signed-pdf', {
-          pen_number: userDetails.personal_details.PEN,
+          pen_number: getDisplayValue(userDetails.personal_details.PEN),
         }, {
           responseType: 'blob',
         });
-        console.log('Signed PDF response:', resp);
         // if (resp.status === 200) {
         const pdfBlob = new Blob([resp.data], { type: 'application/pdf' });
         const fileName = `${userDetails.full_name.replace(/ /g, "_")}_profile.pdf`;
@@ -771,7 +1143,7 @@ const ProfilePreviewPage = () => {
   useEffect(() => {
     const fetchOfficerProfileDocument = async () => {
       try {
-        const response = await axiosInstance.post('/as-II/get-officer-profile-document', {
+        const response = await axiosInstance.post(`${previewApiBase}/get-officer-profile-document`, {
           ais_per_id: aisPerId,
         });
         if (response.data.success) {
@@ -797,7 +1169,7 @@ const ProfilePreviewPage = () => {
     if (aisPerId) {
       fetchOfficerProfileDocument();
     }
-  }, [aisPerId]);
+  }, [aisPerId, previewApiBase]);
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
   if (error) {
@@ -819,8 +1191,24 @@ const ProfilePreviewPage = () => {
   if (!userDetails) return <div className="text-center py-10">No officer data found</div>;
 
   // ModernCardSection Component (Updated to handle dependents consistently)
-  const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
+  const ModernCardSection = ({
+    title,
+    data,
+    icon,
+    onViewDocument,
+    onTargetRemark = null,
+    selectedRemarkTargets = [],
+  }) => {
     const formatFieldName = (key) => {
+      const fieldLabelMap = {
+        udid_document_number: "UDID Document Number",
+        udid_number: "UDID Document Number",
+      };
+
+      if (fieldLabelMap[key]) {
+        return fieldLabelMap[key];
+      }
+
       return key
         .replace(/_/g, " ")
         .split(' ')
@@ -829,6 +1217,14 @@ const ProfilePreviewPage = () => {
     };
 
     if (!data || data.length === 0) return null;
+    const serviceDuplicateMetaMap = title === "SERVICE DETAILS" ? getServiceDuplicateMetaMap(data) : new Map();
+    const hasServiceDuplicates = serviceDuplicateMetaMap.size > 0;
+    const getServiceDuplicateMeta = (item) => {
+      if (title !== "SERVICE DETAILS") return null;
+      const key = getServiceDuplicateKey(item);
+      if (!key) return null;
+      return serviceDuplicateMetaMap.get(key) || null;
+    };
 
     const getCardTitle = (item, index) => {
       if (item.relation) {
@@ -879,45 +1275,48 @@ const ProfilePreviewPage = () => {
 
     const getDisplayFields = (item) => {
       const fields = {};
+      const setField = (label, value, source = null) => {
+        fields[label] = createPreviewField(value, source);
+      };
 
       // For dependents, create custom display fields
       if (item.relation) {
-        fields["Name"] = item.name;
-        fields["Date of Birth"] = formatDate(item.date_of_birth);
-        fields["Gender"] = item.gender;
+        setField("Name", item.name, item._fieldSources?.name);
+        setField("Date of Birth", formatDate(item.date_of_birth), item._fieldSources?.date_of_birth);
+        setField("Gender", item.gender, item._fieldSources?.gender);
 
         // Only show email and mobile if they have values
-        if (item.email && item.email !== "N/A") fields["Email"] = item.email;
-        if (item.mobile_number && item.mobile_number !== "N/A") fields["Mobile"] = item.mobile_number;
+        if (item.email && item.email !== "N/A") setField("Email", item.email, item._fieldSources?.email);
+        if (item.mobile_number && item.mobile_number !== "N/A") setField("Mobile", item.mobile_number, item._fieldSources?.mobile_number);
 
         if (item.ais_officer === 'Yes' || item.ais_officer === true) {
-          fields["AIS Officer"] = "Yes";
+          setField("AIS Officer", "Yes", item._fieldSources?.ais_officer);
         }
         if (item.government_servant === 'Yes' || item.government_servant === true) {
-          fields["Government Servant"] = "Yes";
+          setField("Government Servant", "Yes", item._fieldSources?.government_servant);
         }
         if (item.institution && item.institution !== "N/A") {
-          fields["Institution"] = item.institution;
+          setField("Institution", item.institution, item._fieldSources?.institution);
         }
         if (item.occupation && item.occupation !== "N/A") {
-          fields["Occupation"] = item.occupation;
+          setField("Occupation", item.occupation, item._fieldSources?.occupation);
         }
 
         // Add status fields for spouses
         const isSpouse = item.relation.toLowerCase().includes('spouse');
         if (isSpouse) {
           if (item.is_alive === false || item.death_date) {
-            fields["Status"] = "Deceased";
+            setField("Status", "Deceased", item._fieldSources?.status);
             if (item.death_date) {
-              fields["Date of Death"] = formatDate(item.death_date);
+              setField("Date of Death", formatDate(item.death_date), item._fieldSources?.death_date);
             }
           } else if (item.divorce_date || item.relation.includes('Divorced')) {
-            fields["Status"] = "Divorced";
+            setField("Status", "Divorced", item._fieldSources?.status);
             if (item.divorce_date) {
-              fields["Date of Divorce"] = formatDate(item.divorce_date);
+              setField("Date of Divorce", formatDate(item.divorce_date), item._fieldSources?.divorce_date);
             }
           } else if (item.relation.includes('Current') || item.relation === 'Spouse') {
-            fields["Status"] = "Current";
+            setField("Status", "Current", item._fieldSources?.status);
           }
         }
 
@@ -926,62 +1325,59 @@ const ProfilePreviewPage = () => {
           item.relation?.toLowerCase().includes('daughter') ||
           item.relation?.toLowerCase().includes('child');
         if (isChild && item.parent_name && item.parent_name !== "N/A") {
-          fields["Parent"] = item.parent_name;
+          setField("Parent", item.parent_name, item._fieldSources?.parent_name);
         }
 
         // Add Date Of Death for deceased dependents (non-spouse)
         if (!isSpouse && (item.is_alive === false || item.death_date)) {
-          fields["Status"] = "Deceased";
+          setField("Status", "Deceased", item._fieldSources?.status);
           if (item.death_date) {
-            fields["Date of Death"] = formatDate(item.death_date);
+            setField("Date of Death", formatDate(item.death_date), item._fieldSources?.death_date);
           }
         }
 
         // Add previous spouse indicator
         if (item.is_from_history) {
-          fields["Type"] = "Previous Relationship";
+          setField("Type", "Previous Relationship", item._fieldSources?.type);
         }
       } else {
         // For other sections, use existing logic
         Object.entries(item)
-          .filter(([key]) => !['documentId', 'documentIds', 'death_certificate', 'marriage_certificate_proof', 'sup_doc_for_remv', 'is_alive', 'death_date', 'divorce_date', 'father_id', 'mother_id', 'spouse_id', 'parent_name', 'is_from_history'].includes(key))
+          .filter(([key]) => !['_fieldSources', 'documentId', 'documentIds', 'death_certificate', 'marriage_certificate_proof', 'sup_doc_for_remv', 'is_alive', 'death_date', 'divorce_date', 'father_id', 'mother_id', 'spouse_id', 'parent_name', 'is_from_history'].includes(key))
           .forEach(([key, value]) => {
             // Format date fields in other sections too
             if (typeof value === 'string' && (value.includes('-') || value.includes('/'))) {
               try {
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                  const day = String(date.getDate()).padStart(2, '0');
-                  const month = String(date.getMonth() + 1).padStart(2, '0');
-                  const year = date.getFullYear();
-                  fields[formatFieldName(key)] = `${day}/${month}/${year}`;
+                const formattedValue = formatDate(value);
+                if (formattedValue !== 'N/A') {
+                  setField(formatFieldName(key), formattedValue, item._fieldSources?.[key]);
                   return;
                 }
               } catch (e) {
                 // If date parsing fails, use original value
               }
             }
-            fields[formatFieldName(key)] = value;
+            setField(formatFieldName(key), value, item._fieldSources?.[key]);
           });
       }
 
       return fields;
     };
 
-    const formatDate = (dateString) => {
-      if (!dateString) return "N/A";
-      try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return "N/A";
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-      } catch (error) {
-        console.error("Date formatting error:", error);
-        return "N/A";
-      }
-    };
+    // const formatDate = (dateString) => {
+    //   if (!dateString) return "N/A";
+    //   try {
+    //     const date = new Date(dateString);
+    //     if (isNaN(date.getTime())) return "N/A";
+    //     const day = String(date.getDate()).padStart(2, '0');
+    //     const month = String(date.getMonth() + 1).padStart(2, '0');
+    //     const year = date.getFullYear();
+    //     return `${day}/${month}/${year}`;
+    //   } catch (error) {
+    //     console.error("Date formatting error:", error);
+    //     return "N/A";
+    //   }
+    // };
 
 
     return (
@@ -996,15 +1392,26 @@ const ProfilePreviewPage = () => {
           </span>
         </div>
 
-        <div className="p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {data.map((item, index) => {
-              const docsArray = getDocumentIds(item);
-              const cardTitle = getCardTitle(item, index);
-              const displayFields = getDisplayFields(item);
+      <div className="p-4">
+        {hasServiceDuplicates && (
+          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+            Some duplicated time period service records are detected. Please remove any one saved duplicate card.
+          </div>
+        )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {data.map((item, index) => {
+            const docsArray = getDocumentIds(item);
+            const cardTitle = getCardTitle(item, index);
+            const duplicateMeta = getServiceDuplicateMeta(item);
+            const isDuplicateService = Boolean(duplicateMeta);
+            const displayFields = getDisplayFields(item);
 
-              return (
-                <div key={index} className="border border-indigo-300 rounded-lg p-3 bg-gradient-to-br from-white to-indigo-50/30 hover:shadow-md hover:border-indigo-300 transition-all dark:from-gray-800 dark:to-gray-700 dark:border-gray-700">
+            return (
+                <div key={index} className={`border rounded-lg p-3 bg-gradient-to-br hover:shadow-md transition-all dark:from-gray-800 dark:to-gray-700 ${
+                  isDuplicateService
+                    ? 'border-amber-300 bg-amber-50/70 hover:border-amber-400 dark:border-amber-600 dark:bg-amber-900/10'
+                    : 'border-indigo-300 from-white to-indigo-50/30 hover:border-indigo-300 dark:border-gray-700'
+                }`}>
                   <div className="flex justify-between items-start mb-2.5 pb-2.5 border-b border-indigo-300 dark:border-gray-700">
                     <h3 className="font-bold text-slate-800 text-sm flex-1 dark:text-gray-100">
                       {cardTitle}
@@ -1019,20 +1426,55 @@ const ProfilePreviewPage = () => {
                       </button>
                     )}
                   </div>
+                  {isDuplicateService && (
+                    <div className="mb-2 rounded-md border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+                      Duplicate period detected. Delete any one saved duplicate card.
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     {Object.entries(displayFields)
-                      .filter(([key, value]) => value && value !== "N/A" && value !== "")
-                      .map(([key, value]) => (
-                        <div key={key} className="flex text-xs">
+                      .filter(([key, value]) => getDisplayValue(value) && getDisplayValue(value) !== "N/A" && getDisplayValue(value) !== "")
+                      .map(([key, value]) => {
+                        const remarkTarget = {
+                          key: `${title}::${index}::${key}`,
+                          path: `${title} -> ${cardTitle} -> ${key}`,
+                        };
+                        const isSelected = selectedRemarkTargets.some((target) => target.key === remarkTarget.key);
+
+                        return (
+                        <div
+                          key={key}
+                          role={onTargetRemark ? "button" : undefined}
+                          tabIndex={onTargetRemark ? 0 : undefined}
+                          title={onTargetRemark ? "Click to target this field in Official Remarks" : undefined}
+                          onClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                          onDoubleClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                          onKeyDown={(event) => {
+                            if ((event.key === 'Enter' || event.key === ' ') && onTargetRemark) {
+                              event.preventDefault();
+                              onTargetRemark(remarkTarget);
+                            }
+                          }}
+                          className={`flex min-w-0 rounded-md border px-2 py-1.5 text-xs transition-all ${
+                            isSelected
+                              ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300 dark:border-amber-500 dark:bg-amber-900/20 dark:ring-amber-600'
+                              : onTargetRemark
+                                ? 'border-transparent hover:border-indigo-200 hover:bg-indigo-50/70 dark:hover:border-gray-600 dark:hover:bg-gray-700/70'
+                                : 'border-transparent'
+                          }`}
+                        >
                           <span className="font-medium text-slate-600 w-2/5 flex-shrink-0 dark:text-gray-300">
                             {key}:
                           </span>
-                          <span className="text-slate-800 flex-1 break-words dark:text-gray-100">
-                            {Array.isArray(value) ? value.join(', ') : (value || "N/A")}
-                          </span>
+                          <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                            <span className="min-w-0 flex-1 break-all text-slate-800 dark:text-gray-100">
+                              {Array.isArray(getDisplayValue(value)) ? getDisplayValue(value).join(', ') : (getDisplayValue(value) || "N/A")}
+                            </span>
+                            <SourceIndicator source={value?.source} />
+                          </div>
                         </div>
-                      ))}
+                      )})}
                   </div>
                 </div>
               );
@@ -1129,7 +1571,7 @@ const ProfilePreviewPage = () => {
         {/* Main Profile Card */}
         <div ref={contentRef} className="bg-white shadow-xl rounded-2xl overflow-hidden border border-indigo-300 dark:bg-gray-800 dark:border-gray-700">
           {/* Compact Professional Header */}
-         <div className="relative bg-gradient-to-r from-indigo-900 via-indigo-500 to-indigo-900 
+          <div className="relative bg-gradient-to-r from-indigo-900 via-indigo-500 to-indigo-900 
                 dark:from-indigo-950 dark:via-indigo-800 dark:to-indigo-950
                 text-white dark:text-white overflow-hidden">
 
@@ -1142,19 +1584,17 @@ const ProfilePreviewPage = () => {
               <div className="flex flex-col lg:flex-row items-center lg:items-center gap-4">
                 <div className="relative flex-shrink-0">
                   <div className="w-20 h-20 rounded-xl bg-white/10 backdrop-blur-sm p-0.5 shadow-lg border border-white/20">
-                    {userDetails.profile_image ? (
-                      <div className="w-full h-full rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-700">
-                        <img
-                          src={userDetails.profile_image}
-                          alt="Profile"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-full h-full rounded-lg bg-slate-100 flex items-center justify-center dark:bg-gray-700">
-                        <span className="text-slate-400 text-xs dark:text-gray-400">No Image</span>
-                      </div>
-                    )}
+                    <div className="w-full h-full rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-700">
+                      <img
+                        src={userDetails.profile_image || DEFAULT_AVATAR}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = DEFAULT_AVATAR;
+                        }}
+                      />
+                    </div>
                   </div>
                   {currentStatus === 'Approved' && (
                     <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 shadow-lg border-2 border-white">
@@ -1174,7 +1614,7 @@ const ProfilePreviewPage = () => {
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
                     <span className="bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium border border-white/20">
-                      {userDetails.personal_details["Karmasri ID"]}
+                      {getDisplayValue(userDetails.personal_details["Karmasri ID"])}
                     </span>
 
                     {/* Enhanced Current Status Display */}
@@ -1235,17 +1675,30 @@ const ProfilePreviewPage = () => {
 
           {/* Content Sections */}
           <div className="p-4 sm:p-6 space-y-4 bg-gradient-to-b from-white to-slate-50 dark:from-gray-900 dark:to-gray-800">
-            <ProfessionalSection title="PERSONAL DETAILS" data={userDetails.personal_details} isKeyValue />
-            <ProfessionalSection title="ADDRESS DETAILS" data={userDetails.address_details} isAddressList />
-            <ModernCardSection title="DEPENDENTS DETAILS" data={userDetails.dependent_details} icon="👥" onViewDocument={openDocumentModal} />
-            <ModernCardSection title="EDUCATIONAL QUALIFICATIONS" data={userDetails.educational_qualifications} icon="🎓" />
-            <ModernCardSection title="DEPUTATION DETAILS" data={userDetails.central_deputation} icon="🏛️" />
-            <ModernCardSection title="SERVICE DETAILS" data={userDetails.service_details} icon="💼" />
-            <ModernCardSection title="TRAINING DETAILS" data={userDetails.training_details} icon="📚" onViewDocument={openDocumentModal} />
-            <ModernCardSection title="AWARDS AND PUBLICATIONS" data={userDetails.awards_and_publications} icon="🏆" onViewDocument={openDocumentModal} />
-            <ModernCardSection title="DISABILITY DETAILS" data={userDetails.disability_details} icon="♿" onViewDocument={openDocumentModal} />
-            <ModernCardSection title="DISCIPLINARY DETAILS" data={userDetails.disciplinary_details} icon="⚖️" onViewDocument={openDocumentModal}/>
-            <ModernTimeline title="STATUS TIMELINE" data={statusTimeline} formatDate={formatDate} />
+            <SourceLegend />
+            <ProfessionalSection
+              title="PERSONAL DETAILS"
+              data={userDetails.personal_details}
+              isKeyValue
+              onTargetRemark={isActionAllowed ? insertRemarkTarget : null}
+              selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []}
+            />
+            <ProfessionalSection
+              title="ADDRESS DETAILS"
+              data={userDetails.address_details}
+              isAddressList
+              onTargetRemark={isActionAllowed ? insertRemarkTarget : null}
+              selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []}
+            />
+            <ModernCardSection title="DEPENDENTS DETAILS" data={userDetails.dependent_details} icon="👥" onViewDocument={openDocumentModal} onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="EDUCATIONAL QUALIFICATIONS" data={userDetails.educational_qualifications} icon="🎓" onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="DEPUTATION DETAILS" data={userDetails.central_deputation} icon="🏛️" onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="SERVICE DETAILS" data={userDetails.service_details} icon="💼" onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="TRAINING DETAILS" data={userDetails.training_details} icon="📚" onViewDocument={openDocumentModal} onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="AWARDS AND PUBLICATIONS" data={userDetails.awards_and_publications} icon="🏆" onViewDocument={openDocumentModal} onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="DISABILITY DETAILS" data={userDetails.disability_details} icon="♿" onViewDocument={openDocumentModal} onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernCardSection title="DISCIPLINARY DETAILS" data={userDetails.disciplinary_details} icon="⚖️" onViewDocument={openDocumentModal} onTargetRemark={isActionAllowed ? insertRemarkTarget : null} selectedRemarkTargets={isActionAllowed ? selectedRemarkTargets : []} />
+            <ModernTimeline title="STATUS TIMELINE" data={statusTimeline} formatDateTime={formatDateTime} />
           </div>
         </div>
 
@@ -1272,25 +1725,63 @@ const ProfilePreviewPage = () => {
                 Official Remarks
                 <span className="text-red-600">*</span>
               </label>
+              {selectedRemarkTargets.length > 0 && (
+                <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+                      Selected Targets
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleAddTargetsToRemark}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                    >
+                      Add To Remarks
+                    </button>
+                  </div>
+                  <p className="mb-3 text-xs text-indigo-700 dark:text-indigo-300">
+                    Finalize the selected targets first, then click <span className="font-semibold">Add To Remarks</span> to insert them into the official remark text.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedRemarkTargets.map((target, index) => (
+                      <span
+                        key={target.key}
+                        className="inline-flex items-center gap-2 rounded-full border border-indigo-300 bg-white px-3 py-1 text-xs text-indigo-800 dark:border-gray-600 dark:bg-gray-800 dark:text-indigo-200"
+                      >
+                        <span>{index + 1}. {target.path}</span>
+                        <button
+                          type="button"
+                          onClick={() => insertRemarkTarget(target)}
+                          className="rounded-full p-0.5 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 dark:text-indigo-300 dark:hover:bg-gray-700"
+                          aria-label={`Remove ${target.path}`}
+                        >
+                          <XMarkIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 id="remark"
+                ref={remarkTextareaRef}
                 value={remark}
                 onChange={(e) => {
                   setRemark(e.target.value);
                   if (remarkError) setRemarkError('');
                 }}
-                maxLength={150}
+                maxLength={remarkMaxLength}
                 rows={4}
                 className="w-full border border-indigo-400 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y bg-indigo-50 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:placeholder:text-gray-400"
-                placeholder="Enter your remarks here..."
+                placeholder="Enter the actual correction remark here. Use 'Add To Remarks' to insert selected targets."
                 disabled={!!profileDocumentError && confirmationAction === 'approve'}
               />
               <div className="flex justify-between items-center mt-2 text-xs text-slate-500 dark:text-gray-300">
                 <span>
-                  {remark.length}/150 characters
+                  {remark.length}/{remarkMaxLength} characters
                 </span>
-                <span className={remark.trim().length < 5 ? 'text-red-500' : remark.trim().length > 150 ? 'text-red-500' : 'text-green-500'}>
-                  {remark.trim().length < 5 ? 'Min 5 characters required' : remark.trim().length > 150 ? 'Max exceeded' : 'Valid'}
+                <span className={remark.trim().length < 5 ? 'text-red-500' : remark.trim().length > remarkMaxLength ? 'text-red-500' : 'text-green-500'}>
+                  {remark.trim().length < 5 ? 'Min 5 characters required' : remark.trim().length > remarkMaxLength ? 'Max exceeded' : 'Valid'}
                 </span>
               </div>
               {remarkError && (
@@ -1300,6 +1791,22 @@ const ProfilePreviewPage = () => {
                 </p>
               )}
             </div>
+
+            {hasDuplicateServicePeriods && (
+              <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/30">
+                <div className="flex items-start gap-3">
+                  <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-300" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                      Duplicate service period entries require resolution
+                    </p>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      The profile contains duplicate saved records for the same main-service time period. Please ensure one duplicate card is removed before approving or returning this profile.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3">
               <button
@@ -1373,7 +1880,7 @@ const ProfilePreviewPage = () => {
           <>
             <div className="text-md mt-3">
               Are you sure you want to{' '}
-              <strong className="text-gray-700 dark:text-gray-200">{confirmationAction.replace('_', ' ')}</strong> this profile?
+              <strong className="text-gray-700 dark:text-gray-200">{confirmationAction.replaceAll('_', ' ')}</strong> this profile?
             </div>
             <div className="mt-2" />
             <div className="font-bold text-md mb-1 text-gray-700 dark:text-gray-200">
@@ -1503,11 +2010,18 @@ const ProfilePreviewPage = () => {
 };
 
 // Professional Section Component
-const ProfessionalSection = ({ title, data, isKeyValue = false, isAddressList = false }) => {
+const ProfessionalSection = ({
+  title,
+  data,
+  isKeyValue = false,
+  isAddressList = false,
+  onTargetRemark = null,
+  selectedRemarkTargets = [],
+}) => {
   if (!data || (Array.isArray(data) && !data.length)) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-indigo-300 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+    <div className="bg-white rounded-lg shadow-sm border border-indigo-300 overflow-visible dark:bg-gray-800 dark:border-gray-700">
       <div className=" bg-gradient-to-r from-indigo-900 via-indigo-500 to-indigo-900 
                 dark:from-indigo-950 dark:via-indigo-800 dark:to-indigo-950
                 text-white px-5 py-3">
@@ -1517,30 +2031,91 @@ const ProfessionalSection = ({ title, data, isKeyValue = false, isAddressList = 
       <div className="p-4">
         {isKeyValue ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {Object.entries(data).map(([key, value]) => (
-              <div key={key} className="flex border border-indigo-300 rounded-lg overflow-hidden hover:shadow-sm transition-shadow dark:border-gray-700">
-                <div className="w-2/5 bg-indigo-50 p-2.5 font-semibold text-slate-700 text-sm border-r border-indigo-300 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+            {Object.entries(data).map(([key, value]) => {
+              const displayValue = getDisplayValue(value) || "N/A";
+              const source = value && typeof value === 'object' ? value.source : null;
+              const remarkTarget = {
+                key: `${title}::field::${key}`,
+                path: `${title} -> ${key}`,
+              };
+              const isSelected = selectedRemarkTargets.some((target) => target.key === remarkTarget.key);
+              return (
+              <div
+                key={key}
+                role={onTargetRemark ? "button" : undefined}
+                tabIndex={onTargetRemark ? 0 : undefined}
+                title={onTargetRemark ? "Click to target this field in Official Remarks" : undefined}
+                onClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                onDoubleClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                onKeyDown={(event) => {
+                  if ((event.key === 'Enter' || event.key === ' ') && onTargetRemark) {
+                    event.preventDefault();
+                    onTargetRemark(remarkTarget);
+                  }
+                }}
+                className={`flex min-w-0 flex-col rounded-lg border overflow-visible transition-all sm:flex-row ${
+                  isSelected
+                    ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300 dark:border-amber-500 dark:bg-amber-900/20 dark:ring-amber-600'
+                    : onTargetRemark
+                      ? 'border-indigo-300 hover:shadow-sm dark:border-gray-700'
+                      : 'border-indigo-300 dark:border-gray-700'
+                }`}
+              >
+                <div className="w-full break-words bg-indigo-50 p-2.5 text-sm font-semibold text-slate-700 border-b border-indigo-300 sm:w-2/5 sm:border-b-0 sm:border-r dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
                   {key}
                 </div>
-                <div className="w-3/5 p-2.5 text-slate-600 text-sm break-words bg-white dark:bg-gray-800 dark:text-gray-100">
-                  {value || "N/A"}
+                <div className="w-full min-w-0 bg-white p-2.5 text-sm text-slate-600 sm:w-3/5 dark:bg-gray-800 dark:text-gray-100">
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                    <span className="min-w-0 flex-1 break-words">{displayValue}</span>
+                    <SourceIndicator source={source} />
+                  </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         ) : isAddressList ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {data.map((item, index) => (
-              <div key={index} className="border border-indigo-300 rounded-lg p-3 bg-indigo-50 hover:shadow-sm transition-shadow dark:bg-gray-700 dark:border-gray-700">
-                <div className="font-semibold text-slate-700 mb-2 text-sm flex items-center gap-2 dark:text-gray-200">
-                  <div className="w-1 h-4 bg-indigo-600 rounded-full"></div>
-                  {item.title}
+            {data.map((item, index) => {
+              const remarkTarget = {
+                key: `${title}::address::${index}`,
+                path: `${title} -> ${item.title}`,
+              };
+              const isSelected = selectedRemarkTargets.some((target) => target.key === remarkTarget.key);
+
+              return (
+              <div
+                key={index}
+                role={onTargetRemark ? "button" : undefined}
+                tabIndex={onTargetRemark ? 0 : undefined}
+                title={onTargetRemark ? "Click to target this field in Official Remarks" : undefined}
+                onClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                onDoubleClick={() => onTargetRemark && onTargetRemark(remarkTarget)}
+                onKeyDown={(event) => {
+                  if ((event.key === 'Enter' || event.key === ' ') && onTargetRemark) {
+                    event.preventDefault();
+                    onTargetRemark(remarkTarget);
+                  }
+                }}
+                className={`rounded-lg border p-3 transition-all ${
+                  isSelected
+                    ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300 dark:border-amber-500 dark:bg-amber-900/20 dark:ring-amber-600'
+                    : onTargetRemark
+                      ? 'border-indigo-300 bg-indigo-50 hover:shadow-sm dark:bg-gray-700 dark:border-gray-700'
+                      : 'border-indigo-300 bg-indigo-50 dark:bg-gray-700 dark:border-gray-700'
+                }`}
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-700 dark:text-gray-200">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="w-1 h-4 bg-indigo-600 rounded-full"></div>
+                    <span className="break-words">{item.title}</span>
+                  </div>
+                  <SourceIndicator source={item.source} />
                 </div>
-                <div className="text-slate-600 text-sm leading-relaxed pl-3 dark:text-gray-300">
+                <div className="pl-3 text-sm leading-relaxed text-slate-600 break-words dark:text-gray-300">
                   {item.value}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         ) : null}
       </div>
@@ -1549,8 +2124,24 @@ const ProfessionalSection = ({ title, data, isKeyValue = false, isAddressList = 
 };
 
 // Modern Card Section Component
-const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
+const ModernCardSection = ({
+  title,
+  data,
+  icon,
+  onViewDocument,
+  onTargetRemark = null,
+  selectedRemarkTargets = [],
+}) => {
   const formatFieldName = (key) => {
+    const fieldLabelMap = {
+      udid_document_number: "UDID Document Number",
+      udid_number: "UDID Document Number",
+    };
+
+    if (fieldLabelMap[key]) {
+      return fieldLabelMap[key];
+    }
+
     return key
       .replace(/_/g, " ")
       .split(' ')
@@ -1559,6 +2150,14 @@ const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
   };
 
   if (!data || data.length === 0) return null;
+  const serviceDuplicateMetaMap = title === "SERVICE DETAILS" ? getServiceDuplicateMetaMap(data) : new Map();
+  const hasServiceDuplicates = serviceDuplicateMetaMap.size > 0;
+  const getServiceDuplicateMeta = (item) => {
+    if (title !== "SERVICE DETAILS") return null;
+    const key = getServiceDuplicateKey(item);
+    if (!key) return null;
+    return serviceDuplicateMetaMap.get(key) || null;
+  };
 
   const getCardTitle = (item, index) => {
     if (item.relation) return `${item.relation} - ${item.name}`;
@@ -1571,8 +2170,18 @@ const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
     return `Entry ${index + 1}`;
   };
 
+  const getCardTitleSource = (item) => {
+    if (!item?._fieldSources) return null;
+    if (item.qualification) return item._fieldSources.qualification;
+    if (item.designation) return item._fieldSources.designation;
+    if (item.training_name) return item._fieldSources.training_name;
+    if (item.award_name) return item._fieldSources.award_name;
+    if (item.disability_type) return item._fieldSources.disability_type;
+    return null;
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-indigo-300 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+      <div className="bg-white rounded-lg shadow-sm border border-indigo-300 overflow-visible dark:bg-gray-800 dark:border-gray-700">
       <div className="bg-gradient-to-r from-indigo-900 via-indigo-500 to-indigo-900 
                 dark:from-indigo-950 dark:via-indigo-800 dark:to-indigo-950
                 text-white dark:text-white px-5 py-3 flex items-center gap-2">
@@ -1584,40 +2193,63 @@ const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
       </div>
 
       <div className="p-4">
+        {hasServiceDuplicates && (
+          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+            Some duplicated time period service records are detected. Please remove any one saved duplicate card.
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {data.map((item, index) => {
             const docsArray = item.documentIds || (item.documentId ? [item.documentId] : []);
             const cardTitle = getCardTitle(item, index);
+            const cardTitleSource = getCardTitleSource(item);
+            const duplicateMeta = getServiceDuplicateMeta(item);
+            const isDuplicateService = Boolean(duplicateMeta);
 
             return (
-              <div key={index} className="border border-indigo-300 rounded-lg p-3 bg-gradient-to-br from-white to-indigo-50/30 hover:shadow-md hover:border-indigo-300 transition-all dark:from-gray-800 dark:to-gray-700 dark:border-gray-700">
-                <div className="flex justify-between items-start mb-2.5 pb-2.5 border-b border-indigo-300 dark:border-gray-700">
-                  <h3 className="font-bold text-slate-800 text-sm flex-1 dark:text-gray-100">
-                    {cardTitle}
-                  </h3>
+              <div key={index} className={`border rounded-lg p-3 bg-gradient-to-br hover:shadow-md transition-all dark:from-gray-800 dark:to-gray-700 ${
+                isDuplicateService
+                  ? 'border-amber-300 bg-amber-50/70 hover:border-amber-400 dark:border-amber-600 dark:bg-amber-900/10'
+                  : 'border-indigo-300 from-white to-indigo-50/30 hover:border-indigo-300 dark:border-gray-700'
+              }`}>
+                <div className="mb-2.5 flex flex-col gap-2 border-b border-indigo-300 pb-2.5 sm:flex-row sm:items-start sm:justify-between dark:border-gray-700">
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
+                    <h3 className="min-w-0 flex-1 break-words text-sm font-bold text-slate-800 dark:text-gray-100">
+                      {cardTitle}
+                    </h3>
+                    <SourceIndicator source={cardTitleSource} />
+                  </div>
                   {docsArray.length > 0 && (
                     <button
                       onClick={() => onViewDocument && onViewDocument(docsArray)}
-                      className="ml-2 px-2.5 py-1 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-medium rounded-md hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-sm flex items-center gap-1"
+                      className="inline-flex w-full items-center justify-center gap-1 self-start rounded-md bg-gradient-to-r from-indigo-600 to-indigo-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-all hover:from-indigo-700 hover:to-indigo-800 sm:ml-2 sm:w-auto"
                     >
                       <DocumentTextIcon className="w-3.5 h-3.5" />
                       {docsArray.length > 1 ? `${docsArray.length}` : 'View'}
                     </button>
                   )}
                 </div>
+                {isDuplicateService && (
+                  <div className="mb-2 rounded-md border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-200">
+                    Duplicate period detected. Delete any one saved duplicate card.
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   {Object.entries(item)
                     .filter(([key]) => !['documentId', 'documentIds'].includes(key) &&
                       !['relation', 'name', 'qualification', 'designation', 'training_name', 'award_name', 'disability_type'].includes(key))
                     .map(([key, value]) => (
-                      <div key={key} className="flex text-xs">
-                        <span className="font-medium text-slate-600 w-2/5 flex-shrink-0 dark:text-gray-300">
+                      <div key={key} className="flex min-w-0 flex-col gap-1 text-xs sm:flex-row sm:gap-2">
+                        <span className="w-full flex-shrink-0 break-words font-medium text-slate-600 sm:w-2/5 dark:text-gray-300">
                           {formatFieldName(key)}:
                         </span>
-                        <span className="text-slate-800 flex-1 break-words dark:text-gray-100">
-                          {Array.isArray(value) ? value.join(', ') : (value || "N/A")}
-                        </span>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1 break-words text-slate-800 dark:text-gray-100">
+                            {Array.isArray(value) ? value.join(', ') : (value || "N/A")}
+                          </span>
+                          <SourceIndicator source={item._fieldSources?.[key]} />
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -1631,7 +2263,7 @@ const ModernCardSection = ({ title, data, icon, onViewDocument }) => {
 };
 
 // Modern Timeline Component
-const ModernTimeline = ({ title, data, formatDate }) => {
+const ModernTimeline = ({ title, data, formatDateTime }) => {
   if (!data || data.length === 0) return null;
 
   return (
@@ -1663,7 +2295,7 @@ const ModernTimeline = ({ title, data, formatDate }) => {
                     )}
                   </div>
                   <span className="text-slate-500 text-xs font-medium bg-white px-2.5 py-1 rounded-md border border-indigo-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                    {status.event_time ? formatDate(status.event_time) : 'N/A'}
+                    {status.event_time ? formatDateTime(status.event_time) : 'N/A'}
                   </span>
                 </div>
 
@@ -1681,7 +2313,7 @@ const ModernTimeline = ({ title, data, formatDate }) => {
                   <div className="space-y-1.5">
                     <p className="flex items-start gap-2">
                       <span className="font-semibold text-slate-700 min-w-fit dark:text-gray-200">Flow:</span>
-                      <span className="break-words">{`${status.from_activity_name || 'N/A'} -> ${status.to_activity_name || 'N/A'}`}</span>
+                      <span className="break-words">{getStatusFlowLabel(status)}</span>
                     </p>
                   </div>
                 </div>

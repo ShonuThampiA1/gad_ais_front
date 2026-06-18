@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function LevelList() {
   const fetchLevels = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/level-all`);
-      console.log("Fetched levelList:", response.data.data.level);
-      setLevelList(response.data.data.level || []);
+      const payload = await fetchBulkMasters(["level"], { admin: true, includeInactive: true });
+      setLevelList(payload.level || []);
     } catch (error) {
       console.error("Error fetching Levels:", error);
       toast.error("Failed to load levels.");
@@ -65,8 +65,6 @@ export default function LevelList() {
 
     try {
       const trimmedLevel = LevelData.level.trim().toLowerCase();
-      console.log("Input level:", trimmedLevel);
-      console.log("Current levelList:", levelList);
 
       // Check for existing level
       const existing = levelList.find(
@@ -75,7 +73,6 @@ export default function LevelList() {
 
       // Case: Level exists and is deactivated
       if (existing && !existing.is_active && !LevelData.level_id) {
-        console.log("Found deactivated level:", existing);
         setLevelToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function LevelList() {
           (lvl) => lvl.level.toLowerCase() === trimmedLevel
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated level:", updatedExisting);
           setLevelToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -189,7 +185,6 @@ export default function LevelList() {
 
   const handleReactivateClick = (level_id) => {
     const level = levelList.find((l) => l.level_id === level_id);
-    console.log("Reactivating level:", level);
     setLevelToReactivate(level);
     setConfirmReactivateOpen(true);
   };

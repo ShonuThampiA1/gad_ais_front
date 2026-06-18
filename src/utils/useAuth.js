@@ -26,16 +26,10 @@ const roleBasedRoutes = {
     '/reimbursement',
     '/knowledge-base',
     '/knowledge-base/user-manual',
-    '/user-agreement',
-    '/disclaimer',
-    '/cookie-policy',
-    '/privacy-policy',
-    '/contact',
    
   ],
   '3': [ // section officer
     '/master',
-    '/section-dashboard',
     '/master-controls',
     '/officer-profile',
     '/knowledge-base',
@@ -90,9 +84,7 @@ export default function useAuth() {
       if (roleId && roleBasedRoutes[roleId]) {
         const allowedRoutes = roleBasedRoutes[roleId];
         const isAllowed = allowedRoutes.some(route => currentPath.startsWith(route));
-        console.log("isAllowed",isAllowed)
         if (!isAllowed && !publicRoutes.includes(currentPath)) {
-          console.log("currentPath",currentPath)
           router.push('/unauthorized'); // Optional: custom unauthorized page
           return;
         }

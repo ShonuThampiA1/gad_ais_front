@@ -166,6 +166,7 @@ export function ModalCentralDeputation({
 }) {
   const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [sparkUpdatedFields, setSparkUpdatedFields] = useState({});
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
   
@@ -173,6 +174,15 @@ export function ModalCentralDeputation({
   const [designationSuggestionsList, setDesignationSuggestionsList] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const isEditing = Boolean(deputationDetails?.cen_dep_id);
+  const hasMasterData = [
+    'state',
+    'tenures',
+    'ministry',
+    'administrative_department',
+    'agency',
+    'deputation_type',
+  ].every((key) => Array.isArray(masterData?.[key]) && masterData[key].length > 0);
   
 
   const prevProgressRef = useRef({ completed: 0, total: 0 });
@@ -235,7 +245,6 @@ export function ModalCentralDeputation({
           cen_org_id: deputationDetails.cen_org_id || "",
           deputation_type: deputationDetails.deputation_type || "",
         };
-        console.log("Modal formData initialized:", JSON.stringify(newFormData, null, 2));
         setFormData(newFormData);
       } else {
         setFormData(initialFormData);
@@ -444,7 +453,7 @@ const handleDesignationChange = (e) => {
       };
     }, []);
 
-    const handleChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
     
     // Skip if it's the designation field (handled separately)
@@ -453,7 +462,6 @@ const handleDesignationChange = (e) => {
       return;
     }
 
-    console.log(`Field ${name} changed to:`, value);
 
     //Trim values for text fields, format phone numbers
   let processedValue = value;
@@ -541,9 +549,25 @@ const handleDesignationChange = (e) => {
     });
   };
 
+  const scrollToFirstError = (errorMap) => {
+    const firstKey = Object.keys(errorMap || {}).find((key) => errorMap[key]);
+    if (!firstKey || typeof document === "undefined") return;
+
+    window.setTimeout(() => {
+      const target =
+        document.querySelector(`[name="${firstKey}"]`) ||
+        document.querySelector(`[data-field="${firstKey}"]`) ||
+        document.getElementById(firstKey);
+
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus?.();
+    }, 0);
+  };
+
 
    const handleSave = async (e) => {
   e.preventDefault();
+  if (isSubmitting) return;
 
   // Create trimmed form data for validation
   const trimmedFormData = { ...formData };
@@ -613,8 +637,14 @@ const handleDesignationChange = (e) => {
 
   setErrors(newErrors);
 
-  if (Object.keys(newErrors).length > 0) return;
+  if (Object.keys(newErrors).length > 0) {
+    scrollToFirstError(newErrors);
+    return;
+  }
 
+  setIsSubmitting(true);
+
+  try {
   const sparkData = {};
   const userData = {};
 
@@ -682,13 +712,15 @@ const handleDesignationChange = (e) => {
     user_data: userData,
   };
 
-  console.log("Modal handleSave updatedData:", JSON.stringify(updatedData, null, 2));
   await onSave(updatedData);
   setFormData(initialFormData);
   setOpen(false);
   setUserUpdatedFields(new Set());
   setSparkUpdatedFields({});
   setShowSuggestions(false);
+  } finally {
+    setIsSubmitting(false);
+  }
 };
 
 
@@ -732,6 +764,19 @@ const handleDesignationChange = (e) => {
     }
 
     return `${baseClasses} border-gray-300 text-gray-900 bg-white dark:bg-gray-800 dark:text-white dark:border-gray-300`;
+  };
+
+  const renderControlSkeleton = () => (
+    <div className="mt-1 animate-pulse">
+      <div className="h-10 w-full rounded-md border border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-700" />
+      <div className="mt-2 h-3 w-24 rounded bg-gray-100 dark:bg-gray-800" />
+    </div>
+  );
+
+  const isMasterOptionsLoading = (field) => {
+    if (!field?.isSelect) return false;
+    const options = masterData?.[field.masterKey];
+    return !Array.isArray(options) || options.length === 0;
   };
 
   // Get date constraints for setting min/max attributes
@@ -805,12 +850,6 @@ const handleDesignationChange = (e) => {
     return hasSparkData || hasOfficerData;
   };
 
-  // Check if masterData.tenures is populated
-  if (open && (!masterData?.tenures || masterData.tenures.length === 0)) {
-    console.warn("Modal not rendering: masterData.tenures is empty");
-    return null;
-  }
-
   const dateAttributes = getDateInputAttributes();
 
   return (
@@ -821,7 +860,7 @@ const handleDesignationChange = (e) => {
       />
       <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
         <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-          <DialogPanel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-700 dark:text-white px-4 pb-4 pt-5 text-left shadow-xl transition-all data-[closed]:translate-y-4 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in sm:my-8 sm:w-full sm:max-w-4xl sm:p-6 data-[closed]:sm:translate-y-0 data-[closed]:sm:scale-95">
+          <DialogPanel className="relative transform overflow-visible rounded-lg bg-white dark:bg-gray-700 dark:text-white px-4 pb-4 pt-5 text-left shadow-xl transition-all data-[closed]:translate-y-4 data-[closed]:opacity-0 data-[enter]:duration-300 data-[leave]:duration-200 data-[enter]:ease-out data-[leave]:ease-in sm:my-8 sm:w-full sm:max-w-4xl sm:p-6 data-[closed]:sm:translate-y-0 data-[closed]:sm:scale-95">
             <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
               <button
                 type="button"
@@ -880,19 +919,23 @@ const handleDesignationChange = (e) => {
                         {renderGadOfficerIndicator(field.key)}
                         
           {field.isSelect ? (
-            <SearchableSelect
-              id={field.key}
-              name={field.key}
-              value={formData[field.key] || ""}
-              onChange={handleChange}
-              disabled={isFieldDisabled(field.key)}
-              placeholder={`Select ${field.label}`}
-              options={getSelectOptions(field)}
-              getOptionLabel={(option) => option.label}
-              getOptionValue={(option) => option.value}
-              className={getFieldClassName(field.key)}
-              searchPlaceholder={`Search ${field.label.toLowerCase()}...`}
-            />
+            isMasterOptionsLoading(field) ? (
+              renderControlSkeleton()
+            ) : (
+              <SearchableSelect
+                id={field.key}
+                name={field.key}
+                value={formData[field.key] || ""}
+                onChange={handleChange}
+                disabled={isFieldDisabled(field.key)}
+                placeholder={`Select ${field.label}`}
+                options={getSelectOptions(field)}
+                getOptionLabel={(option) => option.label}
+                getOptionValue={(option) => option.value}
+                className={getFieldClassName(field.key)}
+                searchPlaceholder={`Search ${field.label.toLowerCase()}...`}
+              />
+            )
           ) : field.type === "date" ? (
                           <input
                             type="date"
@@ -1014,9 +1057,10 @@ const handleDesignationChange = (e) => {
                     </button>
                     <button
                       type="submit"
-                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      disabled={isSubmitting || !hasMasterData}
+                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update" : "Save")}
                     </button>
                   </div>
                 </div>

@@ -21,17 +21,17 @@
 
 .bg-primary-500 {
   --tw-bg-opacity: 1;
-  background-color: var(--theme-primary-color, rgb(30 64 175));
+  background-color: rgb(30 64 175 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary-600 {
   --tw-bg-opacity: 1;
-  background-color: var(--theme-primary-color, rgb(37 99 235));
+  background-color: rgb(37 99 235 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary-700 {
   --tw-bg-opacity: 1;
-  background-color: var(--theme-primary-color, rgb(29 78 216));
+  background-color: rgb(29 78 216 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary-800 {
@@ -97,7 +97,7 @@
 /* Text Colors */
 .text-primary-500 {
   --tw-text-opacity: 1;
-  color: var(--theme-primary-color, rgb(30 64 175));
+  color: rgb(30 64 175 / var(--tw-text-opacity, 1));
 }
 
 .text-neutral-100 {
@@ -251,4 +251,38 @@
 
 .animate-count {
   animation: count 1s ease-out;
+}
+
+.ProseMirror {
+  min-height: 200px;
+  outline: none;
+}
+
+.ProseMirror p {
+  margin: 0.5rem 0;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+}
+
+.ProseMirror h1 {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.ProseMirror a {
+  color: blue;
+  text-decoration: underline;
 }

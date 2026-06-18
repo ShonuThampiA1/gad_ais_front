@@ -6,8 +6,10 @@ import {
   ExclamationTriangleIcon, 
   ClockIcon,
   DocumentCheckIcon,
-  DocumentMagnifyingGlassIcon
+  DocumentMagnifyingGlassIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline';
+import { readStoredErProfileWorkflowContext } from '@/utils/erProfileWorkflow';
 
 export default function ProfileCompletionModal({ 
   isOpen, 
@@ -64,6 +66,61 @@ export default function ProfileCompletionModal({
     ),
     [officerName]
   );
+
+  const scheduleOpenDescription = useMemo(() => {
+    const workflowContext = readStoredErProfileWorkflowContext();
+    const activeWindow = workflowContext?.change_preview?.active_window;
+    const formatWindowDate = (value) => {
+      if (!value) return 'N/A';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    };
+
+    return (
+      <div className="space-y-3">
+        <p>
+          Your ER Profile edit submission window is currently open. You can review your latest approved profile,
+          update the required sections, and submit the changes within the active schedule.
+        </p>
+        <div className="rounded-xl border border-blue-100 bg-blue-50/80 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+          <div className="grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Schedule</div>
+              <div className="mt-1 font-medium text-gray-900 dark:text-white">
+                {activeWindow?.schedule_code || activeWindow?.window_name || 'ER Profile Update Window'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Window</div>
+              <div className="mt-1 font-medium text-gray-900 dark:text-white">
+                {activeWindow?.window_name || 'Active'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Starts</div>
+              <div className="mt-1 font-medium text-gray-900 dark:text-white">
+                {formatWindowDate(activeWindow?.start_date || activeWindow?.start_datetime)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Closes</div>
+              <div className="mt-1 font-medium text-gray-900 dark:text-white">
+                {formatWindowDate(activeWindow?.end_date || activeWindow?.end_datetime)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }, []);
   
   // Configuration for different modal types
   const modalConfig = {
@@ -111,6 +168,18 @@ export default function ProfileCompletionModal({
         'Your profile needs corrections before it can be verified. Please update the requested details and resubmit your profile for verification. You will be able to proceed with all other actions only after ER-profile verification.',
       buttonText: 'View Profile',
       buttonColor: 'bg-amber-600 hover:bg-amber-500 focus-visible:ring-amber-500',
+      buttonTextColor: 'text-white'
+    },
+
+    schedule_open: {
+      icon: CalendarDaysIcon,
+      iconColor: 'text-blue-600',
+      title: 'ER Profile Update Window Open',
+      subtitle: 'Your scheduled ER profile update window is active now',
+      description: scheduleOpenDescription,
+      dismissText: 'Close',
+      buttonText: 'Go to ER Profile',
+      buttonColor: 'bg-blue-600 hover:bg-blue-500 focus-visible:ring-blue-500',
       buttonTextColor: 'text-white'
     }
 
@@ -202,7 +271,7 @@ export default function ProfileCompletionModal({
                         className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                         onClick={handleClose}
                       >
-                        Later
+                        {config.dismissText || 'Later'}
                       </button>
                       <button
                         type="button"

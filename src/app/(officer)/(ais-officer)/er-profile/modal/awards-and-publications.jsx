@@ -17,6 +17,7 @@ export function ModalAwardsAndPublications({
   open = false,
   setOpen,
   save,
+  saving = false,
   awards,
   sparkFields,
   officerFields,
@@ -47,7 +48,7 @@ export function ModalAwardsAndPublications({
 
    // Add category options
   const awardCategoryOptions = [
-    { value: "", label: "Select Category" },
+    // { value: "", label: "Select Category" },
     { value: "Personal Award", label: "Personal Award" },
     { value: "Organizational Award", label: "Organizational Award" },
   ];
@@ -252,6 +253,7 @@ const isSparkField = (fieldKey) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (saving) return;
 
     const newErrors = {};
     const nameRegex = /^[A-Za-z0-9\s()&/.,\-]*$/;
@@ -565,12 +567,12 @@ const isSparkField = (fieldKey) => {
                           value={formData.reward_type}
                           onChange={handleChange}
                           disabled={isFieldDisabled("reward_type")}
-                          placeholder="Select Reward Type"
+                          placeholder="Select Category"
                           options={awardCategoryOptions}
                           getOptionLabel={(option) => option.label}
                           getOptionValue={(option) => option.value}
                           className={getFieldClassName("reward_type")}
-                          searchPlaceholder="Search reward type..."
+                          searchPlaceholder="Search Category..."
                         />
                         {errors.reward_type && (
                           <p className="mt-1 text-sm text-red-600">{errors.reward_type}</p>
@@ -695,7 +697,7 @@ const isSparkField = (fieldKey) => {
   </div>
 
   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-    Allowed: PDF, JPG, JPEG, PNG • max 1MB
+    Allowed: PDF, JPG, JPEG, PNG • max 5MB
   </p>
 
   {errors.file && (
@@ -714,9 +716,12 @@ const isSparkField = (fieldKey) => {
                   </button>
                   <button
                     type="submit"
-                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                    disabled={saving}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                      saving ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"
+                    }`}
                   >
-                    {awards && awards.ais_rew_id ? "Update" : "Save"}
+                    {saving ? (awards && awards.ais_rew_id ? "Updating..." : "Saving...") : (awards && awards.ais_rew_id ? "Update" : "Save")}
                   </button>
                 </div>
               </div>

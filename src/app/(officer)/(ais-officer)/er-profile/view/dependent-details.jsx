@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDownIcon, PlusIcon, PencilSquareIcon,  UserCircleIcon, CalendarIcon, IdentificationIcon, EnvelopeIcon, PhoneIcon, BriefcaseIcon, HomeIcon, CheckCircleIcon, ExclamationTriangleIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { UserGroupIcon,  UserIcon, HeartIcon,  BoltIcon,} from '@heroicons/react/24/solid';
 import { ModalDependentDetails } from '../modal/dependent-details';
@@ -11,9 +11,10 @@ import { Tree, TreeNode } from 'react-organizational-chart';
 import { motion, AnimatePresence } from 'framer-motion';
 import 'react-tooltip/dist/react-tooltip.css';
 import { viewDocument } from '@/utils/documentUpload';
+import { fetchBulkMasters, mapBulkMasters } from '@/utils/masters';
+import { canEditErProfile, readStoredErProfileWorkflowContext } from '@/utils/erProfileWorkflow';
 
-export function DependentDetails({ profileData }) {
-  console.log('Rendering DependentDetails with profileData:', profileData);
+export function DependentDetails({ profileData, sharedMasterData, sharedMastersReady = false }) {
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [dependentDetails, setDependentDetails] = useState([]);
@@ -30,6 +31,7 @@ export function DependentDetails({ profileData }) {
   });
   
   const [isDataLoaded, setDataLoaded] = useState(false);
+  const saveInFlightRef = useRef(false);
   const [officerFields, setOfficerFields] = useState(() => {
     const familyInfo = profileData?.officer_data?.get_all_officer_info_by_user_id?.family_info || [];
     const fieldsBySource = {
@@ -59,10 +61,12 @@ export function DependentDetails({ profileData }) {
   });
   const { updateSectionProgress } = useProfileCompletion();
   const [localProfileData, setLocalProfileData] = useState(profileData);
-  const [profileStatus, setProfileStatus] = useState('');
+  const [canEditProfile, setCanEditProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [hasFetchedDependents, setHasFetchedDependents] = useState(false);
+  const [isSectionDataLoading, setSectionDataLoading] = useState(true);
 
   useEffect(() => {
     const storedProfile = sessionStorage.getItem('profileData');
@@ -74,13 +78,9 @@ export function DependentDetails({ profileData }) {
   }, [profileData]);
 
   useEffect(() => {
-    const status = sessionStorage.getItem('profile_status');
-    setProfileStatus(status);
-    if (status === '2' || status === '3' || status === '4') {
-      setButtonDisable(true);
-    } else {
-      setButtonDisable(false);
-    }
+    const editable = canEditErProfile(readStoredErProfileWorkflowContext());
+    setCanEditProfile(editable);
+    setButtonDisable(!editable);
   }, [profileData]);
 
   // Function to fetch fresh profile data from API
@@ -403,11 +403,16 @@ export function DependentDetails({ profileData }) {
     }, 0);
   }, [dependentDetails, requiredKeys]);
 
-  const fetchDependents = useCallback(async () => {
+  const unsavedSparkDependentsCount = useMemo(() => {
+    return dependentDetails.filter((dep) => String(dep?.ais_fam_id || '').startsWith('spark_')).length;
+  }, [dependentDetails]);
+
+  const fetchDependents = useCallback(async (profileSnapshot = null) => {
+    setSectionDataLoading(true);
     try {
-      const dbFamilyInfo = localProfileData?.officer_data?.get_all_officer_info_by_user_id?.family_info || [];
+      const profileSource = profileSnapshot || localProfileData;
+      const dbFamilyInfo = profileSource?.officer_data?.get_all_officer_info_by_user_id?.family_info || [];
       
-      console.log('Raw DB Family Info:', dbFamilyInfo);
       
       // Transform database records
       const dbDependents = dbFamilyInfo.map((dep) => {
@@ -482,16 +487,15 @@ export function DependentDetails({ profileData }) {
           relation_id: relationId || allFields.relation_id || null,
           first_name: allFields.first_name || dep.first_name || '',
           last_name: allFields.last_name || dep.last_name || '',
+          gender_id: dep.gender_id ?? allFields.gender_id ?? null,
         };
 
         return flat;
       });
 
-      console.log('Transformed DB dependents:', dbDependents);
 
       // Get SPARK data
-      const sparkPersonal = localProfileData?.spark_data?.data?.personal_details || {};
-      console.log('SPARK personal data:', sparkPersonal);
+      const sparkPersonal = profileSource?.spark_data?.data?.personal_details || {};
       
       const sparkRelationMap = {
         father_name: { 
@@ -519,15 +523,12 @@ export function DependentDetails({ profileData }) {
         if (trimmedName) {
           const sparkMap = sparkRelationMap[key];
           if (!sparkMap) {
-            console.log(`No mapping for SPARK key: ${key}`);
             return;
           }
 
-          console.log(`Checking SPARK ${key}: ${trimmedName} for relation ${sparkMap.relation}`);
           
           const matchingDb = dbDependents.find(d => {
             const dbRelName = getMasterValue(d.relation_id, 'relation_id');
-            console.log(`Comparing SPARK ${sparkMap.relation} with DB ${dbRelName} (${d.first_name} ${d.last_name})`);
             
             return dbRelName === sparkMap.relation ||
                    (sparkMap.relation === 'Spouse' && dbRelName === 'Spouse') ||
@@ -536,12 +537,10 @@ export function DependentDetails({ profileData }) {
           });
           
           if (matchingDb) {
-            console.log(`Found matching DB entry for SPARK ${key}:`, matchingDb);
             const dbName = `${matchingDb.first_name || ''} ${matchingDb.last_name || ''}`.trim();
             if (dbName !== trimmedName) {
               matchingDb.nameDifference = true;
               matchingDb.spark_name = trimmedName;
-              console.log(`Name difference found: DB="${dbName}", SPARK="${trimmedName}"`);
             }
             
             sparkEntries.push({
@@ -549,7 +548,6 @@ export function DependentDetails({ profileData }) {
               hasSparkData: true
             });
           } else {
-            console.log(`No matching DB entry found for SPARK ${key}, creating SPARK entry`);
             const nameParts = trimmedName.split(/\s+/);
             const first_name = nameParts[0] || '';
             const last_name = nameParts.slice(1).join(' ') || '';
@@ -577,14 +575,12 @@ export function DependentDetails({ profileData }) {
             };
             
             missingSpark.push(sparkEntry);
-            console.log('Created SPARK entry:', sparkEntry);
           }
         }
       });
 
       const merged = [...dbDependents];
       
-      console.log('Before merging SPARK, merged count:', merged.length);
       
       missingSpark.forEach(sparkEntry => {
         const alreadyExists = merged.some(dbEntry => {
@@ -593,41 +589,61 @@ export function DependentDetails({ profileData }) {
           const sameRelation = dbRelName === sparkRelName;
           const isSavedEntry = !dbEntry.ais_fam_id.toString().startsWith('spark_');
           
-          console.log(`Checking if SPARK ${sparkRelName} exists: DB=${dbRelName}, same=${sameRelation}, saved=${isSavedEntry}`);
           
           return sameRelation && isSavedEntry;
         });
         
         if (!alreadyExists) {
-          console.log(`Adding SPARK entry for ${sparkEntry.relation}`);
           merged.push(sparkEntry);
         } else {
-          console.log(`Skipping SPARK ${sparkEntry.relation} - already exists as saved entry`);
         }
       });
 
-      console.log('Final merged dependents:', merged.map(d => ({
-        id: d.ais_fam_id,
-        name: `${d.first_name} ${d.last_name}`,
-        relation: getMasterValue(d.relation_id, 'relation_id'),
-        fromSpark: d.fromSpark,
-        child_type: d.child_type
-      })));
 
       setDependentDetails(merged);
     } catch (err) {
       setError('Failed to fetch dependent details');
       console.error('fetchDependents error:', err);
+    } finally {
+      setHasFetchedDependents(true);
+      setSectionDataLoading(false);
     }
   }, [localProfileData, masterData.relationship, getMasterValue]);
 
-  const handleRemoveDependent = useCallback(async (dependentId) => {
-    if (!['1', undefined, null].includes(profileStatus)) {
+  useEffect(() => {
+    if (!hasFetchedDependents) return;
+
+    if (unsavedSparkDependentsCount > 0) {
+      updateSectionProgress('dependent', 0, 1);
+      return;
+    }
+
+    updateSectionProgress('dependent', 0, 0);
+  }, [hasFetchedDependents, unsavedSparkDependentsCount, updateSectionProgress]);
+
+  const handleRemoveDependent = useCallback(async (dependent) => {
+    if (!canEditProfile) {
       toast.error('Cannot remove dependents after profile submission');
       return;
     }
 
-    if (!window.confirm('Are you sure you want to remove this dependent?')) {
+    const dependentId = dependent?.ais_fam_id;
+    const isSpouse = getMasterValue(dependent?.relation_id, 'relation_id') === 'Spouse';
+    const linkedChildren = isSpouse
+      ? dependentDetails.filter((item) => {
+          const isChild = getMasterValue(item.relation_id, 'relation_id') === 'Child';
+          if (!isChild) return false;
+          const spouseId = dependentId?.toString();
+          return item.father_id?.toString() === spouseId || item.mother_id?.toString() === spouseId;
+        })
+      : [];
+
+    const confirmationMessage =
+      isSpouse && linkedChildren.length > 0
+        ? `Are you sure you want to remove this dependent?\n\nThis spouse is linked to ${linkedChildren.length} child(ren). If you remove,please update the parent information for the linked child(ren) first.`
+        : 'Are you sure you want to remove this dependent?';
+
+    if (!window.confirm(confirmationMessage)) {
       return;
     }
 
@@ -638,12 +654,10 @@ export function DependentDetails({ profileData }) {
         toast.success('Dependents removed successfully');
         
         // Fetch fresh data from API
-        await fetchFreshProfileData();
+        const freshProfileData = await fetchFreshProfileData();
         
         // Re-fetch dependents with fresh data
-        await fetchDependents();
-        
-        toast.success('Dependents removed successfully');
+        await fetchDependents(freshProfileData);
       } else {
         toast.error(response.data.message || 'Failed to remove dependent');
       }
@@ -653,24 +667,36 @@ export function DependentDetails({ profileData }) {
     } finally {
       setIsRemoving(false);
     }
-  }, [profileStatus, fetchFreshProfileData, fetchDependents]);
+  }, [canEditProfile, fetchFreshProfileData, fetchDependents, dependentDetails]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
+      if (!sharedMastersReady) {
+        return;
+      }
+
+      if (sharedMasterData) {
+        setMasterData(sharedMasterData);
+        setDataLoaded(true);
+        return;
+      }
+
       try {
-        const [genderResponse, relationshipResponse, occupationCategoryResponse, institutionResponse] = await Promise.all([
-          axiosInstance.get('/masters/gender'),
-          axiosInstance.get('/masters/relation'),
-          axiosInstance.get('/masters/occupation-category-all'),
-          axiosInstance.get('/masters/institution-all'),
+        const payload = await fetchBulkMasters([
+          'gender',
+          'relation',
+          'occupation_category',
+          'institution',
         ]);
 
-        setMasterData({
-          gender: genderResponse.data?.data?.gender || [],
-          relationship: relationshipResponse.data?.data || [],
-          occupationCategory: occupationCategoryResponse.data?.data?.categories || [],
-          institution: institutionResponse.data?.data?.institutions || [],
-        });
+        setMasterData(
+          mapBulkMasters(payload, {
+            gender: 'gender',
+            relationship: 'relation',
+            occupationCategory: 'occupation_category',
+            institution: 'institution',
+          }),
+        );
 
         setDataLoaded(true);
       } catch (err) {
@@ -680,7 +706,7 @@ export function DependentDetails({ profileData }) {
       }
     };
     fetchMasterData();
-  }, []);
+  }, [sharedMasterData, sharedMastersReady]);
 
   useEffect(() => {
     if (isDataLoaded) {
@@ -689,6 +715,11 @@ export function DependentDetails({ profileData }) {
   }, [isDataLoaded, fetchDependents]);
 
   const handleSave = useCallback(async ({ spark_data, user_data, ais_fam_id }) => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setTimeout(() => {
+      saveInFlightRef.current = false;
+    }, 2500);
     setIsLoading(true);
     try {
       const relation_id = user_data.relation_id || spark_data.relation_id;
@@ -737,14 +768,10 @@ export function DependentDetails({ profileData }) {
       }
 
       if (response.data.success) {
+        const freshProfileData = await fetchFreshProfileData();
+        await fetchDependents(freshProfileData);
         toast.success('Dependents details saved successfully');
-        
-        // Fetch fresh data from API
-        await fetchFreshProfileData();
-        
-        // Re-fetch dependents with fresh data
-        await fetchDependents();
-        
+
         // Close modal and reset
         setModalOpen(false);
         setSelectedDependent(null);
@@ -872,7 +899,6 @@ export function DependentDetails({ profileData }) {
 
   const handleDocumentView = async (documentId) => {
     try {
-      console.log('Viewing document with ID:', documentId);
       if (!documentId) {
         toast.error('No document available to view');
         return;
@@ -884,6 +910,42 @@ export function DependentDetails({ profileData }) {
     }
   };
 
+  const renderDependentSkeleton = () => (
+    <div className="w-full px-4 py-6 animate-pulse">
+      <div className="mx-auto mb-6 flex w-fit items-center gap-3 rounded-full bg-indigo-100 px-5 py-3 dark:bg-gray-800">
+        <div className="h-6 w-6 rounded-full bg-indigo-200 dark:bg-gray-700" />
+        <div className="h-5 w-20 rounded bg-indigo-200 dark:bg-gray-700" />
+      </div>
+      <div className="flex flex-wrap justify-center gap-4">
+        {[0, 1, 2].map((index) => (
+          <div
+            key={index}
+            className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+          >
+            <div className="mb-3 flex items-start justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-700">
+              <div className="flex-1 space-y-2">
+                <div className="h-5 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+                <div className="h-4 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+              </div>
+              <div className="h-5 w-5 rounded-full bg-gray-200 dark:bg-gray-700" />
+            </div>
+            <div className="space-y-3">
+              {[0, 1, 2, 3].map((fieldIndex) => (
+                <div key={fieldIndex} className="flex items-start gap-2.5">
+                  <div className="mt-0.5 h-4 w-4 rounded bg-gray-200 dark:bg-gray-700" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-11/12 rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-4 w-7/12 rounded bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-2 mx-auto w-full bg-white dark:bg-gray-950">
       <button
@@ -894,7 +956,7 @@ export function DependentDetails({ profileData }) {
         <div className="flex items-center gap-4">
           <UserGroupIcon className="w-5 h-5 text-indigo-600" strokeWidth={2} />
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">Dependents Details</h2>
-          {(isLoading || isRefreshing || isRemoving) && (
+          {(isLoading || isRefreshing || isRemoving || isSectionDataLoading) && (
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
               {isRemoving ? 'Removing...' : 'Loading...'}
             </span>
@@ -961,6 +1023,9 @@ export function DependentDetails({ profileData }) {
             </div>
 
             {/* Tree Structure */}
+            {isSectionDataLoading ? (
+              renderDependentSkeleton()
+            ) : (
             <div className="w-full overflow-x-auto px-4 py-6">
               <div className="min-w-max">
                 <Tree
@@ -1102,11 +1167,11 @@ export function DependentDetails({ profileData }) {
                                               {isSaved ? (
                                                 <>
                                                   <CheckCircleIcon className="w-5 h-5 text-green-600" strokeWidth={2} />
-                                                  {!isbuttondisable && ['1', undefined, null].includes(profileStatus) && (
+                                                  {!isbuttondisable && canEditProfile && (
                                                     <button
                                                       onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleRemoveDependent(dependent.ais_fam_id);
+                                                        handleRemoveDependent(dependent);
                                                       }}
                                                       className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
                                                       aria-label="Remove dependent"
@@ -1226,6 +1291,7 @@ export function DependentDetails({ profileData }) {
                 </Tree>
               </div>
             </div>
+            )}
 
             {/* Add Dependents Button */}
             {!isbuttondisable && (

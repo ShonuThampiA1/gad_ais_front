@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function DivisionList() {
   const fetchDivision = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/division-all`);
-      console.log("Fetched divisionList:", response.data.data.division);
-      setDivisionList(response.data.data.division);
+      const payload = await fetchBulkMasters(["division"], { admin: true, includeInactive: true });
+      setDivisionList(payload.division || []);
     } catch (error) {
       console.error("Error fetching Division:", error);
       toast.error("Failed to load divisions.");
@@ -65,8 +65,6 @@ export default function DivisionList() {
 
     try {
       const trimmedDivision = DivisionData.division.trim().toLowerCase();
-      console.log("Input division:", trimmedDivision);
-      console.log("Current divisionList:", divisionList);
 
       // Check for existing division
       const existing = divisionList.find(
@@ -75,7 +73,6 @@ export default function DivisionList() {
 
       // Case: Division exists and is deactivated
       if (existing && !existing.is_active && !DivisionData.division_id) {
-        console.log("Found deactivated division:", existing);
         setDivisionToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function DivisionList() {
           (div) => div.division.toLowerCase() === trimmedDivision
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated division:", updatedExisting);
           setDivisionToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -181,7 +177,6 @@ export default function DivisionList() {
 
   const handleReactivateClick = (division_id) => {
     const division = divisionList.find((d) => d.division_id === division_id);
-    console.log("Reactivating division:", division);
     setDivisionToReactivate(division);
     setConfirmReactivateOpen(true);
   };

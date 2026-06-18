@@ -3,7 +3,7 @@
 import { UserIcon, IdentificationIcon, EnvelopeIcon, PhoneIcon, CalendarIcon, BriefcaseIcon } from '@heroicons/react/24/outline';
 import { getServiceTypeName } from '@/utils/serviceTypeUtils';
 
-export default function PrimaryDetails({ personalDetails, masterData }) {
+export default function PrimaryDetails({ personalDetails, masterData, masterLoading = false }) {
   const getMasterValue = (id, key) => {
     if (!id) return 'N/A';
     const keyMap = {
@@ -61,14 +61,21 @@ export default function PrimaryDetails({ personalDetails, masterData }) {
     { label: 'Mobile Number', key: 'mobile_no', icon: PhoneIcon, value: personalDetails?.mobile_no || 'N/A' }
   ];
 
-  // Check if data is loading (i.e., personalDetails or masterData is undefined/null or empty)
-  const isLoading = !personalDetails || Object.keys(personalDetails || {}).length === 0 || !masterData || Object.keys(masterData || {}).length === 0;
+  const isLoading = masterLoading || !personalDetails || Object.keys(personalDetails || {}).length === 0;
 
   return (
     <div className="mt-3 mb-6 w-full bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-gray-100 dark:border-gray-600">
       {isLoading ? (
-        <div className="flex justify-center items-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-600"></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xxl:grid-cols-4 gap-x-6 gap-y-6">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={`primary-skeleton-${index}`} className="flex items-start gap-3 animate-pulse">
+              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 mt-0.5" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+                <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xxl:grid-cols-4 gap-x-6 gap-y-6">

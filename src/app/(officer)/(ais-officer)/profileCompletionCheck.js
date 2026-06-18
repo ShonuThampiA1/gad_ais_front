@@ -4,6 +4,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import ProfileCompletionModal from '../../components/profileCompletionModal';
 import axiosInstance from "@/utils/apiClient";
+import {
+  deriveErProfileModalType,
+  deriveErProfileWorkflowState,
+  storeErProfileWorkflowContext,
+} from "@/utils/erProfileWorkflow";
 
 export default function ProfileCheck() {
   const pathname = usePathname();
@@ -12,25 +17,40 @@ export default function ProfileCheck() {
   const [modalType, setModalType] = useState('incomplete');
   const [shouldShowModal, setShouldShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
   const hasFetchedStatus = useRef(false);
   const isFetching = useRef(false);
   const lastPathname = useRef(pathname);
   const abortControllerRef = useRef(null);
 
-  //  Add debug ref to track modal state changes
+  // 🆕 Add debug ref to track modal state changes
   const modalActionRef = useRef({ lastAction: null, timestamp: null });
+  const SCHEDULE_WINDOW_MODAL_KEY = 'er_profile_schedule_window_seen';
+
+  const getScheduleWindowMarker = useCallback(() => {
+    const workflowContextRaw = sessionStorage.getItem('er_profile_workflow_context');
+    let workflowContext = null;
+    try {
+      workflowContext = workflowContextRaw ? JSON.parse(workflowContextRaw) : null;
+    } catch {
+      workflowContext = null;
+    }
+
+    const activeWindow = workflowContext?.change_preview?.active_window;
+    return activeWindow
+      ? String(activeWindow.window_id || activeWindow.schedule_code || activeWindow.start_date || 'active')
+      : null;
+  }, []);
 
   const fetchProfileStatus = useCallback(async (isInitial = false) => {
     // Prevent multiple simultaneous calls
     if (isFetching.current) {
-      console.log("DEBUG >>> API call already in progress, skipping");
       return;
     }
 
     const role_id = sessionStorage.getItem('role_id');
     const ais_per_id = sessionStorage.getItem('ais_per_id');
     
-    console.log("DEBUG >>> Fetching profile status for role:", role_id, "ais_per_id:", ais_per_id, "isInitial:", isInitial);
 
     if (role_id === '2' && ais_per_id) {
       try {
@@ -47,60 +67,34 @@ export default function ProfileCheck() {
         }, {
           signal: abortControllerRef.current.signal
         });
+
+        let workflowContext = null;
+
+        try {
+          const workflowResponse = await axiosInstance.get(`/officer/er-profile/workflow-context/${ais_per_id}`, {
+            signal: abortControllerRef.current.signal
+          });
+          workflowContext = workflowResponse?.data?.data || null;
+          storeErProfileWorkflowContext(workflowContext);
+        } catch (workflowError) {
+          if (workflowError.name !== 'CanceledError' && workflowError.name !== 'AbortError') {
+            console.error('Error fetching workflow context:', workflowError);
+          }
+        }
         
-        console.log("DEBUG >>> Profile status API response:", statusResponse);
         
         // Access the profile_status array from the nested data structure
         const { profile_status: timeline } = statusResponse.data.data;
         
-        let profileStatus;
-        let newModalType = 'incomplete'; // Default modal type
+        const derivedState = deriveErProfileWorkflowState(workflowContext, timeline);
+        const newModalType = deriveErProfileModalType(workflowContext, timeline);
         
-        console.log("DEBUG >>> Timeline data:", timeline);
-        
-        if (!timeline || timeline.length === 0) {
-          // No data: incomplete
-          profileStatus = '1';
-          newModalType = 'incomplete';
-        } else {
-          // Find the current status (with is_current: true) or get the last one
-          const latestStatus = timeline.find(status => status.is_current) || timeline[timeline.length - 1];
-          console.log("DEBUG >>> Latest status:", latestStatus);
-          
-          switch (latestStatus.action_key) {
-            case 'approve':
-              profileStatus = '3'; // approved, no modal
-              newModalType = null;
-              break;
-            case 'submit':
-              profileStatus = '2'; // submitted, pending review
-              newModalType = 'submitted';
-              break;
-            case 'resubmit':
-              profileStatus = '2'; // resubmitted, pending review  
-              newModalType = 'resubmitted';
-              break;
-            case 'return_for_correction':
-              profileStatus = '1'; // needs correction
-              newModalType = 'correction';
-              break;
-            default:
-              profileStatus = '1'; // fallback
-              newModalType = 'incomplete';
-          }
-        }
-        
-        // Check if status has actually changed to avoid unnecessary updates
-        const currentStatus = sessionStorage.getItem('profile_status');
+        const currentStatus = sessionStorage.getItem('profile_workflow_state');
         const currentModalType = sessionStorage.getItem('profile_modal_type');
         
-        if (currentStatus !== profileStatus || currentModalType !== newModalType) {
-          console.log("DEBUG >>> Profile status changed - updating storage");
-          // Store both status and modal type
-          sessionStorage.setItem('profile_status', profileStatus);
+        if (currentStatus !== derivedState || currentModalType !== newModalType) {
+          sessionStorage.setItem('profile_workflow_state', derivedState);
           sessionStorage.setItem('profile_modal_type', newModalType);
-        } else {
-          console.log("DEBUG >>> Profile status unchanged");
         }
         
         if (isInitial) {
@@ -111,8 +105,9 @@ export default function ProfileCheck() {
         // Don't log if it's an abort error
         if (error.name !== 'CanceledError' && error.name !== 'AbortError') {
           console.error('Error fetching profile status:', error);
-          sessionStorage.setItem('profile_status', '1');
+          sessionStorage.setItem('profile_workflow_state', 'incomplete');
           sessionStorage.setItem('profile_modal_type', 'incomplete');
+          storeErProfileWorkflowContext(null);
         }
       } finally {
         isFetching.current = false;
@@ -132,20 +127,17 @@ export default function ProfileCheck() {
   const checkAndShowModal = useCallback(() => {
     const normalizedPathname = pathname.replace(/\/$/, '');
     const role = sessionStorage.getItem('role_id');
-    const statusCode = sessionStorage.getItem('profile_status');
+    const workflowState = sessionStorage.getItem('profile_workflow_state');
     const modalTypeFromStorage = sessionStorage.getItem('profile_modal_type');
+    const scheduleWindowMarker = getScheduleWindowMarker();
+    const scheduleWindowSeen = scheduleWindowMarker
+      ? sessionStorage.getItem(SCHEDULE_WINDOW_MODAL_KEY) === scheduleWindowMarker
+      : false;
 
-    console.log(" DEBUG >>> checkAndShowModal FIRED");
-    console.log(" DEBUG >>> pathname:", pathname, "normalized:", normalizedPathname);
-    console.log(" DEBUG >>> role:", role, "statusCode:", statusCode);
-    console.log(" DEBUG >>> modalTypeFromStorage:", modalTypeFromStorage);
-    console.log(" DEBUG >>> current modal state - isOpen:", isOpen, "shouldShowModal:", shouldShowModal);
-    console.log(" DEBUG >>> last modal action:", modalActionRef.current);
 
     // 🆕 CRITICAL FIX: If we're on er-profile routes, NEVER show modal
-    if (normalizedPathname === '/er-profile' || normalizedPathname === '/preview-profile' || normalizedPathname === '/er-profile/preview-profile2'|| normalizedPathname === '/preview-profile2' || normalizedPathname === '/er-profile/preview-profile' ||normalizedPathname === '/er-profile/spark-preview') {
+     if (normalizedPathname === '/er-profile' || normalizedPathname === '/preview-profile' || normalizedPathname === '/er-profile/preview-profile2'|| normalizedPathname === '/preview-profile2' || normalizedPathname === '/er-profile/preview-profile' ||normalizedPathname === '/er-profile/spark-preview') {
       
-      console.log("✅ DEBUG >>> On er-profile route - FORCING modal close");
       setShouldShowModal(false);
       setIsOpen(false);
       return;
@@ -153,41 +145,58 @@ export default function ProfileCheck() {
 
     // 🆕 If we recently navigated to profile, don't show modal
     if (modalActionRef.current.lastAction === 'NAVIGATING_TO_PROFILE') {
-      console.log("✅ DEBUG >>> Recently navigated to profile - suppressing modal");
       return;
     }
 
-    // Officer role & not approved
-    if (role === '2' && statusCode !== '3') {
-      console.log(" DEBUG >>> Showing modal - blocking access to:", pathname);
+    if (
+      role === '2' &&
+      modalTypeFromStorage &&
+      workflowState !== 'approved' &&
+      !(modalTypeFromStorage === 'schedule_open' && scheduleWindowSeen)
+    ) {
       setModalType(modalTypeFromStorage || 'incomplete');
       setShouldShowModal(true);
       setIsOpen(true);
     } else {
-      console.log("✅ DEBUG >>> Approved or not officer - no modal needed");
       setShouldShowModal(false);
       setIsOpen(false);
     }
-  }, [pathname, isOpen, shouldShowModal]);
+  }, [pathname, getScheduleWindowMarker]);
+
+  const handleModalVisibilityChange = useCallback((nextOpen) => {
+    if (!nextOpen && modalType === 'schedule_open') {
+      const scheduleWindowMarker = getScheduleWindowMarker();
+      if (scheduleWindowMarker) {
+        sessionStorage.setItem(SCHEDULE_WINDOW_MODAL_KEY, scheduleWindowMarker);
+      }
+    }
+    setIsOpen(nextOpen);
+    if (!nextOpen) {
+      setShouldShowModal(false);
+    }
+  }, [getScheduleWindowMarker, modalType]);
 
   const handleGoToProfile = useCallback(() => {
-    console.log("🔄 DEBUG >>> handleGoToProfile called - Starting navigation to /er-profile");
     
     // 🆕 Clear any existing timeouts and close modal immediately
     setIsOpen(false);
     setShouldShowModal(false);
+    if (modalType === 'schedule_open') {
+      const scheduleWindowMarker = getScheduleWindowMarker();
+      if (scheduleWindowMarker) {
+        sessionStorage.setItem(SCHEDULE_WINDOW_MODAL_KEY, scheduleWindowMarker);
+      }
+    }
     
     modalActionRef.current = {
       lastAction: 'NAVIGATING_TO_PROFILE',
       timestamp: Date.now()
     };
     
-    console.log("🔄 DEBUG >>> Modal closed, now pushing route...");
      router.push('/er-profile');
-  }, [router]);
+  }, [router, modalType, getScheduleWindowMarker]);
 
   const refreshProfileStatus = useCallback(async () => {
-    console.log("DEBUG >>> Manual profile status refresh triggered");
     hasFetchedStatus.current = false;
     await fetchProfileStatus(true);
     checkAndShowModal();
@@ -195,7 +204,6 @@ export default function ProfileCheck() {
 
   // Initial setup
   useEffect(() => {
-    console.log(" DEBUG >>> ProfileCheck mounted");
     
     const initializeProfileCheck = async () => {
       if (!hasFetchedStatus.current && !isFetching.current) {
@@ -216,12 +224,9 @@ export default function ProfileCheck() {
   // Navigation effect
   useEffect(() => {
     const normalizedPathname = pathname.replace(/\/$/, '');
-    console.log(" DEBUG >>> Navigation effect - pathname changed to:", pathname, "normalized:", normalizedPathname);
-    console.log(" DEBUG >>> Previous pathname was:", lastPathname.current);
 
     //  Reset navigation flag after successful navigation
     if (modalActionRef.current.lastAction === 'NAVIGATING_TO_PROFILE' && (normalizedPathname === '/er-profile' || normalizedPathname === '/preview-profile' || normalizedPathname === '/er-profile/preview-profile')) {
-      console.log("✅ DEBUG >>> Navigation to er-profile completed successfully");
       modalActionRef.current.lastAction = 'NAVIGATION_COMPLETE';
     }
 
@@ -242,7 +247,6 @@ export default function ProfileCheck() {
   useEffect(() => {
     if (modalActionRef.current.lastAction === 'NAVIGATING_TO_PROFILE') {
       const safetyTimer = setTimeout(() => {
-        console.log(" DEBUG >>> Safety timer - resetting navigation flag");
         modalActionRef.current.lastAction = 'NAVIGATION_COMPLETE';
       }, 2000);
 
@@ -253,7 +257,6 @@ export default function ProfileCheck() {
   // Listen for custom events to trigger refresh (called from other components)
   useEffect(() => {
     const handleRefreshEvent = () => {
-      console.log("DEBUG >>> Refresh event received");
       refreshProfileStatus();
     };
 
@@ -277,15 +280,14 @@ export default function ProfileCheck() {
     return null;
   }
 
-  console.log(" DEBUG >>> RENDERING - isOpen:", isOpen, "shouldShowModal:", shouldShowModal, "pathname:", pathname);
 
   return (
     <ProfileCompletionModal 
       isOpen={isOpen && shouldShowModal} 
-      setIsOpen={setIsOpen} 
+      setIsOpen={handleModalVisibilityChange} 
       onNavigate={handleGoToProfile}
       modalType={modalType}
-      canClose={false}
+      canClose={modalType === 'schedule_open'}
     />
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   AcademicCapIcon,
   BuildingLibraryIcon,
@@ -16,13 +16,17 @@ import { useProfileCompletion } from '@/contexts/Profile-completion-context';
 import { toast } from "react-toastify";
 import axiosInstance from "@/utils/apiClient";
 import ConfirmModal from "@/app/components/confirmModal";
+import { fetchBulkMasters } from "@/utils/masters";
+import { canEditErProfile, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
-export function EducationalQualifications({ profileData }) {
+export function EducationalQualifications({ profileData, sharedMasterData, sharedMastersReady = false }) {
+  const saveInFlightRef = useRef(false);
   const [isModalOpen, setModalOpen] = useState(false);
   const [educationalQualifications, setEducationalQualifications] = useState([]);
   const [selectedQualification, setSelectedQualification] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [masterLoading, setMasterLoading] = useState(true);
   const [masterData, setMasterData] = useState({
     qualification: [],
   });
@@ -35,8 +39,28 @@ export function EducationalQualifications({ profileData }) {
   const [qualificationToDelete, setQualificationToDelete] = useState(null); //New
   
   // Get profile status from sessionStorage
-  const profileStatus = sessionStorage.getItem('profile_status');
-  const isButtonDisabled = profileStatus === '2' || profileStatus === '3'; // Disable for submitted or approved
+  const workflowContext = readStoredErProfileWorkflowContext();
+  const isButtonDisabled = !canEditErProfile(workflowContext);
+  const updateProfileQualifications = useCallback((nextQualifications) => {
+    setLocalProfileData((prevProfileData) => {
+      const currentProfileData = prevProfileData || profileData || {};
+      const currentOfficerData =
+        currentProfileData.officer_data?.get_all_officer_info_by_user_id || {};
+      const updatedProfileData = {
+        ...currentProfileData,
+        officer_data: {
+          ...currentProfileData.officer_data,
+          get_all_officer_info_by_user_id: {
+            ...currentOfficerData,
+            edu_qualification: nextQualifications,
+          },
+        },
+      };
+
+      sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+      return updatedProfileData;
+    });
+  }, [profileData]);
 
 
   // ALL EXISTING CODE BELOW REMAINS EXACTLY THE SAME
@@ -53,10 +77,21 @@ export function EducationalQualifications({ profileData }) {
   // Fetch master data only once on mount
   useEffect(() => {
     const fetchMasterData = async () => {
+      if (!sharedMastersReady) {
+        return;
+      }
+
+      setMasterLoading(true);
+      if (sharedMasterData) {
+        setMasterData(sharedMasterData);
+        setMasterLoading(false);
+        return;
+      }
+
       try {
-        const qualificationResponse = await axiosInstance.get("/masters/qualification-all");
+        const qualificationResponse = await fetchBulkMasters(["qualification"]);
         setMasterData({
-          qualification: qualificationResponse.data.data.qualification || [],
+          qualification: qualificationResponse.qualification || [],
         });
       } catch (err) {
         console.error("Error fetching master data:", err);
@@ -64,11 +99,13 @@ export function EducationalQualifications({ profileData }) {
         toast.error("Failed to fetch master data", {
           className: "bg-primary-500 text-white",progressClassName: "bg-primary-200",
         });
+      } finally {
+        setMasterLoading(false);
       }
     };
 
     fetchMasterData();
-  }, []);
+  }, [sharedMasterData, sharedMastersReady]);
 
   const getMasterValue = useCallback(
     (id, key) => {
@@ -138,7 +175,10 @@ export function EducationalQualifications({ profileData }) {
                         sources.some(s => s === "USER") ? "MIXED" : "SPARK";
 
         // Extract qualification_id from fields if available
-        const dbQualId = dbQual.fields?.DB_SPARK_API?.qualification_id || dbQual.fields?.AIS_OFFICER?.qualification_id || dbQual.qualification_id;
+        const dbQualId = dbQual.fields?.DB_SPARK_API?.qualification_id ||
+        dbQual.fields?.GAD_OFFICER?.qualification_id ||
+        dbQual.fields?.AIS_OFFICER?.qualification_id ||
+        dbQual.qualification_id;
 
         return {
           ais_edu_id: String(dbQual.ais_edu_id), // Ensure string format
@@ -156,7 +196,7 @@ export function EducationalQualifications({ profileData }) {
       // Match Spark data with DB data and update saved status
       const matchedSparkIndices = new Set();
       dbQualifications.forEach((dbQual, dbIndex) => {
-        const dbQualId = dbQual.fields?.DB_SPARK_API?.qualification_id || dbQual.fields?.AIS_OFFICER?.qualification_id || dbQual.qualification_id;
+        const dbQualId = dbQual.fields?.DB_SPARK_API?.qualification_id || dbQual.fields?.AIS_OFFICER?.qualification_id || dbQual.fields?.GAD_OFFICER?.qualification_id ||dbQual.qualification_id;
         const matchedIndex = tempSparkList.findIndex((sparkQual, sparkIndex) => {
           const sparkQualName = String(getMasterValue(sparkQual.qualification_id, "qualification_id") || sparkQual.raw_qualification || "").toLowerCase().trim();
           const dbQualName = String(getMasterValue(dbQualId, "qualification_id") || "").toLowerCase().trim();
@@ -214,7 +254,6 @@ export function EducationalQualifications({ profileData }) {
   return unique;
 }, []);
 
-console.log("Final details after reduce:", JSON.stringify(finalDetails, null, 2));
 
       // Sort by displayed qualification
       finalDetails.sort((a, b) =>
@@ -236,16 +275,6 @@ console.log("Final details after reduce:", JSON.stringify(finalDetails, null, 2)
 // Process education data when masterData or localProfileData changes
 useEffect(() => {
   if (!masterData.qualification.length || !localProfileData) return;
-
-  // ADD THIS: Check for cached educational qualifications first
-  const storedQualifications = sessionStorage.getItem('educational_qualifications');
-  if (storedQualifications) {
-    console.log("Loading educational qualifications from sessionStorage");
-    const parsedQualifications = JSON.parse(storedQualifications);
-    setEducationalQualifications(parsedQualifications);
-    setLoading(false);
-    return;
-  }
 
   const processEducationData = () => {
     const sparkData = localProfileData.spark_data?.data || {};
@@ -284,7 +313,7 @@ useEffect(() => {
         icon: AcademicCapIcon,
         isMaster: true,
         source: qualification.fieldSources.qualification_id,
-        computeValue: () => getMasterValue(qualification.qualification_id, "qualification_id") || qualification.raw_qualification || "N/A",
+        computeValue: () => (!masterLoading ? getMasterValue(qualification.qualification_id, "qualification_id") : qualification.raw_qualification) || qualification.raw_qualification || "N/A",
       },
       {
         label: "Institute",
@@ -304,9 +333,8 @@ useEffect(() => {
       },
     ],
   }));
-  console.log("Generated sections:", JSON.stringify(cards, null, 2));
   return [{ cards }];
-}, [educationalQualifications, getMasterValue]);
+}, [educationalQualifications, getMasterValue, masterLoading]);
 
  // Button Handlers
   const handleAdd = useCallback(
@@ -346,7 +374,6 @@ useEffect(() => {
         fields: qualification.fields,
         fieldSources: qualification.fieldSources,
       };
-      console.log("Selected Qualification:", JSON.stringify(cleanQualification, null, 2));
       setSelectedQualification(cleanQualification);
       setModalOpen(true);
     },
@@ -371,7 +398,6 @@ useEffect(() => {
       return;
     }
 
-    console.log("Delete qualification with ID:", qualificationId);
 
     // Example of how delete would work:
     
@@ -396,10 +422,13 @@ useEffect(() => {
       if (response.data.success) {
         // Remove from local state
         setEducationalQualifications(prev => prev.filter(q => String(q.ais_edu_id) !== String(qualificationId)));
-        
-        // Update sessionStorage
-        const updatedQualifications = educationalQualifications.filter(q => String(q.ais_edu_id) !== String(qualificationId));
-        sessionStorage.setItem('educational_qualifications', JSON.stringify(updatedQualifications));
+        const currentOfficerData =
+          localProfileData?.officer_data?.get_all_officer_info_by_user_id || {};
+        updateProfileQualifications(
+          (currentOfficerData.edu_qualification || []).filter(
+            (qualification) => String(qualification?.ais_edu_id) !== String(qualificationId)
+          )
+        );
         
         toast.success("Qualification deleted successfully", {
           className: "bg-primary-500 text-white",
@@ -420,13 +449,17 @@ useEffect(() => {
       setQualificationToDelete(null);
     }
     
-  }, [isButtonDisabled, educationalQualifications, qualificationToDelete]);
+  }, [isButtonDisabled, qualificationToDelete, localProfileData, updateProfileQualifications]);
 
 
   const handleSave = useCallback(
     async (updatedData) => {
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setTimeout(() => {
+        saveInFlightRef.current = false;
+      }, 2500);
       try {
-      console.log("Incoming updatedData:", JSON.stringify(updatedData, null, 2));
 
       const isSparkEntry = selectedQualification && selectedQualification.ais_edu_id && typeof selectedQualification.ais_edu_id === "string" && selectedQualification.ais_edu_id.startsWith("spark_");
       const isUpdate = selectedQualification && selectedQualification.ais_edu_id && !(typeof selectedQualification.ais_edu_id === "string" && selectedQualification.ais_edu_id.startsWith("spark_"));
@@ -451,7 +484,6 @@ useEffect(() => {
         }
       }
 
-      console.log("Request body:", JSON.stringify(requestBody, null, 2));
 
       // Duplication check - use the actual values that will be saved
       const newQualId = String(
@@ -538,8 +570,7 @@ useEffect(() => {
           spark_data: localProfileData.spark_data
         };
 
-        setLocalProfileData(updatedProfileData);
-        sessionStorage.setItem('profileData', JSON.stringify(updatedProfileData));
+        updateProfileQualifications(updatedEduQualifications);
 
         // FIXED: Preserve original field sources - if it was SPARK, keep it as SPARK even after saving
         const originalFieldSources = selectedQualification?.fieldSources || {
@@ -598,10 +629,6 @@ useEffect(() => {
             newQualifications = [...prevData, updatedQualification];
           }
 
-          // Store processed educational qualifications in sessionStorage
-          sessionStorage.setItem('educational_qualifications', JSON.stringify(newQualifications));
-          
-          console.log("Updated educationalQualifications:", JSON.stringify(newQualifications, null, 2));
           return newQualifications;
         });
 
@@ -637,8 +664,8 @@ useEffect(() => {
       }
     }
   },
-  [selectedQualification, getMasterValue, educationalQualifications, localProfileData]
-);
+  [selectedQualification, getMasterValue, educationalQualifications, localProfileData, updateProfileQualifications]
+  );
 
 useEffect(() => {
     if (!loading && educationalQualifications) { // After data is set
@@ -651,6 +678,43 @@ useEffect(() => {
       }
     }
   }, [educationalQualifications, loading, updateSectionProgress]);
+
+  const showInitialSkeleton = loading && educationalQualifications.length === 0;
+  const showCardSkeleton = loading && educationalQualifications.length > 0;
+
+  const renderEducationSkeleton = (count = 3) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-pulse">
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          key={`education-skeleton-${index}`}
+          className="relative rounded-md border border-indigo-300 bg-gray-50 p-3 shadow-sm dark:border-indigo-600 dark:bg-gray-800"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="flex gap-2">
+              <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div className="h-4 w-4 rounded-full bg-gray-200 dark:bg-gray-700" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            {[0, 1, 2].map((fieldIndex) => (
+              <div
+                key={fieldIndex}
+                className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-600 dark:bg-gray-700"
+              >
+                <div className="mt-0.5 h-6 w-6 rounded-full bg-indigo-100 dark:bg-indigo-900" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-600" />
+                  <div className="h-4 w-full rounded bg-gray-200 dark:bg-gray-600" />
+                  <div className="h-4 w-2/3 rounded bg-gray-200 dark:bg-gray-600" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
   
 
    // Common Button Helper Functions
@@ -875,75 +939,77 @@ return (
               </div>
       
  
-      {loading ? (
-        <div className="flex justify-center items-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-600"></div>
-        </div>
+      {showInitialSkeleton ? (
+        renderEducationSkeleton()
       ) : sections[0].cards.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sections[0].cards.map((card, index) => (
-            <div
-              key={card.ais_edu_id}
-              className="relative bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-600 rounded-md p-3 shadow-sm"
-            >
-              {renderSavedIndicator(card.isSaved)}
-              <div className="flex items-center justify-end mb-2 gap-2">
-                {renderEditButton(educationalQualifications[index], index)}
-                {renderDeleteButton(educationalQualifications[index])}
-              </div>
-             <div className="space-y-2">
-                {card.fields.map((field) => (
-                  <div
-                    key={field.key}
-                    className="relative flex items-start gap-2 bg-white dark:bg-gray-700 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
-                  >
-                    {renderSparkIndicator(field.key, field.source, educationalQualifications[index], field.originalKey)}
-                    {renderUserIndicator(field.key, field.source)}
-                    {renderGadOfficerIndicator(field.originalKey, educationalQualifications[index])}
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center mt-0.5">
-                      <field.icon className="w-4 h-4 text-indigo-600 dark:text-indigo-300" />
+        showCardSkeleton ? (
+          renderEducationSkeleton(sections[0].cards.length)
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sections[0].cards.map((card, index) => (
+              <div
+                key={card.ais_edu_id}
+                className="relative bg-gray-50 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-600 rounded-md p-3 shadow-sm"
+              >
+                {renderSavedIndicator(card.isSaved)}
+                <div className="flex items-center justify-end mb-2 gap-2">
+                  {renderEditButton(educationalQualifications[index], index)}
+                  {renderDeleteButton(educationalQualifications[index])}
+                </div>
+               <div className="space-y-2">
+                  {card.fields.map((field) => (
+                    <div
+                      key={field.key}
+                      className="relative flex items-start gap-2 bg-white dark:bg-gray-700 rounded-lg p-2 border border-gray-200 dark:border-gray-600"
+                    >
+                      {renderSparkIndicator(field.key, field.source, educationalQualifications[index], field.originalKey)}
+                      {renderUserIndicator(field.key, field.source)}
+                      {renderGadOfficerIndicator(field.originalKey, educationalQualifications[index])}
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center mt-0.5">
+                        <field.icon className="w-4 h-4 text-indigo-600 dark:text-indigo-300" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          {field.label}
+                        </p>
+                        <p 
+                          className={`text-sm font-bold text-gray-900 dark:text-white ${
+                            field.originalKey === 'institute_name' || field.originalKey === 'subject_name' 
+                              ? 'break-words line-clamp-5' 
+                              : 'truncate'
+                          }`}
+                          title={field.computeValue
+                            ? (() => {
+                                const val = field.computeValue();
+                                return val === null || val === undefined || Number.isNaN(val) ? "N/A" : val;
+                              })()
+                            : field.isMaster
+                            ? getMasterValue(
+                                educationalQualifications[index][field.originalKey],
+                                field.originalKey
+                              )
+                            : educationalQualifications[index][field.originalKey] || "N/A"}
+                        >
+                          {field.computeValue
+                            ? (() => {
+                                const val = field.computeValue();
+                                return val === null || val === undefined || Number.isNaN(val) ? "N/A" : val;
+                              })()
+                            : field.isMaster
+                            ? getMasterValue(
+                                educationalQualifications[index][field.originalKey],
+                                field.originalKey
+                              )
+                            : educationalQualifications[index][field.originalKey] || "N/A"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        {field.label}
-                      </p>
-                      <p 
-                        className={`text-sm font-bold text-gray-900 dark:text-white ${
-                          field.originalKey === 'institute_name' || field.originalKey === 'subject_name' 
-                            ? 'break-words line-clamp-5' 
-                            : 'truncate'
-                        }`}
-                        title={field.computeValue
-                          ? (() => {
-                              const val = field.computeValue();
-                              return val === null || val === undefined || Number.isNaN(val) ? "N/A" : val;
-                            })()
-                          : field.isMaster
-                          ? getMasterValue(
-                              educationalQualifications[index][field.originalKey],
-                              field.originalKey
-                            )
-                          : educationalQualifications[index][field.originalKey] || "N/A"}
-                      >
-                        {field.computeValue
-                          ? (() => {
-                              const val = field.computeValue();
-                              return val === null || val === undefined || Number.isNaN(val) ? "N/A" : val;
-                            })()
-                          : field.isMaster
-                          ? getMasterValue(
-                              educationalQualifications[index][field.originalKey],
-                              field.originalKey
-                            )
-                          : educationalQualifications[index][field.originalKey] || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-gray-500 dark:text-gray-400 text-sm text-center py-3">
           No Qualification Details Available.

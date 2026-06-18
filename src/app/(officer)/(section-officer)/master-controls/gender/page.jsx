@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function GenderList() {
   const fetchGender = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/gender-all`);
-      console.log("Fetched genderList:", response.data.data.gender);
-      setGenderList(response.data.data.gender);
+      const payload = await fetchBulkMasters(["gender"], { admin: true, includeInactive: true });
+      setGenderList(payload.gender || []);
     } catch (error) {
       console.error("Error fetching Gender:", error);
       toast.error("Failed to load genders.");
@@ -65,8 +65,6 @@ export default function GenderList() {
 
     try {
       const trimmedGender = GenderData.gender.trim().toLowerCase();
-      console.log("Input gender:", trimmedGender);
-      console.log("Current genderList:", genderList);
 
       // Check for existing gender
       const existing = genderList.find(
@@ -75,7 +73,6 @@ export default function GenderList() {
 
       // Case: Gender exists and is deactivated
       if (existing && !existing.is_active && !GenderData.gender_id) {
-        console.log("Found deactivated gender:", existing);
         setGenderToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function GenderList() {
           (g) => g.gender.toLowerCase() === trimmedGender
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated gender:", updatedExisting);
           setGenderToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -181,7 +177,6 @@ export default function GenderList() {
 
   const handleReactivateClick = (gender_id) => {
     const gender = genderList.find((g) => g.gender_id === gender_id);
-    console.log("Reactivating gender:", gender);
     setGenderToReactivate(gender);
     setConfirmReactivateOpen(true);
   };

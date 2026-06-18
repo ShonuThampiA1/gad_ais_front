@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function MinistryList() {
   const fetchMinistry = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/ministry-all`);
-      console.log("Fetched ministryList:", response.data.data.ministry);
-      setMinistryList(response.data.data.ministry);
+      const payload = await fetchBulkMasters(["ministry"], { admin: true, includeInactive: true });
+      setMinistryList(payload.ministry || []);
     } catch (error) {
       console.error("Error fetching Ministries:", error);
       toast.error("Failed to load ministries.");
@@ -65,8 +65,6 @@ export default function MinistryList() {
 
     try {
       const trimmedMinistry = MinistryData.ministry.trim().toLowerCase();
-      console.log("Input ministry:", trimmedMinistry);
-      console.log("Current ministryList:", ministryList);
 
       // Check for existing ministry
       const existing = ministryList.find(
@@ -75,7 +73,6 @@ export default function MinistryList() {
 
       // Case: Ministry exists and is deactivated
       if (existing && !existing.is_active && !MinistryData.ministry_id) {
-        console.log("Found deactivated ministry:", existing);
         setMinistryToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -123,7 +120,6 @@ export default function MinistryList() {
           (min) => min.ministry.toLowerCase() === trimmedMinistry
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated ministry:", updatedExisting);
           setMinistryToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -189,7 +185,6 @@ export default function MinistryList() {
 
   const handleReactivateClick = (ministry_id) => {
     const ministry = ministryList.find((m) => m.ministry_id === ministry_id);
-    console.log("Reactivating ministry:", ministry);
     setMinistryToReactivate(ministry);
     setConfirmReactivateOpen(true);
   };

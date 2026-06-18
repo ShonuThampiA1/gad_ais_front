@@ -39,6 +39,8 @@ export function ModalSuspensionDetails({
 }) {
   const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEditing = Boolean(suspension);
   const [charError, setCharError] = useState("");
   const [sparkUpdatedFields, setSparkUpdatedFields] = useState({});
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
@@ -71,7 +73,6 @@ export function ModalSuspensionDetails({
       setCharError("");
       setSparkUpdatedFields({});
       setUserUpdatedFields(new Set());
-      console.log("Modal opened with suspension:", JSON.stringify(suspension, null, 2));
     }
   }, [open, suspension]);
 
@@ -200,6 +201,7 @@ useEffect(() => {
 
 const handleSave = async (e) => {
   e.preventDefault();
+  if (isSubmitting) return;
 
   const newErrors = {};
 
@@ -233,8 +235,24 @@ const handleSave = async (e) => {
   setErrors(newErrors);
   setCharError("");
 
-  if (Object.keys(newErrors).length > 0) return;
+  if (Object.keys(newErrors).length > 0) {
+    const firstKey = Object.keys(newErrors).find((key) => newErrors[key]);
+    if (firstKey && typeof document !== "undefined") {
+      window.setTimeout(() => {
+        const target =
+          document.querySelector(`[name="${firstKey}"]`) ||
+          document.querySelector(`[data-field="${firstKey}"]`) ||
+          document.getElementById(firstKey);
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        target?.focus?.();
+      }, 0);
+    }
+    return;
+  }
 
+  setIsSubmitting(true);
+
+  try {
     const sparkData = {};
     const userData = {};
 
@@ -254,12 +272,14 @@ const handleSave = async (e) => {
       user_data: userData,
     };
 
-    console.log("Modal handleSave updatedData:", JSON.stringify(updatedData, null, 2));
     await onSave(updatedData);
     setFormData(initialFormData);
     setOpen(false);
     setUserUpdatedFields(new Set());
     setSparkUpdatedFields({});
+  } finally {
+    setIsSubmitting(false);
+  }
   };
 
   const handleClose = () => {
@@ -497,9 +517,10 @@ const handleSave = async (e) => {
                     </button>
                     <button
                       type="submit"
-                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                      disabled={isSubmitting}
+                      className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                     >
-                      Save
+                      {isSubmitting ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update" : "Save")}
                     </button>
                   </div>
                 </div>

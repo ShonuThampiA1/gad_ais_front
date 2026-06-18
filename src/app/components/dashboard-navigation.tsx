@@ -37,9 +37,9 @@ const DashboardNavigation = ({ variant = 'desktop' }: DashboardNavigationProps) 
     { name: 'My Applications', href: '/applications', icon: FolderIcon, role: [2] },
     { name: 'My Documents', href: '/documents', icon: CalendarIcon, role: [2] },
     { name: 'My Profile', href: '/er-profile', icon: UserIcon, role: [2] },
-    { name: 'Dashboard', href: '/rbac/dashboard', icon: HomeIcon, role: [7] },
+    { name: 'Dashboard', href: '/rbac/superadmin-dashboard', icon: HomeIcon, role: [7] },
     { name: 'Knowledge Base', href: '/knowledge-base', icon: BookOpenIcon, role: [1, 2, 3, 4, 7] },
-
+    
   ];
 
   const filteredNavigation =

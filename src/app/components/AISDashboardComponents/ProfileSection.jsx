@@ -18,25 +18,33 @@ import { fileTypes } from "@/utils/fileValidator";
 import { useRouter } from "next/navigation";
 import { useProfileCompletion } from "@/contexts/Profile-completion-context";
 import { getServiceTypeName } from "@/utils/serviceTypeUtils";
+import { canEditErProfilePhoto, isApprovedErProfileState, readStoredErProfileWorkflowContext } from "@/utils/erProfileWorkflow";
 
 // React Image Crop component
 import ReactCrop from 'react-image-crop';
 import { createPortal } from "react-dom";
 import 'react-image-crop/dist/ReactCrop.css';
 
-export const ProfileSection = ({ compactMode = false, highlightSparkButton = false, highlightProfileButton = false }) => {
+export const ProfileSection = ({
+  compactMode = false,
+  profileData = null,
+  onRefreshProfileData = null,
+  highlightSparkButton = false,
+  highlightProfileButton = false,
+}) => {
   const fileInputRef = useRef(null);
   const imgRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const router = useRouter();  
-  const { overallProgress, updateSectionProgress, markSectionLoaded, markInitialLoadComplete } = useProfileCompletion();
+  const { overallProgress, updateSectionProgress, markSectionLoaded, isProgressReady } = useProfileCompletion();
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [isProfileImageLoading, setIsProfileImageLoading] = useState(true);
   const [isProgressCalculating, setIsProgressCalculating] = useState(false);
   
-  const profileProgress = overallProgress ? overallProgress() : 0;
+  const profileProgress = overallProgress ? overallProgress() : null;
+  const showProgressSkeleton = !isProgressReady || typeof profileProgress !== 'number';
   
   const [profileImage, setProfileImage] = useState("/api/placeholder/120/120");
   const [isUploading, setIsUploading] = useState(false);
@@ -55,22 +63,22 @@ export const ProfileSection = ({ compactMode = false, highlightSparkButton = fal
   const [userDetails, setUserDetails] = useState(null);
   const [officerData, setOfficerData] = useState(null);
   const [sparkData, setSparkData] = useState(null);
-  const [profileStatus, setProfileStatus] = useState('1');
+  const [workflowContext, setWorkflowContext] = useState(null);
   
   const baseURL = process.env.NEXT_PUBLIC_API_URL;
+  const isProfilePhotoEditable = canEditErProfilePhoto(workflowContext);
+  const isApprovedProfile = isApprovedErProfileState(workflowContext);
 
   // Check if profile is complete for preview
-  const isProfileComplete = profileProgress >= 0;
+  const isProfileComplete = typeof profileProgress === 'number' && isProgressReady;
 
   // Fetch user details and profile image on component mount
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoading(true);
-      setIsDataLoading(true);
       
       try {
         const storedUserDetails = sessionStorage.getItem("user_details");
-        console.log("Stored User Details:", storedUserDetails);
         if (storedUserDetails) {
           try {
             setUserDetails(JSON.parse(storedUserDetails));
@@ -78,15 +86,11 @@ export const ProfileSection = ({ compactMode = false, highlightSparkButton = fal
             console.error("Error parsing user details:", error);
           }
         }
-        const storedProfileStatus = sessionStorage.getItem('profile_status') || '1';
-        setProfileStatus(storedProfileStatus);
-        
-        await fetchOfficerData();
+        setWorkflowContext(readStoredErProfileWorkflowContext());
       } catch (error) {
         console.error("Error loading initial data:", error);
       } finally {
         setIsLoading(false);
-        setIsDataLoading(false);
       }
     };
 
@@ -95,7 +99,7 @@ export const ProfileSection = ({ compactMode = false, highlightSparkButton = fal
 
   // Monitor progress calculation
   useEffect(() => {
-    if (typeof profileProgress === 'number') {
+    if (typeof profileProgress === 'number' && isProgressReady) {
       setIsProgressCalculating(true);
       // Simulate calculation delay for better UX
       const timer = setTimeout(() => {
@@ -104,40 +108,32 @@ export const ProfileSection = ({ compactMode = false, highlightSparkButton = fal
       
       return () => clearTimeout(timer);
     }
-  }, [profileProgress]);
+    setIsProgressCalculating(true);
+  }, [profileProgress, isProgressReady]);
 
-  // Fetch officer data from API
- const fetchOfficerData = async () => {
-  setIsDataLoading(true);
-  setIsProfileImageLoading(true);
-  
-  try {
-    const response = await axiosInstance.get("/officer/officer");
-    const data = response.data.data;
-    
-    // Set officer data and spark data
-    setOfficerData(data.officer_data);
-    setSparkData(data.spark_data);
-    
-    // Fetch profile image
-    await fetchProfileImage(data.officer_data);
-    
-    // Mark initial load as complete after all data is fetched
-    markInitialLoadComplete();
-    
-  } catch (error) {
-    console.error("Error fetching officer data:", error);
-    // Use default avatar if API fails
-    setProfileImage("/images/avatar.jpg");
-    // Still mark as loaded
-    updateSectionProgress('profile_photo', 0, 1);
-    markSectionLoaded('profile_photo');
-    markInitialLoadComplete();
-  } finally {
-    setIsDataLoading(false);
-    setIsProfileImageLoading(false);
-  }
-};
+  useEffect(() => {
+    if (!profileData) {
+      return;
+    }
+
+    const syncProfileData = async () => {
+      setIsDataLoading(true);
+      try {
+        setOfficerData(profileData.officer_data || null);
+        setSparkData(profileData.spark_data || null);
+        await fetchProfileImage(profileData.officer_data || null);
+      } catch (error) {
+        console.error("Error syncing officer data:", error);
+        setProfileImage("/images/avatar.jpg");
+        updateSectionProgress('profile_photo', 0, 1);
+        markSectionLoaded('profile_photo');
+      } finally {
+        setIsDataLoading(false);
+      }
+    };
+
+    syncProfileData();
+  }, [profileData]);
 
   // Fetch profile image from officer data
 const fetchProfileImage = async (officerDataParam = null) => {
@@ -181,12 +177,10 @@ const fetchProfileImage = async (officerDataParam = null) => {
       
       // Profile photo exists - mark as completed
       updateSectionProgress('profile_photo', 1, 1); // 1 completed out of 1 field
-      console.log('✅ Profile photo found and marked as complete (1/1)');
     } else {
       setProfileImage("/images/avatar.jpg");
       // No profile photo - mark as incomplete
       updateSectionProgress('profile_photo', 0, 1); // 0 completed out of 1 field
-      console.log('⚠️ No profile photo found, marked as incomplete (0/1)');
     }
     
     // Mark section as loaded regardless
@@ -354,6 +348,14 @@ const fetchProfileImage = async (officerDataParam = null) => {
   }, [showCropModal]);
 
   const handleImageUpload = (event) => {
+    if (!isProfilePhotoEditable) {
+      toast.info("Cannot update profile picture after the profile is submitted or approved.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     const file = event.target.files[0];
     if (file) {
       // Basic file type validation
@@ -382,6 +384,10 @@ const fetchProfileImage = async (officerDataParam = null) => {
   };
 
   const handleEditProfile = () => {
+    if (!isProfilePhotoEditable) {
+      toast.info("Cannot update profile picture after the profile is submitted or approved.");
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -472,7 +478,9 @@ const fetchProfileImage = async (officerDataParam = null) => {
     
     // Update profile completion and refresh image
     setIsDataLoading(true);
-    await fetchOfficerData(); // This will call fetchProfileImage which updates the progress
+    if (onRefreshProfileData) {
+      await onRefreshProfileData();
+    }
     
     toast.success("Profile picture updated successfully!");
     
@@ -567,14 +575,57 @@ const fetchProfileImage = async (officerDataParam = null) => {
     return baseSize;
   };
 
+  const renderProfileSkeleton = () => (
+    <div
+      className={`bg-gradient-to-br from-indigo-900 via-indigo-500 to-indigo-900 rounded-2xl p-5 shadow-2xl text-white relative overflow-hidden dark:from-gray-950 dark:via-gray-800 dark:to-gray-950 dark:border border-gray-600 ${
+        compactMode ? 'max-w-full' : ''
+      }`}
+    >
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -mr-8 -mt-8"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full -ml-8 -mb-8"></div>
+      </div>
+
+      <div className="relative z-10 animate-pulse">
+        <div className={`flex items-start justify-between ${compactMode ? 'mb-2' : 'mb-3'}`}>
+          <div className="flex items-start space-x-3">
+            <div className={`${getProfileImageSize()} rounded-2xl border-4 border-white/20 bg-white/20`} />
+            <div className="space-y-3">
+              <div className="h-6 w-44 rounded bg-white/20" />
+              <div className="h-4 w-28 rounded bg-white/20" />
+            </div>
+          </div>
+          <div className="h-9 w-24 rounded-xl bg-white/15" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="h-16 rounded-xl bg-white/10" />
+          <div className="h-16 rounded-xl bg-white/10" />
+          <div className="h-16 rounded-xl bg-white/10" />
+          <div className="h-16 rounded-xl bg-white/10" />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <div className="h-4 w-28 rounded bg-white/20" />
+            <div className="h-5 w-16 rounded bg-white/20" />
+          </div>
+          <div className="w-full bg-white/15 rounded-full h-2 overflow-hidden relative">
+            <div className="absolute inset-0 animate-[pulse_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="h-10 rounded-xl bg-white/10" />
+          <div className="h-10 rounded-xl bg-white/10" />
+        </div>
+      </div>
+    </div>
+  );
+
   // Main loading state
   if (isLoading) {
-    return (
-      <div className={`bg-gradient-to-br from-indigo-900 via-indigo-500 to-indigo-900 rounded-2xl p-5 shadow-2xl text-white relative overflow-hidden flex flex-col justify-center items-center ${compactMode ? 'h-48' : 'h-64'} dark:from-gray-600 dark:via-gray-900 dark:to-gray-600`}>
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-white/30 border-t-white mb-4"></div>
-        <p className="text-sm text-white/80">Loading profile...</p>
-      </div>
-    );
+    return renderProfileSkeleton();
   }
 
   return (
@@ -595,7 +646,7 @@ const fetchProfileImage = async (officerDataParam = null) => {
           <div className={`flex items-start justify-between ${compactMode ? 'mb-2' : 'mb-3'}`}>
             <div className="flex items-start space-x-3">
               <div 
-                className="relative group cursor-pointer flex-shrink-0"
+                className={`relative group flex-shrink-0 ${isProfilePhotoEditable ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 onClick={handleEditProfile}
@@ -620,7 +671,7 @@ const fetchProfileImage = async (officerDataParam = null) => {
                 
                 {/* Upload Overlay */}
                 <AnimatePresence>
-                  {isHovered && !isProfileImageLoading && (
+                  {isHovered && !isProfileImageLoading && isProfilePhotoEditable && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -640,7 +691,7 @@ const fetchProfileImage = async (officerDataParam = null) => {
                 )}
                               
                {/* Verified Badge */}
-                {profileStatus === '3' && (
+                {isApprovedProfile && (
                   <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center dark:bg-green-600">
                     <CheckBadgeIcon className="w-4 h-4 text-white" />
                   </div>
@@ -684,6 +735,7 @@ const fetchProfileImage = async (officerDataParam = null) => {
             ref={fileInputRef}
             onChange={handleImageUpload}
             accept="image/*"
+            disabled={!isProfilePhotoEditable}
             className="hidden"
           />
 
@@ -754,20 +806,24 @@ const fetchProfileImage = async (officerDataParam = null) => {
 
           {/* Progress Bar */}
           <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-indigo-100 dark:text-indigo-200 ${compactMode ? 'text-xs' : 'text-sm'}">Profile Completion</span>
-              <div className="flex items-center space-x-2">
-                {isProgressCalculating && (
-                  <div className="animate-spin rounded-full h-3 w-3 border border-white/30 border-t-white"></div>
-                )}
+              <div className="flex justify-between">
+                <span className="text-indigo-100 dark:text-indigo-200 ${compactMode ? 'text-xs' : 'text-sm'}">Profile Completion</span>
+                <div className="flex items-center space-x-2">
+                {(isProgressCalculating || showProgressSkeleton) ? (
+                  <div className="h-5 w-20 rounded-full bg-white/15 overflow-hidden relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-[pulse_1.4s_ease-in-out_infinite]" />
+                  </div>
+                ) : null}
                 <span className="font-semibold ${compactMode ? 'text-xs' : 'text-sm'}">
-                  {isProgressCalculating ? "Calculating..." : `${profileProgress}%`}
+                  {showProgressSkeleton || isProgressCalculating ? "Stabilizing..." : `${profileProgress}%`}
                 </span>
               </div>
             </div>
             <div className="w-full bg-white/20 rounded-full h-2 dark:bg-white/10 relative overflow-hidden">
-              {isProgressCalculating ? (
-                <div className="absolute inset-0 bg-gradient-to-r from-green-400/30 to-cyan-400/30 h-2 rounded-full animate-pulse"></div>
+              {showProgressSkeleton || isProgressCalculating ? (
+                <div className="absolute inset-0 rounded-full overflow-hidden bg-white/10">
+                  <div className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent animate-[shimmer_1.4s_linear_infinite]" />
+                </div>
               ) : (
                 <motion.div 
                   initial={{ width: 0 }}
@@ -853,12 +909,6 @@ const fetchProfileImage = async (officerDataParam = null) => {
               </div>
             </div>
             
-            {/* Single message for both buttons */}
-            {!isProfileComplete && (
-              <p className="text-xs text-yellow-200 text-center mt-2 dark:text-yellow-300">
-                Complete your profile to enable preview
-              </p>
-            )}
           </div>
         </div>
       </motion.div>
@@ -1130,6 +1180,17 @@ const fetchProfileImage = async (officerDataParam = null) => {
           </AnimatePresence>,
           document.body
         )}
+
+      <style jsx>{`
+        @keyframes shimmer {
+          0% {
+            transform: translateX(0%);
+          }
+          100% {
+            transform: translateX(420%);
+          }
+        }
+      `}</style>
     </>
   );
 };

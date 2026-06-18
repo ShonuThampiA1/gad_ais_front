@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function TenureList() {
   const fetchTenures = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/tenure-all`);
-      console.log("Fetched tenureList:", response.data.data.tenure);
-      setTenureList(response.data.data.tenure || []);
+      const payload = await fetchBulkMasters(["tenure"], { admin: true, includeInactive: true });
+      setTenureList(payload.tenure || []);
     } catch (error) {
       console.error("Error fetching Tenures:", error);
       toast.error("Failed to load tenures.");
@@ -65,8 +65,6 @@ export default function TenureList() {
 
     try {
       const trimmedTenure = TenureData.tenures.trim().toLowerCase();
-      console.log("Input tenure:", trimmedTenure);
-      console.log("Current tenureList:", tenureList);
 
       // Check for existing tenure
       const existing = tenureList.find(
@@ -75,7 +73,6 @@ export default function TenureList() {
 
       // Case: Tenure exists and is deactivated
       if (existing && !existing.is_active && !TenureData.tenure_id) {
-        console.log("Found deactivated tenure:", existing);
         setTenureToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -95,14 +92,12 @@ export default function TenureList() {
           `/masters/tenure/${tenure_id}`,
           { ...TenureDataWithoutId, tenures: TenureData.tenures.trim() }
         );
-        console.log("Tenure updated:", response);
         toast.success("Tenure updated successfully");
       } else {
         response = await axiosInstance.post("/masters/tenure", {
           ...TenureData,
           tenures: TenureData.tenures.trim(),
         });
-        console.log("Tenure added:", response);
         toast.success("Tenure added successfully");
       }
 
@@ -125,7 +120,6 @@ export default function TenureList() {
           (ten) => ten.tenures.toLowerCase() === trimmedTenure
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated tenure:", updatedExisting);
           setTenureToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -191,7 +185,6 @@ export default function TenureList() {
 
   const handleReactivateClick = (tenure_id) => {
     const tenure = tenureList.find((t) => t.tenure_id === tenure_id);
-    console.log("Reactivating tenure:", tenure);
     setTenureToReactivate(tenure);
     setConfirmReactivateOpen(true);
   };

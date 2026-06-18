@@ -118,12 +118,16 @@ const idFields = [
 export function ModalPersonalDetails({ open, setOpen, personalDetails, onSave, masterData, sparkFields, officerFields }) {
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [isHydratingForm, setIsHydratingForm] = useState(false);
   const dropdownRef = useRef(null);
+  const hydrationTimerRef = useRef(null);
   const { updateSectionProgress } = useProfileCompletion();
   const [userUpdatedFields, setUserUpdatedFields] = useState(new Set());
   const [languageSearchTerm, setLanguageSearchTerm] = useState('');
+  const isEditing = Boolean(personalDetails && Object.keys(personalDetails).length > 0);
 
   const filteredDistrictsCom = useMemo(() => {
     if (!open || !masterData.district) return [];
@@ -183,6 +187,8 @@ export function ModalPersonalDetails({ open, setOpen, personalDetails, onSave, m
 
   useEffect(() => {
     if (open) {
+      setIsHydratingForm(true);
+
       // Trim all string fields in personalDetails
       const trimmedDetails = trimObjectStrings(personalDetails);
       
@@ -202,8 +208,32 @@ export function ModalPersonalDetails({ open, setOpen, personalDetails, onSave, m
       setSelectedOptions(languagesKnown);
       setErrors({});
       setUserUpdatedFields(new Set());
+
+      if (hydrationTimerRef.current) {
+        clearTimeout(hydrationTimerRef.current);
+      }
+      hydrationTimerRef.current = setTimeout(() => {
+        setIsHydratingForm(false);
+      }, 120);
     }
   }, [open, personalDetails]);
+
+  useEffect(() => {
+    if (!open) {
+      setIsHydratingForm(false);
+      if (hydrationTimerRef.current) {
+        clearTimeout(hydrationTimerRef.current);
+        hydrationTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (hydrationTimerRef.current) {
+        clearTimeout(hydrationTimerRef.current);
+        hydrationTimerRef.current = null;
+      }
+    };
+  }, [open]);
 
 
   const calculateAge = (dob) => {
@@ -267,6 +297,7 @@ export function ModalPersonalDetails({ open, setOpen, personalDetails, onSave, m
 
   const validateForm = () => {
     const newErrors = {};
+    const isPfFromSpark = sparkFields.has('pf_number');
     const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
     const isValidPAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(String(pan || '').toUpperCase().trim());
     const isValidMobile = (num) => /^\d{10}$/.test(String(num || '').trim());
@@ -417,15 +448,30 @@ if (formData.allotment_year) {
       newErrors.praan_number = 'PRAN must be exactly 12 numeric digits (0-9 only,no letters, spaces, or special characters).';
    }
 
-  //  if (formData.pf_number && !isValidPFNumber(formData.pf_number)) {
-  //       newErrors.pf_number = 'PF Account Number must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).'; // Updated error message
-  //   }
+   if (!isPfFromSpark && formData.pf_number && !isValidPFNumber(formData.pf_number)) {
+       newErrors.pf_number = 'PF Account Number must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).';
+   }
    if (formData.ais_number && !isValidAISNumber(formData.ais_number)) {
      newErrors.ais_number = 'AIS Number must be exactly 10 alphanumeric characters (e.g., 01KL023300 or KL09676600)';
    }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
+  };
+
+  const scrollToFirstError = (errorMap) => {
+    const firstKey = Object.keys(errorMap || {}).find((key) => errorMap[key]);
+    if (!firstKey || typeof document === 'undefined') return;
+
+    window.setTimeout(() => {
+      const target =
+        document.querySelector(`[name="${firstKey}"]`) ||
+        document.querySelector(`[data-field="${firstKey}"]`) ||
+        document.getElementById(firstKey);
+
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.focus?.();
+    }, 0);
   };
 
   const handleChange = (e) => {
@@ -504,45 +550,38 @@ if (formData.allotment_year) {
         }
         break;
       case 'allotment_year':
-      const val = trimmedValue;
-      let error = '';
+        if (trimmedValue && !/^\d{4}$/.test(trimmedValue)) {
+          error = 'Must be a 4-digit year';
+        } else if (trimmedValue) {
+          const yearNum = Number(trimmedValue);
+          const currentYear = new Date().getFullYear();
 
-       if (val && !/^\d{4}$/.test(val)) {
-        error = 'Must be a 4-digit year';
-      } else if (val) {
-      const yearNum = Number(val);
-      const currentYear = new Date().getFullYear();
+          if (yearNum > currentYear) {
+            error = 'Cannot be in the future';
+          } else if (formData.dob) {
+            let birthYear = null;
+            const dobStr = String(formData.dob).trim();
 
-      if (yearNum > currentYear) {
-        error = 'Cannot be in the future';
-      }
-      else if (formData.dob) {
-      let birthYear = null;
-      const dobStr = String(formData.dob).trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
+              birthYear = Number(dobStr.split('-')[0]);
+            } else if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(dobStr)) {
+              birthYear = Number(dobStr.split(/[-/]/)[2]);
+            } else if (dobStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)) {
+              birthYear = Number(dobStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)[3]);
+            }
 
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
-        birthYear = Number(dobStr.split('-')[0]);
-      } else if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(dobStr)) {
-        birthYear = Number(dobStr.split(/[-/]/)[2]);
-      } else if (dobStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)) {
-        birthYear = Number(dobStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)[3]);
-      }
-
-      if (birthYear && !isNaN(birthYear)) {
-        if (yearNum < birthYear + 18) {
-          error = `Must be at least age 18 (${birthYear + 18})`;
+            if (birthYear && !isNaN(birthYear) && yearNum < birthYear + 18) {
+              error = `Must be at least age 18 (${birthYear + 18})`;
+            }
+          }
         }
-      }
-    }
-  }
-
-  setErrors((prev) => ({ ...prev, allotment_year: error }));
-  break;
+        break;
       // case 'pf_number':
-      //   if (trimmedValue && !/^\d{12}$/.test(trimmedValue)) {
-      //     error = 'PF Account Number must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).';
-      //   }
-      //   break;
+      case 'pf_number':
+        if (!sparkFields.has('pf_number') && trimmedValue && !/^\d{12}$/.test(trimmedValue)) {
+          error = 'PF Account Number must be exactly 12 numeric digits (0-9 only, no letters, spaces, or special characters).';
+        }
+        break;
       case 'ais_number':
         const upperAIS = trimmedValue.toUpperCase();
         if (trimmedValue && !AIS_NUMBER_PATTERN.test(upperAIS)) {
@@ -590,11 +629,18 @@ if (formData.allotment_year) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    const isValid = validateForm();
-    if (!isValid) return;
+    if (isSubmitting) return;
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      scrollToFirstError(validationErrors);
+      return;
+    }
 
-    // Trim all string fields in formData before processing
-    let processedData = trimObjectStrings({ ...formData, age: calculateAge(formData.dob) });
+    setIsSubmitting(true);
+
+    try {
+      // Trim all string fields in formData before processing
+      let processedData = trimObjectStrings({ ...formData, age: calculateAge(formData.dob) });
 
     // Parse int for id fields
     idFields.forEach((key) => {
@@ -621,8 +667,12 @@ if (formData.allotment_year) {
       }
     });
 
+    const effectiveSparkFields = Array.from(sparkFields).filter((key) =>
+      processedData.hasOwnProperty(key)
+    );
+
     // Add unchanged SPARK_FIELDS to spark_data (skip if empty)
-    SPARK_FIELDS.forEach((key) => {
+    effectiveSparkFields.forEach((key) => {
       if (!userUpdatedFields.has(key) && processedData.hasOwnProperty(key)) {
         const value = processedData[key];
         if (value !== undefined && value !== null && value !== '') {
@@ -636,9 +686,14 @@ if (formData.allotment_year) {
       user_data: userData,
     };
 
-    await onSave(updated_data, userUpdatedFields);
-    setOpen(false);
-    setUserUpdatedFields(new Set());
+      const saveSucceeded = await onSave(updated_data, userUpdatedFields);
+      if (saveSucceeded) {
+        setOpen(false);
+        setUserUpdatedFields(new Set());
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getSelectOptions = (field) => {
@@ -669,6 +724,16 @@ if (formData.allotment_year) {
     const masterKey = keyMap[field.key] || 'bloodGroup';
     const options = masterData[masterKey] || [];
 
+    if (field.key === 'category_id') {
+      return options.map((option) => ({
+        value: option[field.idForSelect],
+        label:
+          option.category_abbr && option.category
+            ? `${option.category_abbr} - ${option.category}`
+            : option.category_abbr || option.category || 'N/A',
+      }));
+    }
+
     return options.map((option) => ({
       value: option[field.idForSelect],
       label:
@@ -691,7 +756,60 @@ if (formData.allotment_year) {
     setFormData(personalDetails || {});
     setErrors({});
     setUserUpdatedFields(new Set());
+    setIsHydratingForm(false);
     setOpen(false);
+  };
+
+  const FieldSkeleton = ({ tall = false }) => (
+    <div className="relative animate-pulse">
+      <div className="mb-2 h-4 w-28 rounded bg-gray-200 dark:bg-gray-600" />
+      <div className={`w-full rounded-md border border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-700 ${tall ? 'h-24' : 'h-10'}`} />
+    </div>
+  );
+
+  const ControlSkeleton = () => (
+    <div className="mt-1 h-10 w-full animate-pulse rounded-md border border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-700" />
+  );
+
+  const SectionSkeleton = ({ title, fields = 6, accent = 'border-l-indigo-500' }) => (
+    <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-300 border-l-4 ${accent} px-3 py-5 mb-5 sm:col-span-2`}>
+      <div className="mb-5 h-6 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-600" />
+      <div className="grid md:grid-cols-2 gap-4 sm:grid-cols-1">
+        {Array.from({ length: fields }).map((_, index) => (
+          <FieldSkeleton key={`${title}-${index}`} />
+        ))}
+      </div>
+    </div>
+  );
+
+  const masterFieldKeyMap = {
+    source_of_recruitment_id: 'recruitment',
+    cadre_id: 'cadre',
+    gender_id: 'gender',
+    state_id_com: 'state',
+    state_id_per: 'state',
+    district_id_com: 'district',
+    district_id_per: 'district',
+    mother_tongue_id: 'motherTongue',
+    retirement_id: 'retirement',
+    languages_known: 'languageKnown',
+    category_id: 'category',
+    blood_group_id: 'bloodGroup',
+  };
+
+  const isMasterOptionsLoading = (fieldKey) => {
+    const masterKey = masterFieldKeyMap[fieldKey];
+    if (!masterKey) return false;
+
+    if (fieldKey === 'district_id_com') {
+      return !Array.isArray(masterData.district) || !Array.isArray(masterData.state);
+    }
+
+    if (fieldKey === 'district_id_per') {
+      return !Array.isArray(masterData.district) || !Array.isArray(masterData.state);
+    }
+
+    return !Array.isArray(masterData[masterKey]) || masterData[masterKey].length === 0;
   };
 
     const isFieldDisabled = (fieldKey) => {
@@ -719,6 +837,7 @@ if (formData.allotment_year) {
     };
 
   const renderSparkIndicator = (fieldKey) => {
+    if (fieldKey === 'age') return null;
     if (!sparkFields.has(fieldKey)) return null;
     
     return (
@@ -736,6 +855,7 @@ if (formData.allotment_year) {
   };
 
   const renderGadOfficerIndicator = (fieldKey) => {
+    if (fieldKey === 'age') return null;
     if (!officerFields.GAD_OFFICER.includes(fieldKey) || sparkFields.has(fieldKey)) return null;
     return (
        <div className="absolute top-3 right-3 group z-10">
@@ -795,6 +915,16 @@ if (formData.allotment_year) {
                     </div>
 
                 <form onSubmit={handleSave} className="mt-6 space-y-6">
+                  {isHydratingForm ? (
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                      <SectionSkeleton title="Basic Details" fields={8} accent="border-l-indigo-500" />
+                      <SectionSkeleton title="Identification Details" fields={6} accent="border-l-green-500" />
+                      <SectionSkeleton title="Service Details" fields={8} accent="border-l-cyan-500" />
+                      <SectionSkeleton title="Demographic Details" fields={4} accent="border-l-emerald-500" />
+                      <SectionSkeleton title="Current Address" fields={5} accent="border-l-indigo-500" />
+                      <SectionSkeleton title="Permanent Residential Address" fields={5} accent="border-l-pink-500" />
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     {/* Basic Info Section */}
                     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 border-l-4 border-l-indigo-500 px-3 py-5 mb-5 sm:col-span-2">
@@ -881,8 +1011,6 @@ if (formData.allotment_year) {
                           <label className="block text-sm font-medium text-gray-700 dark:text-white">
                             Age
                           </label>
-                          {renderSparkIndicator('dob')}
-                          {renderGadOfficerIndicator('dob')}
                           <input
                             type="text"
                             name="age"
@@ -898,18 +1026,22 @@ if (formData.allotment_year) {
                           </label>
                           {renderSparkIndicator('gender_id')}
                           {renderGadOfficerIndicator('gender_id')}
-                          <SearchableSelect
-                            name="gender_id"
-                            value={formData.gender_id || ''}
-                            onChange={handleChange}
-                            disabled={isFieldDisabled('gender_id')}
-                            placeholder="Select Gender"
-                            options={getSelectOptions({ key: 'gender_id', idForSelect: 'gender_id' })}
-                            getOptionLabel={(option) => option.label}
-                            getOptionValue={(option) => option.value}
-                            className={getFieldClassName('gender_id')}
-                            searchPlaceholder="Search gender..."
-                          />
+                          {isMasterOptionsLoading('gender_id') ? (
+                            <ControlSkeleton />
+                          ) : (
+                            <SearchableSelect
+                              name="gender_id"
+                              value={formData.gender_id || ''}
+                              onChange={handleChange}
+                              disabled={isFieldDisabled('gender_id')}
+                              placeholder="Select Gender"
+                              options={getSelectOptions({ key: 'gender_id', idForSelect: 'gender_id' })}
+                              getOptionLabel={(option) => option.label}
+                              getOptionValue={(option) => option.value}
+                              className={getFieldClassName('gender_id')}
+                              searchPlaceholder="Search gender..."
+                            />
+                          )}
                           {errors.gender_id && <p className="text-red-500 text-sm mt-1">{errors.gender_id}</p>}
                         </div>
                         <div className="relative">
@@ -919,18 +1051,22 @@ if (formData.allotment_year) {
                           </label>
                           {renderSparkIndicator('blood_group_id')}
                           {renderGadOfficerIndicator('blood_group_id')}
-                          <SearchableSelect
-                            name="blood_group_id"
-                            value={formData.blood_group_id || ''}
-                            onChange={handleChange}
-                            disabled={isFieldDisabled('blood_group_id')}
-                            placeholder="Select Blood Group"
-                            options={getSelectOptions({ key: 'blood_group_id', idForSelect: 'blood_group_id' })}
-                            getOptionLabel={(option) => option.label}
-                            getOptionValue={(option) => option.value}
-                            className={getFieldClassName('blood_group_id')}
-                            searchPlaceholder="Search blood group..."
-                          />
+                          {isMasterOptionsLoading('blood_group_id') ? (
+                            <ControlSkeleton />
+                          ) : (
+                            <SearchableSelect
+                              name="blood_group_id"
+                              value={formData.blood_group_id || ''}
+                              onChange={handleChange}
+                              disabled={isFieldDisabled('blood_group_id')}
+                              placeholder="Select Blood Group"
+                              options={getSelectOptions({ key: 'blood_group_id', idForSelect: 'blood_group_id' })}
+                              getOptionLabel={(option) => option.label}
+                              getOptionValue={(option) => option.value}
+                              className={getFieldClassName('blood_group_id')}
+                              searchPlaceholder="Search blood group..."
+                            />
+                          )}
                           {errors.blood_group_id && <p className="text-red-500 text-sm mt-1">{errors.blood_group_id}</p>}
                         </div>
                       
@@ -1112,18 +1248,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('source_of_recruitment_id')}
                       {renderGadOfficerIndicator('source_of_recruitment_id')}
-                      <SearchableSelect
-                        name="source_of_recruitment_id"
-                        value={formData.source_of_recruitment_id || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('source_of_recruitment_id')}
-                        placeholder="Select Source"
-                        options={getSelectOptions({ key: 'source_of_recruitment_id', idForSelect: 'recruitment_id' })}
-                        getOptionLabel={(option) => option.label}
-                        getOptionValue={(option) => option.value}
-                        className={getFieldClassName('source_of_recruitment_id')}
-                        searchPlaceholder="Search source..."
-                      />
+                      {isMasterOptionsLoading('source_of_recruitment_id') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="source_of_recruitment_id"
+                          value={formData.source_of_recruitment_id || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('source_of_recruitment_id')}
+                          placeholder="Select Source"
+                          options={getSelectOptions({ key: 'source_of_recruitment_id', idForSelect: 'recruitment_id' })}
+                          getOptionLabel={(option) => option.label}
+                          getOptionValue={(option) => option.value}
+                          className={getFieldClassName('source_of_recruitment_id')}
+                          searchPlaceholder="Search source..."
+                        />
+                      )}
                       {errors.source_of_recruitment_id && <p className="text-red-500 text-sm mt-1">{errors.source_of_recruitment_id}</p>}
                     </div>
                     <div className="relative">
@@ -1133,18 +1273,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('cadre_id')}
                       {renderGadOfficerIndicator('cadre_id')}
-                      <SearchableSelect
-                        name="cadre_id"
-                        value={formData.cadre_id || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('cadre_id')}
-                        placeholder="Select Cadre"
-                        options={getSelectOptions({ key: 'cadre_id', idForSelect: 'cadre_id' })}
-                        getOptionLabel={(option) => option.label}
-                        getOptionValue={(option) => option.value}
-                        className={getFieldClassName('cadre_id')}
-                        searchPlaceholder="Search cadre..."
-                      />
+                      {isMasterOptionsLoading('cadre_id') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="cadre_id"
+                          value={formData.cadre_id || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('cadre_id')}
+                          placeholder="Select Cadre"
+                          options={getSelectOptions({ key: 'cadre_id', idForSelect: 'cadre_id' })}
+                          getOptionLabel={(option) => option.label}
+                          getOptionValue={(option) => option.value}
+                          className={getFieldClassName('cadre_id')}
+                          searchPlaceholder="Search cadre..."
+                        />
+                      )}
                       {errors.cadre_id && <p className="text-red-500 text-sm mt-1">{errors.cadre_id}</p>}
                     </div>
                     <div className="relative">
@@ -1167,18 +1311,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('retirement_id')}
                       {renderGadOfficerIndicator('retirement_id')}
-                      <SearchableSelect
-                        name="retirement_id"
-                        value={formData.retirement_id || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('retirement_id')}
-                        placeholder="Select Mode"
-                        options={getSelectOptions({ key: 'retirement_id', idForSelect: 'retirement_id' })}
-                        getOptionLabel={(option) => option.label}
-                        getOptionValue={(option) => option.value}
-                        className={getFieldClassName('retirement_id')}
-                        searchPlaceholder="Search retirement mode..."
-                      />
+                      {isMasterOptionsLoading('retirement_id') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="retirement_id"
+                          value={formData.retirement_id || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('retirement_id')}
+                          placeholder="Select Mode"
+                          options={getSelectOptions({ key: 'retirement_id', idForSelect: 'retirement_id' })}
+                          getOptionLabel={(option) => option.label}
+                          getOptionValue={(option) => option.value}
+                          className={getFieldClassName('retirement_id')}
+                          searchPlaceholder="Search retirement mode..."
+                        />
+                      )}
                     </div>
                     <div className="relative">
                       <label className="block text-sm font-medium text-gray-700 dark:text-white">
@@ -1285,18 +1433,22 @@ if (formData.allotment_year) {
                     </label>
                     {renderSparkIndicator('mother_tongue_id')}
                     {renderGadOfficerIndicator('mother_tongue_id')}
-                    <SearchableSelect
-                      name="mother_tongue_id"
-                      value={formData.mother_tongue_id || ''}
-                      onChange={handleChange}
-                      disabled={isFieldDisabled('mother_tongue_id')}
-                      placeholder="Select Mother Tongue"
-                      options={getSelectOptions({ key: 'mother_tongue_id', idForSelect: 'language_id' })}
-                      getOptionLabel={(option) => option.label}
-                      getOptionValue={(option) => option.value}
-                      className={getFieldClassName('mother_tongue_id')}
-                      searchPlaceholder="Search mother tongue..."
-                    />
+                    {isMasterOptionsLoading('mother_tongue_id') ? (
+                      <ControlSkeleton />
+                    ) : (
+                      <SearchableSelect
+                        name="mother_tongue_id"
+                        value={formData.mother_tongue_id || ''}
+                        onChange={handleChange}
+                        disabled={isFieldDisabled('mother_tongue_id')}
+                        placeholder="Select Mother Tongue"
+                        options={getSelectOptions({ key: 'mother_tongue_id', idForSelect: 'language_id' })}
+                        getOptionLabel={(option) => option.label}
+                        getOptionValue={(option) => option.value}
+                        className={getFieldClassName('mother_tongue_id')}
+                        searchPlaceholder="Search mother tongue..."
+                      />
+                    )}
                     {errors.mother_tongue_id && <p className="text-red-500 text-sm mt-1">{errors.mother_tongue_id}</p>}
                   </div>
                   <div className="relative">
@@ -1306,18 +1458,22 @@ if (formData.allotment_year) {
                     </label>
                     {renderSparkIndicator('category_id')}
                     {renderGadOfficerIndicator('category_id')}
-                    <SearchableSelect
-                      name="category_id"
-                      value={formData.category_id || ''}
-                      onChange={handleChange}
-                      disabled={isFieldDisabled('category_id')}
-                      placeholder="Select Category"
-                      options={getSelectOptions({ key: 'category_id', idForSelect: 'category_id' })}
-                      getOptionLabel={(option) => option.label}
-                      getOptionValue={(option) => option.value}
-                      className={getFieldClassName('category_id')}
-                      searchPlaceholder="Search category..."
-                    />
+                    {isMasterOptionsLoading('category_id') ? (
+                      <ControlSkeleton />
+                    ) : (
+                      <SearchableSelect
+                        name="category_id"
+                        value={formData.category_id || ''}
+                        onChange={handleChange}
+                        disabled={isFieldDisabled('category_id')}
+                        placeholder="Select Category"
+                        options={getSelectOptions({ key: 'category_id', idForSelect: 'category_id' })}
+                        getOptionLabel={(option) => option.label}
+                        getOptionValue={(option) => option.value}
+                        className={getFieldClassName('category_id')}
+                        searchPlaceholder="Search category..."
+                      />
+                    )}
                     {errors.category_id && <p className="text-red-500 text-sm mt-1">{errors.category_id}</p>}
                   </div>
 
@@ -1443,18 +1599,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('state_id_com')}
                       {renderGadOfficerIndicator('state_id_com')}
-                      <SearchableSelect
-                        name="state_id_com"
-                        value={formData.state_id_com || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('state_id_com')}
-                        placeholder="Select State"
-                        options={masterData.state || []}
-                        getOptionLabel={(state) => state.state}
-                        getOptionValue={(state) => state.state_id}
-                        className={getFieldClassName('state_id_com')}
-                        searchPlaceholder="Search state..."
-                      />
+                      {isMasterOptionsLoading('state_id_com') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="state_id_com"
+                          value={formData.state_id_com || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('state_id_com')}
+                          placeholder="Select State"
+                          options={masterData.state || []}
+                          getOptionLabel={(state) => state.state}
+                          getOptionValue={(state) => state.state_id}
+                          className={getFieldClassName('state_id_com')}
+                          searchPlaceholder="Search state..."
+                        />
+                      )}
                       {errors.state_id_com && <p className="text-red-500 text-sm mt-1">{errors.state_id_com}</p>}
                     </div>
                     <div className="relative">
@@ -1464,18 +1624,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('district_id_com')}
                       {renderGadOfficerIndicator('district_id_com')}
-                      <SearchableSelect
-                        name="district_id_com"
-                        value={formData.district_id_com || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('district_id_com')}
-                        placeholder="Select District"
-                        options={filteredDistrictsCom || []}
-                        getOptionLabel={(district) => district.district}
-                        getOptionValue={(district) => district.district_id}
-                        className={getFieldClassName('district_id_com')}
-                        searchPlaceholder="Search district..."
-                      />
+                      {isMasterOptionsLoading('district_id_com') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="district_id_com"
+                          value={formData.district_id_com || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('district_id_com')}
+                          placeholder="Select District"
+                          options={filteredDistrictsCom || []}
+                          getOptionLabel={(district) => district.district}
+                          getOptionValue={(district) => district.district_id}
+                          className={getFieldClassName('district_id_com')}
+                          searchPlaceholder="Search district..."
+                        />
+                      )}
                       {errors.district_id_com && <p className="text-red-500 text-sm mt-1">{errors.district_id_com}</p>}
                     </div>
                     <div className="relative">
@@ -1548,18 +1712,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('state_id_per')}
                       {renderGadOfficerIndicator('state_id_per')}
-                      <SearchableSelect
-                        name="state_id_per"
-                        value={formData.state_id_per || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('state_id_per')}
-                        placeholder="Select State"
-                        options={masterData.state || []}
-                        getOptionLabel={(state) => state.state}
-                        getOptionValue={(state) => state.state_id}
-                        className={getFieldClassName('state_id_per')}
-                        searchPlaceholder="Search state..."
-                      />
+                      {isMasterOptionsLoading('state_id_per') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="state_id_per"
+                          value={formData.state_id_per || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('state_id_per')}
+                          placeholder="Select State"
+                          options={masterData.state || []}
+                          getOptionLabel={(state) => state.state}
+                          getOptionValue={(state) => state.state_id}
+                          className={getFieldClassName('state_id_per')}
+                          searchPlaceholder="Search state..."
+                        />
+                      )}
                       {errors.state_id_per && <p className="text-red-500 text-sm mt-1">{errors.state_id_per}</p>}
                     </div>
                     <div className="relative">
@@ -1569,18 +1737,22 @@ if (formData.allotment_year) {
                       </label>
                       {renderSparkIndicator('district_id_per')}
                       {renderGadOfficerIndicator('district_id_per')}
-                      <SearchableSelect
-                        name="district_id_per"
-                        value={formData.district_id_per || ''}
-                        onChange={handleChange}
-                        disabled={isFieldDisabled('district_id_per')}
-                        placeholder="Select District"
-                        options={filteredDistrictsPer || []}
-                        getOptionLabel={(district) => district.district}
-                        getOptionValue={(district) => district.district_id}
-                        className={getFieldClassName('district_id_per')}
-                        searchPlaceholder="Search district..."
-                      />
+                      {isMasterOptionsLoading('district_id_per') ? (
+                        <ControlSkeleton />
+                      ) : (
+                        <SearchableSelect
+                          name="district_id_per"
+                          value={formData.district_id_per || ''}
+                          onChange={handleChange}
+                          disabled={isFieldDisabled('district_id_per')}
+                          placeholder="Select District"
+                          options={filteredDistrictsPer || []}
+                          getOptionLabel={(district) => district.district}
+                          getOptionValue={(district) => district.district_id}
+                          className={getFieldClassName('district_id_per')}
+                          searchPlaceholder="Search district..."
+                        />
+                      )}
                       {errors.district_id_per && <p className="text-red-500 text-sm mt-1">{errors.district_id_per}</p>}
                     </div>
                     <div className="relative">
@@ -1615,12 +1787,14 @@ if (formData.allotment_year) {
                   </button>
                   <button
                     type="submit"
-                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                    disabled={isSubmitting}
+                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                   >
-                    Save
+                    {isSubmitting ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
                   </button>
                 </div>
               </div>
+              )}
             </form>
           </DialogPanel>
         </div>

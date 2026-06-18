@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "@/utils/apiClient";
+import { fetchBulkMasters } from "@/utils/masters";
 import { toast } from "react-toastify";
 import {
   PencilSquareIcon,
@@ -38,9 +39,8 @@ export default function CadreList() {
   const fetchCadre = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axiosInstance.get(`/masters/cadre-all`);
-      console.log("Fetched cadreList:", response.data.data.cadre);
-      setCadreList(response.data.data.cadre);
+      const payload = await fetchBulkMasters(["cadre"], { admin: true, includeInactive: true });
+      setCadreList(payload.cadre || []);
     } catch (error) {
       console.error("Error fetching Cadre:", error);
       toast.error("Failed to load cadres.");
@@ -66,8 +66,6 @@ export default function CadreList() {
     try {
       const trimmedCadre = CadreData.cadre.trim().toLowerCase();
       const trimmedAbbr = CadreData.cadre_abbr?.trim().toLowerCase() || "";
-      console.log("Input cadre:", trimmedCadre, "Abbreviation:", trimmedAbbr);
-      console.log("Current cadreList:", cadreList);
 
       // Check for existing cadre
       const existing = cadreList.find(
@@ -76,7 +74,6 @@ export default function CadreList() {
 
       // Case: Cadre exists and is deactivated
       if (existing && !existing.is_active && !CadreData.cadre_id) {
-        console.log("Found deactivated cadre:", existing);
         setCadreToReactivate(existing);
         setConfirmReactivateOpen(true);
         return;
@@ -129,7 +126,6 @@ export default function CadreList() {
           (cad) => cad.cadre.toLowerCase() === trimmedCadre
         );
         if (updatedExisting && !updatedExisting.is_active) {
-          console.log("Backend reported existing deactivated cadre:", updatedExisting);
           setCadreToReactivate(updatedExisting);
           setConfirmReactivateOpen(true);
           return;
@@ -197,7 +193,6 @@ export default function CadreList() {
 
   const handleReactivateClick = (cadre_id) => {
     const cadre = cadreList.find((c) => c.cadre_id === cadre_id);
-    console.log("Reactivating cadre:", cadre);
     setCadreToReactivate(cadre);
     setConfirmReactivateOpen(true);
   };

@@ -33,8 +33,6 @@ const signPdf = async (
     throw new Error("File must be a PDF");
   }
 
-  console.log("requestType===",requestType);
-  console.log("requestType=approve:",requestType === 'approve');
 
   if (requestType === 'approve' && !aisPerId) {
     toast.warn('User ID is required for approval.');
@@ -94,7 +92,6 @@ const signPdf = async (
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120000); // 100 second timeout
   let result;
-    console.log("requestBody===",requestBody.request)
 
     const response = await fetch(`http://127.0.0.1:${portNumber}`, {
       method: "POST",
@@ -109,14 +106,10 @@ const signPdf = async (
     result = await response.json();
 
     if (!response.ok) {
-      console.log("step 1")
       throw new Error(result.error || "Network request failed");
     }
 
     if (result.response.status !== "ok") {
-      console.log("step 2")
-      console.log("signer response:", result);
-      console.log("signer response error text:", result.response.error?.text);
       throw new Error(result.response.error?.text || "Signing failed");
     }
   
@@ -141,17 +134,13 @@ const signPdf = async (
     if (requestType === 'approve') {
       formData.append("selected_user_id", aisPerId)
     }
-    console.log("formData:",[...formData.entries()]);
     const saveResponse = await axiosInstance.post("file-uploader/signed-pdf-save", formData, {
       headers: { "Content-Type": "multipart/form-data" }
     });
-    console.log("Save response:", saveResponse);
     if (!saveResponse.data?.success) {
-      console.log("step 5")
       throw new Error(saveResponse.data?.detail || "Internal Server Error on Uploading Signed File");
     }
   } catch (error) {
-    console.log("step 6")
     throw new Error(error || "Unexpected Error while Uploading Signed File")
   }
 
