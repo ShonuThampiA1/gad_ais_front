@@ -12,7 +12,7 @@ export default function RBACLayout({
 }) {
   return (
     
-      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col -mx-4 sm:-mx-6 lg:-mx-8">
         {/* Breadcrumb Section */}
           
         {/* Layout Structure */}

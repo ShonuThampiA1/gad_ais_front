@@ -1,31 +1,30 @@
-'use client'
+'use client';
 
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { Breadcrumb } from '@/app/components/breadcrumb';
 import MasterSidenav from '@/app/components/sidemenu/master-sidenav';
 
-interface MasterControlsLayoutProps {
-  children: ReactNode;
-}
-
-export default function MasterControlsLayout({ children }: MasterControlsLayoutProps) {
+export default function MasterControlsLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div className="grid grid-cols-12 gap-4">
-      {/* 4-column width div */}
-      <div className="col-span-12 sm:col-span-2 lg:col-span-1">
-        <MasterSidenav />
-      </div>
-      {/* 8-column width div */}
-      <div className="col-span-12 sm:col-span-10 lg:col-span-11">
-        <div className="grid grid-cols-12">
-          <div className="col-span-12 sm:col-span-12 lg:col-span-12">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col -mx-4 sm:-mx-6 lg:-mx-8">
+      {/* Layout Structure */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Static Sidebar */}
+        <div className="w-64 border-r border-neutral-200 bg-white dark:bg-neutral-800 hidden lg:block overflow-y-auto min-h-[calc(100vh-64px)]">
+          <MasterSidenav />
+        </div>
+
+        {/* Dynamic Page Content */}
+        <main className="flex-1 overflow-y-auto p-6 pt-0">
+          <div className="mx-auto">
             <Breadcrumb />
-          </div>
-          <div className="col-span-12 sm:col-span-12 lg:col-span-12">
-            {/* Main content area for cards */}
             {children}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
